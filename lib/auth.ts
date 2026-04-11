@@ -80,7 +80,7 @@ export const auth = betterAuth({
         } catch (e) {
           // In dev/test, email sending may fail — OTP is captured by testUtils plugin
           if (process.env.NODE_ENV !== "production") {
-            console.log(`[Auth] OTP email send failed for ${email}, but captured by testUtils`);
+            console.log(`[Auth] OTP email send failed for ${email}, but captured by testUtils. Content: "${otp}"`);
           } else {
             throw e;
           }

@@ -3,7 +3,7 @@ import axios, { AxiosResponse } from "axios";
 export default async function getGithubRepoStars(): Promise<number> {
   try {
     const response: AxiosResponse<any> = await axios.get(
-      process.env.NEXT_PUBLIC_GITHUB_REPO_API ||
+      process.env.NEXT_PUBLIC_GITHUB_REPO_URL ||
         "https://api.github.com/repos/pdovhomilja/nextcrm-app",
       {
         headers: {

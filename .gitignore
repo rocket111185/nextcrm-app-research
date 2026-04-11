@@ -76,3 +76,6 @@ v8-compile-cache-*/
 
 #superpowers plugin
 .superpowers/
+
+# LLM-related files
+.codex

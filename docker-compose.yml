@@ -1,0 +1,26 @@
+services:
+  postgres:
+    container_name: nextcrm_postgres
+    image: pgvector/pgvector:pg17-trixie
+    restart: always
+    environment:
+      POSTGRES_DB: nextcrm
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - nextcrm-net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  nextcrm-net:
+    driver: bridge
