@@ -24,11 +24,20 @@ import {
 
 type Step = "email" | "otp";
 
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
 export function LoginComponent() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
 
   const loginWithGoogle = async () => {
     setIsLoading(true);
@@ -95,7 +104,7 @@ export function LoginComponent() {
   return (
     <Card className="shadow-lg my-5">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl">Login</CardTitle>
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
         <CardDescription>Choose your sign-in method</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
@@ -115,7 +124,7 @@ export function LoginComponent() {
           </div>
           <div className="relative flex justify-center text-xs uppercase">
             <span className="bg-background px-2 text-muted-foreground">
-              Or continue with email
+              {dividerLabel}
             </span>
           </div>
         </div>
@@ -136,7 +145,7 @@ export function LoginComponent() {
             </div>
             <Button onClick={sendOtp} disabled={isLoading || !email}>
               <MailIcon className="mr-2 h-4 w-4" />
-              Send verification code
+              {getSubmitLabel(step)}
             </Button>
           </div>
         )}
@@ -164,7 +173,7 @@ export function LoginComponent() {
               </InputOTP>
             </div>
             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
-              Verify and sign in
+              {getSubmitLabel(step)}
             </Button>
             <Button
               variant="ghost"
