@@ -73,6 +73,7 @@ const ImportTargetsModal = () => {
   const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
   // mapping: targetField -> csvHeader (or SKIP_VALUE)
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
 
   const resetState = () => {
     setStep("upload");
@@ -287,6 +288,11 @@ const ImportTargetsModal = () => {
                 <p className="text-xs text-muted-foreground pt-1">
                   <span className="text-destructive">*</span> last_name or company is required per row.
                 </p>
+                {previewRows.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                  </p>
+                )}
               </div>
             )}
           </div>

@@ -4,6 +4,10 @@ import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import Papa from "papaparse";
 
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export async function importTargets(
   formData: FormData
 ): Promise<{ imported: number; skipped: number; errors: string[] }> {
@@ -37,10 +41,12 @@ export async function importTargets(
       Object.assign(row, rawRow);
     }
 
-    const last_name = row.last_name;
-    const email = row.email;
-    const mobile_phone = row.mobile_phone;
-    const company = row.company;
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = row.company?.trim();
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.trim().toLowerCase();
 
     if (!last_name && !company) {
       errors.push(`Row ${index + 2}: missing last_name or company`);
@@ -55,7 +61,7 @@ export async function importTargets(
       office_phone: row.office_phone || null,
       company: row.company || null,
       position: row.position || null,
-      company_website: row.company_website || null,
+      company_website: companyDomain || null,
       personal_website: row.personal_website || null,
       social_linkedin: row.social_linkedin || null,
       social_x: row.social_x || null,
