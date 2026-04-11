@@ -37,11 +37,16 @@ const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
   const form = useForm({
     resolver: zodResolver(formSchema),
   });
+  const feedbackValue = form.watch("feedback") || "";
 
   const onSubmit = async (data: any) => {
     setLoading(true);
     try {
-      await axios.post("/api/feedback", data);
+      await axios.post("/api/feedback", {
+        ...data,
+        page: window.location.pathname,
+        submittedAt: new Date().toISOString(),
+      });
     } catch (error) {
       console.error(error);
       toast.error("Something went wrong. Please try again later.");
@@ -65,6 +70,7 @@ const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
                 <Textarea
                   placeholder="Your feedback"
                   disabled={loading}
+                  maxLength={1000}
                   {...field}
                 />
               </FormControl>
@@ -72,6 +78,9 @@ const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
                 We appreciate every feedback. Thank you for helping us make this
                 app better
               </FormDescription>
+              <div className="text-right text-xs text-muted-foreground">
+                {feedbackValue.length}/1000
+              </div>
               <FormMessage />
             </FormItem>
           )}

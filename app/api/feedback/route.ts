@@ -2,6 +2,10 @@ import { getSession } from "@/lib/auth-server";
 import resendHelper from "@/lib/resend";
 import { NextResponse } from "next/server";
 
+function buildFeedbackSubject(sourcePath: string) {
+  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+}
+
 export async function POST(req: Request) {
   /*
   Resend.com function init - this is a helper function that will be used to send emails
@@ -25,8 +29,11 @@ export async function POST(req: Request) {
     return new NextResponse("Missing body", { status: 400 });
   }
   const { feedback } = body;
+  const normalizedFeedback =
+    typeof feedback === "string" ? feedback.trim() : "";
+  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
 
-  if (!feedback) {
+  if (!normalizedFeedback) {
     return new NextResponse("Missing feedback", { status: 400 });
   }
 
@@ -36,8 +43,8 @@ export async function POST(req: Request) {
       from:
         process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
       to: "info@softbase.cz",
-      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
-      text: feedback, // Add this line to fix the types issue
+      subject: buildFeedbackSubject(sourcePath),
+      text: normalizedFeedback,
     });
     return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
   } catch (error) {

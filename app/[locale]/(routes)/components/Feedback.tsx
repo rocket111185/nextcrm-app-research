@@ -20,7 +20,7 @@ const Feedback = () => {
           Feedback
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent align="end" className="w-96">
         <FeedbackForm setOpen={setOpen} />
       </PopoverContent>
     </Popover>
