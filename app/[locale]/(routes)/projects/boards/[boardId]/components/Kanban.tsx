@@ -87,6 +87,13 @@ interface Task {
   taskStatus?: string;
 }
 
+function getPriorityClassName(priority?: string) {
+  if (priority === "normal") return "text-yellow-500";
+  if (priority === "high") return "text-red-500";
+  if (priority === "low") return "text-green-500";
+  return "text-slate-600";
+}
+
 // Draggable Task Item Component
 function TaskItem({ task, onDelete, onDone, onEdit, router }: any) {
   const {
@@ -99,6 +106,8 @@ function TaskItem({ task, onDelete, onDone, onEdit, router }: any) {
   } = useSortable({ id: task.id });
 
   const [currentTime] = React.useState(() => Date.now());
+  const dueDateLabel = typeof window === "undefined" ? "Due date" : "Deadline";
+  const taskTitle = task.title?.trim() || "Untitled";
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -115,9 +124,7 @@ function TaskItem({ task, onDelete, onDone, onEdit, router }: any) {
       className="flex flex-col overflow-hidden items-start justify-center text-xs p-3 mb-2  rounded-md border  shadow-md cursor-grab active:cursor-grabbing"
     >
       <div className="flex flex-row justify-between mx-auto w-full py-1">
-        <h2 className="grow font-bold text-sm ">
-          {task.title === "" ? "Untitled" : task.title}
-        </h2>
+        <h2 className="grow font-bold text-sm ">{taskTitle}</h2>
         <div className="ml-1">
           {task?.dueDateAt &&
             task.taskStatus != "COMPLETE" &&
@@ -175,20 +182,10 @@ function TaskItem({ task, onDelete, onDone, onEdit, router }: any) {
         </DropdownMenu>
       </div>
       <div className="py-1">
-        Due date: {moment(task.dueDateAt).format("YYYY-MM-DD")}
+        {dueDateLabel}: {moment(task.dueDateAt).format("YYYY-MM-DD")}
       </div>
       <div className="my-2">
-        <p
-          className={
-            task.priority === "normal"
-              ? `text-yellow-500`
-              : task.priority === "high"
-              ? `text-red-500`
-              : task.priority === "low"
-              ? `text-green-500`
-              : `text-slate-600`
-          }
-        >
+        <p className={getPriorityClassName(task.priority)}>
           Priorita: {task.priority}
         </p>
       </div>

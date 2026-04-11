@@ -42,6 +42,7 @@ const NewSectionForm = ({ boardId, onClose }: NewSectionFormProps) => {
   const form = useForm<NewAccountFormValues>({
     resolver: zodResolver(formSchema),
   });
+  const titleValue = form.watch("title") || "";
 
   useEffect(() => {
     setIsMounted(true);
@@ -88,9 +89,13 @@ const NewSectionForm = ({ boardId, onClose }: NewSectionFormProps) => {
                   <Input
                     disabled={isLoading}
                     placeholder="Enter section name"
+                    maxLength={255}
                     {...field}
                   />
                 </FormControl>
+                <div className="text-right text-xs text-muted-foreground">
+                  {titleValue.length}/255
+                </div>
                 <FormMessage />
               </FormItem>
             )}
