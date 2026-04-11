@@ -22,12 +22,14 @@ export function MinioUploader({
 }: MinioUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
       const file = acceptedFiles[0];
       if (!file) return;
 
+      setSelectedFileName(file.name);
       setUploading(true);
       setProgress("Requesting upload URL...");
 
@@ -99,6 +101,9 @@ export function MinioUploader({
           <p className="text-sm text-muted-foreground">
             {isDragActive ? "Drop file here" : "Drag & drop or click to upload"}
           </p>
+          {selectedFileName && (
+            <p className="text-xs text-muted-foreground/60">{selectedFileName}</p>
+          )}
           <p className="text-xs text-muted-foreground/60">Max {maxSizeMB}MB</p>
         </>
       )}

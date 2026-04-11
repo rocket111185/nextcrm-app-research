@@ -9,6 +9,12 @@ import { randomUUID } from "crypto";
 const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
 type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
 
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -39,6 +45,7 @@ export async function POST(req: NextRequest) {
   // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
   const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
   const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
 
   const command = new PutObjectCommand({
     Bucket: MINIO_BUCKET,
@@ -51,9 +58,9 @@ export async function POST(req: NextRequest) {
     const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
 
     // The public URL where the file will be accessible after upload
-    const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+    const fileUrl = buildPublicFileUrl(key);
 
-    return NextResponse.json({ presignedUrl, fileUrl, key });
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
   } catch (err) {
     console.error("Failed to generate presigned URL:", err);
     return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
