@@ -1,0 +1,507 @@
+run_name: 4-build-invalid-import-A
+case_name: 4-build-invalid-import
+variant: A
+target_branch: research-4
+model: default
+started_utc: 2026-04-12T13:06:48Z
+elapsed_seconds: 40
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/4-build-invalid-import/A/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+The incident is caused by a syntax error introduced in [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21). The expression:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+mixes `??` with `||` without parentheses. In JavaScript/TypeScript, that is a parser error, not a runtime edge case. Because `Footer` is imported by [`layout.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/layout.tsx:6), Next.js fails while parsing the server component tree, which explains the immediate `GET /en 500` and the “Parsing ecmascript source code failed” message.
+
+**Why this is the likeliest cause**
+
+- The stack trace points exactly to [`Footer.tsx:21`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21).
+- The error text is explicit: `Nullish coalescing operator(??) requires parens when mixing with logical operators`.
+- `git blame` shows that exact line was changed in commit `875c7a63` on **April 11, 2026**, during the “Refactor footer link metadata” change.
+- The previous version of the line only used `||` and would parse correctly.
+
+**Contributing Issue**
+
+There is also a second defect in the same refactor: [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels`, but [`footer-links.ts`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/footer-links.ts:1) does not export it. That would likely surface as a separate build/runtime error after the parser issue is fixed, but it is not the immediate cause of this incident.
+
+**Conclusion**
+
+Primary root cause: the April 11, 2026 footer metadata refactor introduced an invalid `??` + `||` expression in the footer badge label fallback logic, causing parse-time failure and taking down the `/en` route. Secondary issue: the same refactor introduced an import/export mismatch for `footerBadgeLabels`.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81cd-4d38-7640-a8c6-dad3a80fe19a
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+⨯ ./app/[locale]/(routes)/components/Footer.tsx:21:12
+Nullish coalescing operator(??) requires parens when mixing with logical operators
+  19 | ...rMeta.poweredBy}
+  20 | ...className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+> 21 | ...terBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VER...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22 | ...>
+  23 | ...
+  24 | ...href={footerLinks[0].href}>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./app/[locale]/(routes)/components/Footer.tsx
+    ./app/[locale]/(routes)/layout.tsx
+
+
+ GET /en 500 in 262ms (next.js: 118ms, proxy.ts: 9ms, application-code: 135ms)
+[browser] ./app/[locale]/(routes)/components/Footer.tsx:21:12
+Nullish coalescing operator(??) requires parens when mixing with logical operators
+  19 | ...rMeta.poweredBy}
+  20 | ...className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+> 21 | ...terBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VER...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22 | ...>
+  23 | ...
+  24 | ...href={footerLinks[0].href}>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./app/[locale]/(routes)/components/Footer.tsx
+    ./app/[locale]/(routes)/layout.tsx 
+[browser] ./app/[locale]/(routes)/components/Footer.tsx:21:12
+Nullish coalescing operator(??) requires parens when mixing with logical operators
+  19 | ...rMeta.poweredBy}
+  20 | ...className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+> 21 | ...terBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VER...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22 | ...>
+  23 | ...
+  24 | ...href={footerLinks[0].href}>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./app/[locale]/(routes)/components/Footer.tsx
+    ./app/[locale]/(routes)/layout.tsx 
+[browser] Uncaught Error: ./app/[locale]/(routes)/components/Footer.tsx:21:12
+Nullish coalescing operator(??) requires parens when mixing with logical operators
+  19 | ...rMeta.poweredBy}
+  20 | ...className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+> 21 | ...terBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VER...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22 | ...>
+  23 | ...
+  24 | ...href={footerLinks[0].href}>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./app/[locale]/(routes)/components/Footer.tsx
+    ./app/[locale]/(routes)/layout.tsx
+
+
+    at <unknown> (Error: ./app/[locale]/(routes)/components/Footer.tsx:21:12)
+    at <unknown> (Error: (./app/[locale]/(routes)/components/Footer.tsx:21:12)
+[browser] ./app/[locale]/(routes)/components/Footer.tsx:21:12
+Nullish coalescing operator(??) requires parens when mixing with logical operators
+  19 | ...rMeta.poweredBy}
+  20 | ...className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+> 21 | ...terBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VER...
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  22 | ...>
+  23 | ...
+  24 | ...href={footerLinks[0].href}>
+
+Parsing ecmascript source code failed
+
+Import trace:
+  Server Component:
+    ./app/[locale]/(routes)/components/Footer.tsx
+    ./app/[locale]/(routes)/layout.tsx 
+
+codex
+I’m checking the failing component and the surrounding layout/import path to pin the cause to a specific expression and confirm whether this is a parser-level failure or a runtime issue.
+exec
+/usr/bin/bash -lc "sed -n '1,80p' app/[locale]/\\(routes\\)/layout.tsx" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,80p' app/[locale]/\\(routes\\)/components/Footer.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import getNextVersion from "@/actions/system/get-next-version";
+import Link from "next/link";
+import { version } from "@/package.json";
+import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+
+const Footer = async () => {
+  const nextVersion = await getNextVersion();
+
+  return (
+    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+      <div className="hidden md:flex pr-5">
+        <Link href="/">
+          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+          </h1>
+        </Link>
+      </div>
+      <div className="hidden md:flex space-x-2 pr-2">
+        {footerMeta.poweredBy}
+        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+        </span>
+        +
+        <Link href={footerLinks[0].href}>
+          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+            {footerLinks[0].label}
+          </span>
+        </Link>
+        {footerMeta.hostedBy}
+        <span className="text-bold underline hover:text-foreground transition-colors">
+          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+        </span>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import getAllCommits from "@/actions/github/get-repo-commits";
+
+import { Metadata } from "next";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "./components/app-sidebar";
+import { getTranslations } from "next-intl/server";
+import { AvatarProvider } from "@/context/avatar-context";
+import { CurrencyProvider } from "@/context/currency-context";
+import { getEnabledCurrencies, getDefaultCurrency } from "@/lib/currency";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+  ),
+  title: "",
+  description: "",
+  openGraph: {
+    images: [
+      {
+        url: "/images/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: [
+      {
+        url: "/images/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "",
+      },
+    ],
+  },
+};
+
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await getSession();
+
+  //console.log(session, "session");
+
+  if (!session) {
+    return redirect("/sign-in");
+  }
+
+  const user = session?.user;
+
+  if (user?.userStatus === "PENDING") {
+    return redirect("/pending");
+  }
+
+  if (user?.userStatus === "INACTIVE") {
+    return redirect("/inactive");
+  }
+
+  const build = await getAllCommits();
+
+  // Fetch localization dictionary
+  const dict = await getTranslations("ModuleMenu");
+
+  // Extract translations as plain object for client component
+  const translations = {
+    dashboard: dict("dashboard"),
+    crm: {
+      title: dict("crm.title"),
+      accounts: dict("crm.accounts"),
+      opportunities: dict("crm.opportunities"),
+
+exec
+/usr/bin/bash -lc "git log -n 3 -- app/[locale]/\\(routes\\)/components/Footer.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+commit 875c7a63e893d0f08a0d6c9aedfaf079cab64757
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Sat Apr 11 22:27:19 2026 +0300
+
+    Refactor footer link metadata
+
+commit 003a728b56429230d40058622e7d0f6fb925e150
+Author: Pavel Dovhomilja <pavel@dovhomilja.dev>
+Date:   Fri Apr 3 09:01:16 2026 +0200
+
+    feat(footer): read app version from package.json instead of env var
+    
+    Replace NEXT_PUBLIC_APP_V env variable with a direct import of `version`
+    from package.json so the footer version stays in sync with releases
+    automatically.
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+commit 2cd7ebb5fe0bd5c8470f1434e22f52bf6a00312d
+Author: Pavel Dovhomilja <pavel@dovhomilja.dev>
+Date:   Fri Mar 20 18:04:42 2026 +0100
+
+    chore: cleanup sidebar, footer, and add inngest proxy passthrough
+    
+    - Remove build version display from sidebar footer
+    - Remove "Supported by SoftBase" from Footer
+    - Delete test-sidebar page (development artifact)
+    - Allow /api/inngest requests to pass through proxy without auth check
+    - Minor formatting fixes (trailing commas, whitespace)
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+codex
+The failure is at parse time inside `Footer.tsx`, not during render. I’m checking the nearby data sources to verify the intended fallback order and whether a recent refactor introduced the invalid operator mix.
+exec
+/usr/bin/bash -lc "sed -n '1,120p' actions/system/get-next-version.ts" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,120p' app/[locale]/\\(routes\\)/components/footer-links.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import fs from "fs";
+export default async function getNextVersion() {
+  try {
+    // Read the package.json file synchronously
+    const data = fs.readFileSync("package.json", "utf8");
+
+    try {
+      const packageJson = JSON.parse(data);
+      const version = packageJson.dependencies["next"]; // Replace 'dependencies' with 'devDependencies' if Next.js is a dev dependency
+
+      //console.log("Actual Next.js version:", version);
+      return version;
+    } catch (error) {
+      console.error("Error parsing package.json:", error);
+      return "0";
+    }
+  } catch (error) {
+    console.error("Error reading package.json:", error);
+  }
+}
+
+ succeeded in 0ms:
+export const footerLinks = [
+  {
+    href: "https://ui.shadcn.com/",
+    label: "shadcnUI",
+  },
+  {
+    href: "https://www.vercel.com",
+    label: "Vercel",
+  },
+];
+
+export const footerMeta = {
+  poweredBy: "powered by Next.js",
+  hostedBy: "hosted by:",
+};
+
+exec
+/usr/bin/bash -lc "git blame -L 18,24 -- app/[locale]/\\(routes\\)/components/Footer.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+4d6364f7 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-09 00:36:33 +0200 18)       <div className="hidden md:flex space-x-2 pr-2">
+875c7a63 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-04-11 22:27:19 +0300 19)         {footerMeta.poweredBy}
+3ffff2a7 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2025-12-10 18:31:01 +0100 20)         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+875c7a63 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-04-11 22:27:19 +0300 21)           {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+022fc4c1 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 20:42:58 +0100 22)         </span>
+022fc4c1 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 20:42:58 +0100 23)         +
+875c7a63 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-04-11 22:27:19 +0300 24)         <Link href={footerLinks[0].href}>
+
+codex
+The recent commit on April 11, 2026 touched the exact failing line. I’m verifying whether `footerBadgeLabels.nextjs` was newly introduced and whether the refactor accidentally combined `??` with `||` without grouping.
+exec
+/usr/bin/bash -lc "git show 875c7a63e893d0f08a0d6c9aedfaf079cab64757 -- app/[locale]/\\(routes\\)/components/Footer.tsx app/[locale]/\\(routes\\)/components/footer-links.ts" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "git show --stat --summary 875c7a63e893d0f08a0d6c9aedfaf079cab64757 -- app/[locale]/\\(routes\\)/components/Footer.tsx app/[locale]/\\(routes\\)/components/footer-links.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+commit 875c7a63e893d0f08a0d6c9aedfaf079cab64757
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Sat Apr 11 22:27:19 2026 +0300
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,11 +1,11 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+@@ -16,19 +16,19 @@ const Footer = async () => {
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+     </footer>
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+ succeeded in 0ms:
+commit 875c7a63e893d0f08a0d6c9aedfaf079cab64757
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Sat Apr 11 22:27:19 2026 +0300
+
+    Refactor footer link metadata
+
+ app/[locale]/(routes)/components/Footer.tsx      | 18 +++++++++---------
+ app/[locale]/(routes)/components/footer-links.ts | 15 +++++++++++++++
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+ create mode 100644 app/[locale]/(routes)/components/footer-links.ts
+
+exec
+/usr/bin/bash -lc "rg -n \"footerBadgeLabels|NEXT_PUBLIC_NEXT_VERSION|substring\\(1, 7\\)\" -S app actions lib" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+
+codex
+**Most Likely Root Cause**
+
+The incident is caused by a syntax error introduced in [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21). The expression:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+mixes `??` with `||` without parentheses. In JavaScript/TypeScript, that is a parser error, not a runtime edge case. Because `Footer` is imported by [`layout.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/layout.tsx:6), Next.js fails while parsing the server component tree, which explains the immediate `GET /en 500` and the “Parsing ecmascript source code failed” message.
+
+**Why this is the likeliest cause**
+
+- The stack trace points exactly to [`Footer.tsx:21`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21).
+- The error text is explicit: `Nullish coalescing operator(??) requires parens when mixing with logical operators`.
+- `git blame` shows that exact line was changed in commit `875c7a63` on **April 11, 2026**, during the “Refactor footer link metadata” change.
+- The previous version of the line only used `||` and would parse correctly.
+
+**Contributing Issue**
+
+There is also a second defect in the same refactor: [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels`, but [`footer-links.ts`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/footer-links.ts:1) does not export it. That would likely surface as a separate build/runtime error after the parser issue is fixed, but it is not the immediate cause of this incident.
+
+**Conclusion**
+
+Primary root cause: the April 11, 2026 footer metadata refactor introduced an invalid `??` + `||` expression in the footer badge label fallback logic, causing parse-time failure and taking down the `/en` route. Secondary issue: the same refactor introduced an import/export mismatch for `footerBadgeLabels`.
+tokens used
+8,363
+**Most Likely Root Cause**
+
+The incident is caused by a syntax error introduced in [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21). The expression:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+mixes `??` with `||` without parentheses. In JavaScript/TypeScript, that is a parser error, not a runtime edge case. Because `Footer` is imported by [`layout.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/layout.tsx:6), Next.js fails while parsing the server component tree, which explains the immediate `GET /en 500` and the “Parsing ecmascript source code failed” message.
+
+**Why this is the likeliest cause**
+
+- The stack trace points exactly to [`Footer.tsx:21`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:21).
+- The error text is explicit: `Nullish coalescing operator(??) requires parens when mixing with logical operators`.
+- `git blame` shows that exact line was changed in commit `875c7a63` on **April 11, 2026**, during the “Refactor footer link metadata” change.
+- The previous version of the line only used `||` and would parse correctly.
+
+**Contributing Issue**
+
+There is also a second defect in the same refactor: [`Footer.tsx`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels`, but [`footer-links.ts`](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/footer-links.ts:1) does not export it. That would likely surface as a separate build/runtime error after the parser issue is fixed, but it is not the immediate cause of this incident.
+
+**Conclusion**
+
+Primary root cause: the April 11, 2026 footer metadata refactor introduced an invalid `??` + `||` expression in the footer badge label fallback logic, causing parse-time failure and taking down the `/en` route. Secondary issue: the same refactor introduced an import/export mismatch for `footerBadgeLabels`.

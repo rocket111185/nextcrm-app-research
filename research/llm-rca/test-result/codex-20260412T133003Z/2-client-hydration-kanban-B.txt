@@ -1,0 +1,880 @@
+run_name: 2-client-hydration-kanban-B
+case_name: 2-client-hydration-kanban
+variant: B
+target_branch: research-2
+model: default
+started_utc: 2026-04-12T13:32:46Z
+elapsed_seconds: 41
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/2-client-hydration-kanban/B/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+The hydration error was introduced by the most recent sign-in copy change in [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36). The component is a client component, but it still renders once on the server for SSR. It now branches on `typeof window` during render:
+
+- [line 36](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36): server renders `"Login"`, client renders `"Sign in"`
+- [lines 37-40](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37): server renders `"Or continue with email"`, client renders `"Or continue with Email"`
+
+That is exactly the failure shown in the incident: the server HTML contains `Login`, while the client’s first render contains `Sign in`, causing React hydration to fail and regenerate the subtree.
+
+**Why this is the likely cause**
+
+The browser error explicitly points to a server/client branch such as `if (typeof window !== 'undefined')`, and the stack trace points directly to `LoginComponent` / `CardTitle`. The diff from the last change shows these `typeof window` branches were newly introduced in commit `5bd2de5` (`Polish sign-in copy and labels`). Before that change, the title was a stable literal `"Login"` on both server and client.
+
+**Scope**
+
+This appears isolated to the sign-in page render path, not `page.tsx`. The `page.tsx` change only extracted the heading into a local `title` variable and does not create divergent server/client output.
+
+**Conclusion**
+
+Primary root cause: render-time server/client branching in `LoginComponent` introduced on April 11, 2026, causing inconsistent initial text between SSR and hydration.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81e5-146d-7703-8b18-ec17448b2ef1
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+Error message:
+ GET /en/sign-in 200 in 1538ms (next.js: 539ms, proxy.ts: 5ms, application-code: 994ms)
+[browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/sign-in" tree={[...]} params={{locale:"en"}} cacheNode={{rsc:{...}, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/(...">
+              <SegmentTrieNode>
+              <SignInPage>
+                <div className="h-full">
+                  <div>
+                  <div>
+                    <LoginComponent>
+                      <Card className="shadow-lg ...">
+                        <div ref={undefined} className="rounded-lg...">
+                          <CardHeader className="space-y-1">
+                            <div ref={undefined} className="flex flex-...">
+                              <CardTitle className="text-2xl">
+                                <div ref={undefined} className="font-semibold tracking-tight text-2xl">
++                                 Sign in
+-                                 Login
+                              ...
+                          ...
+            ...
+          ...
+
+    at div (unknown)
+    at CardTitle (components/ui/card.tsx:39:3)
+    at LoginComponent (app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:9)
+    at SignInPage (app/[locale]/(auth)/sign-in/page.tsx:14:9)
+  37 |   ...props
+  38 | }: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+> 39 |   <div
+     |   ^
+  40 |     ref={ref}
+  41 |     className={cn(
+  42 |       "text-2xl font-semibold leading-none tracking-tight",
+
+Incident date: 2026-04-11T22:12:13.950Z
+
+Last changes:
+ app/[locale]/(auth)/sign-in/components/LoginComponent.tsx          | 17 +++++++++++++----
+ app/[locale]/(auth)/sign-in/page.tsx                               |  4 +++-
+ .../(routes)/projects/boards/[boardId]/components/Kanban.tsx       | 27 ++++++++++++---------------
+ .../(routes)/projects/boards/[boardId]/forms/NewSection.tsx        |  5 +++++
+ 4 files changed, 33 insertions(+), 20 deletions(-)
+
+codex
+I’m tracing the sign-in hydration mismatch against the most recent edits, starting with the touched auth files and the locale/title rendering path.
+exec
+/usr/bin/bash -lc 'git diff --stat HEAD~1..HEAD -- app/[locale]/(auth)/sign-in/components/LoginComponent.tsx app/[locale]/(auth)/sign-in/page.tsx' in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `git diff --stat HEAD~1..HEAD -- app/[locale]/(auth)/sign-in/components/LoginComponent.tsx app/[locale]/(auth)/sign-in/page.tsx'
+
+exec
+/usr/bin/bash -lc "sed -n '1,200p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+exec
+/usr/bin/bash -lc 'git diff HEAD~1..HEAD -- app/[locale]/(auth)/sign-in/components/LoginComponent.tsx app/[locale]/(auth)/sign-in/page.tsx' in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,240p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `git diff HEAD~1..HEAD -- app/[locale]/(auth)/sign-in/components/LoginComponent.tsx app/[locale]/(auth)/sign-in/page.tsx'
+
+codex
+The live file already shows a direct hydration hazard: the client component renders different strings on server and client with `typeof window`. I’m checking whether that came from the last change and whether any locale layer could also be involved.
+exec
+/usr/bin/bash -lc "git show HEAD~1:'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">Login</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              Or continue with email
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              Send verification code
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              Verify and sign in
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+exec
+/usr/bin/bash -lc "rg -n \"Login|Sign in|Or continue with email|Or continue with Email|typeof window === \\\"undefined\\\"\" app/[locale]/(auth)/sign-in -S" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "git diff HEAD~1..HEAD -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `rg -n "Login|Sign in|Or continue with email|Or continue with Email|typeof window === \"undefined\"" app/[locale]/(auth)/sign-in -S'
+
+ succeeded in 0ms:
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -24,11 +24,20 @@ import {
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+@@ -95,7 +104,7 @@ export function LoginComponent() {
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+@@ -115,7 +124,7 @@ export function LoginComponent() {
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+@@ -136,7 +145,7 @@ export function LoginComponent() {
+             </div>
+             <Button onClick={sendOtp} disabled={isLoading || !email}>
+               <MailIcon className="mr-2 h-4 w-4" />
+-              Send verification code
++              {getSubmitLabel(step)}
+             </Button>
+           </div>
+         )}
+@@ -164,7 +173,7 @@ export function LoginComponent() {
+               </InputOTP>
+             </div>
+             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+-              Verify and sign in
++              {getSubmitLabel(step)}
+             </Button>
+             <Button
+               variant="ghost"
+diff --git a/app/[locale]/(auth)/sign-in/page.tsx b/app/[locale]/(auth)/sign-in/page.tsx
+index 02dbfb1..d6b25c5 100644
+--- a/app/[locale]/(auth)/sign-in/page.tsx
++++ b/app/[locale]/(auth)/sign-in/page.tsx
+@@ -1,11 +1,13 @@
+ import { LoginComponent } from "./components/LoginComponent";
+ 
+ const SignInPage = async () => {
++  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
++
+   return (
+     <div className="h-full">
+       <div className="py-10">
+         <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+-          Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
++          {title}
+         </h1>
+       </div>
+       <div>
+
+codex
+The diff confirms the mismatch was introduced in the last auth change. I’m pulling exact line numbers and checking whether this is isolated to the sign-in component or part of a broader pattern.
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,220p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import React, { useState } from "react";
+     4	import { authClient } from "@/lib/auth-client";
+     5	
+     6	import { Icons } from "@/components/ui/icons";
+     7	import { Button } from "@/components/ui/button";
+     8	import {
+     9	  Card,
+    10	  CardContent,
+    11	  CardDescription,
+    12	  CardHeader,
+    13	  CardTitle,
+    14	} from "@/components/ui/card";
+    15	import { Input } from "@/components/ui/input";
+    16	import { Label } from "@/components/ui/label";
+    17	import { toast } from "sonner";
+    18	import { MailIcon } from "lucide-react";
+    19	import {
+    20	  InputOTP,
+    21	  InputOTPGroup,
+    22	  InputOTPSlot,
+    23	} from "@/components/ui/input-otp";
+    24	
+    25	type Step = "email" | "otp";
+    26	
+    27	function getSubmitLabel(step: Step) {
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+    46	        provider: "google",
+    47	        callbackURL: "/",
+    48	      });
+    49	    } catch (error) {
+    50	      toast.error("Something went wrong with Google sign-in.");
+    51	    } finally {
+    52	      setIsLoading(false);
+    53	    }
+    54	  };
+    55	
+    56	  const sendOtp = async () => {
+    57	    if (!email) {
+    58	      toast.error("Please enter your email address.");
+    59	      return;
+    60	    }
+    61	    setIsLoading(true);
+    62	    try {
+    63	      const { error } = await authClient.emailOtp.sendVerificationOtp({
+    64	        email,
+    65	        type: "sign-in",
+    66	      });
+    67	      if (error) {
+    68	        toast.error(error.message || "Failed to send verification code.");
+    69	        return;
+    70	      }
+    71	      setStep("otp");
+    72	      toast.success("Verification code sent to your email.");
+    73	    } catch (error) {
+    74	      toast.error("Failed to send verification code.");
+    75	    } finally {
+    76	      setIsLoading(false);
+    77	    }
+    78	  };
+    79	
+    80	  const verifyOtp = async () => {
+    81	    if (otp.length !== 6) {
+    82	      toast.error("Please enter the 6-digit code.");
+    83	      return;
+    84	    }
+    85	    setIsLoading(true);
+    86	    try {
+    87	      const { error } = await authClient.signIn.emailOtp({
+    88	        email,
+    89	        otp,
+    90	      });
+    91	      if (error) {
+    92	        toast.error(error.message || "Invalid or expired code.");
+    93	        return;
+    94	      }
+    95	      toast.success("Login successful.");
+    96	      window.location.href = "/";
+    97	    } catch (error) {
+    98	      toast.error("Verification failed.");
+    99	    } finally {
+   100	      setIsLoading(false);
+   101	    }
+   102	  };
+   103	
+   104	  return (
+   105	    <Card className="shadow-lg my-5">
+   106	      <CardHeader className="space-y-1">
+   107	        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+   108	        <CardDescription>Choose your sign-in method</CardDescription>
+   109	      </CardHeader>
+   110	      <CardContent className="grid gap-4">
+   111	        <Button
+   112	          variant="outline"
+   113	          onClick={loginWithGoogle}
+   114	          disabled={isLoading}
+   115	          className="w-full"
+   116	        >
+   117	          <Icons.google className="mr-2 h-4 w-4" />
+   118	          Continue with Google
+   119	        </Button>
+   120	
+   121	        <div className="relative">
+   122	          <div className="absolute inset-0 flex items-center">
+   123	            <span className="w-full border-t" />
+   124	          </div>
+   125	          <div className="relative flex justify-center text-xs uppercase">
+   126	            <span className="bg-background px-2 text-muted-foreground">
+   127	              {dividerLabel}
+   128	            </span>
+   129	          </div>
+   130	        </div>
+   131	
+   132	        {step === "email" && (
+   133	          <div className="grid gap-3">
+   134	            <div className="grid gap-1.5">
+   135	              <Label htmlFor="email">Email</Label>
+   136	              <Input
+   137	                id="email"
+   138	                type="email"
+   139	                placeholder="name@domain.com"
+   140	                value={email}
+   141	                onChange={(e) => setEmail(e.target.value)}
+   142	                disabled={isLoading}
+   143	                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+   144	              />
+   145	            </div>
+   146	            <Button onClick={sendOtp} disabled={isLoading || !email}>
+   147	              <MailIcon className="mr-2 h-4 w-4" />
+   148	              {getSubmitLabel(step)}
+   149	            </Button>
+   150	          </div>
+   151	        )}
+   152	
+   153	        {step === "otp" && (
+   154	          <div className="grid gap-3">
+   155	            <p className="text-sm text-muted-foreground">
+   156	              Enter the 6-digit code sent to <strong>{email}</strong>
+   157	            </p>
+   158	            <div className="flex justify-center">
+   159	              <InputOTP
+   160	                maxLength={6}
+   161	                value={otp}
+   162	                onChange={setOtp}
+   163	                disabled={isLoading}
+   164	              >
+   165	                <InputOTPGroup>
+   166	                  <InputOTPSlot index={0} />
+   167	                  <InputOTPSlot index={1} />
+   168	                  <InputOTPSlot index={2} />
+   169	                  <InputOTPSlot index={3} />
+   170	                  <InputOTPSlot index={4} />
+   171	                  <InputOTPSlot index={5} />
+   172	                </InputOTPGroup>
+   173	              </InputOTP>
+   174	            </div>
+   175	            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+   176	              {getSubmitLabel(step)}
+   177	            </Button>
+   178	            <Button
+   179	              variant="ghost"
+   180	              size="sm"
+   181	              onClick={() => {
+   182	                setStep("email");
+   183	                setOtp("");
+   184	              }}
+   185	              disabled={isLoading}
+   186	            >
+   187	              Use a different email
+   188	            </Button>
+   189	          </div>
+   190	        )}
+   191	      </CardContent>
+   192	    </Card>
+   193	  );
+   194	}
+
+exec
+/usr/bin/bash -lc "git log --oneline -n 3 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "rg -n 'typeof window|Date.now\\(|Math.random\\(' 'app/[locale]/(auth)/sign-in' -S" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+5bd2de5 Polish sign-in copy and labels
+9560934 fix(auth): fix better-auth schema compatibility and E2E test infrastructure
+1eb6635 feat(auth): rewrite login page with Google OAuth + Email OTP
+
+ succeeded in 0ms:
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:38:    typeof window === "undefined"
+
+codex
+**Most Likely Root Cause**
+
+The hydration error was introduced by the most recent sign-in copy change in [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36). The component is a client component, but it still renders once on the server for SSR. It now branches on `typeof window` during render:
+
+- [line 36](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36): server renders `"Login"`, client renders `"Sign in"`
+- [lines 37-40](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37): server renders `"Or continue with email"`, client renders `"Or continue with Email"`
+
+That is exactly the failure shown in the incident: the server HTML contains `Login`, while the client’s first render contains `Sign in`, causing React hydration to fail and regenerate the subtree.
+
+**Why this is the likely cause**
+
+The browser error explicitly points to a server/client branch such as `if (typeof window !== 'undefined')`, and the stack trace points directly to `LoginComponent` / `CardTitle`. The diff from the last change shows these `typeof window` branches were newly introduced in commit `5bd2de5` (`Polish sign-in copy and labels`). Before that change, the title was a stable literal `"Login"` on both server and client.
+
+**Scope**
+
+This appears isolated to the sign-in page render path, not `page.tsx`. The `page.tsx` change only extracted the heading into a local `title` variable and does not create divergent server/client output.
+
+**Conclusion**
+
+Primary root cause: render-time server/client branching in `LoginComponent` introduced on April 11, 2026, causing inconsistent initial text between SSR and hydration.
+tokens used
+10,820
+**Most Likely Root Cause**
+
+The hydration error was introduced by the most recent sign-in copy change in [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36). The component is a client component, but it still renders once on the server for SSR. It now branches on `typeof window` during render:
+
+- [line 36](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36): server renders `"Login"`, client renders `"Sign in"`
+- [lines 37-40](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37): server renders `"Or continue with email"`, client renders `"Or continue with Email"`
+
+That is exactly the failure shown in the incident: the server HTML contains `Login`, while the client’s first render contains `Sign in`, causing React hydration to fail and regenerate the subtree.
+
+**Why this is the likely cause**
+
+The browser error explicitly points to a server/client branch such as `if (typeof window !== 'undefined')`, and the stack trace points directly to `LoginComponent` / `CardTitle`. The diff from the last change shows these `typeof window` branches were newly introduced in commit `5bd2de5` (`Polish sign-in copy and labels`). Before that change, the title was a stable literal `"Login"` on both server and client.
+
+**Scope**
+
+This appears isolated to the sign-in page render path, not `page.tsx`. The `page.tsx` change only extracted the heading into a local `title` variable and does not create divergent server/client output.
+
+**Conclusion**
+
+Primary root cause: render-time server/client branching in `LoginComponent` introduced on April 11, 2026, causing inconsistent initial text between SSR and hydration.

@@ -1,0 +1,2205 @@
+run_name: 5-data-shape-target-import-B
+case_name: 5-data-shape-target-import
+variant: B
+target_branch: research-5
+model: default
+started_utc: 2026-04-12T13:10:32Z
+elapsed_seconds: 66
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/5-data-shape-target-import/B/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+The 500 on `POST /en/campaigns/targets` was introduced by the new `parseEmployeesValue()` helper in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That helper now assumes every imported `employees` cell is valid JSON with this exact shape:
+
+```ts
+{ min: number; max: number }
+```
+
+It then immediately does:
+
+```ts
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The crash means `JSON.parse(...)` returned something that did not contain `min` and/or `max`, so `parsed.min` was `undefined` and `.toString()` threw. This matches the stack exactly at line 17.
+
+**Why this is the likely regression**
+
+The previous implementation stored `row.employees` directly and did not parse it at all. The failing behavior appeared only after the last change set, which added `parseEmployeesValue()` and switched the import path to use it. The rest of the codebase still treats `employees` as a plain string field, not a structured object:
+
+- Manual create/update forms use a normal text input with placeholder `50-200`.
+- E2E coverage fills `Employees` with the plain string `50-200`.
+- Prisma stores `employees` as `String?`.
+
+So the server-side import path became stricter than the rest of the app and is now incompatible with normal or legacy CSV content.
+
+**Contributing factors**
+
+- `parseEmployeesValue()` runs before row validation, so one bad `employees` value aborts the entire import instead of skipping a row.
+- There is no shape check or fallback for empty cells, plain strings, or alternate JSON formats.
+- The modal text added in the same change mentions “legacy imports” expecting structured employee ranges, but there is no corresponding enforcement or conversion on the client side; the server still receives raw CSV strings.
+
+**Conclusion**
+
+The incident was most likely caused by a regression in the April 12, 2026 import change: `employees` import values were changed from pass-through strings to mandatory JSON `{min,max}` parsing, but actual CSV data still contains non-matching values.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81d0-b6a3-73f1-ba0a-60bd792f0455
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+Error message:
+⨯ TypeError: Cannot read properties of undefined (reading 'toString')
+    at parseEmployeesValue (actions/crm/targets/import-targets.ts:17:24)
+    at <unknown> (actions/crm/targets/import-targets.ts:59:23)
+    at Array.forEach (<anonymous>)
+    at importTargets (actions/crm/targets/import-targets.ts:41:8)
+  15 |   };
+  16 |
+> 17 |   return `${parsed.min.toString()}-${parsed.max.toString()}`;
+     |                        ^
+  18 | }
+  19 |
+  20 | export async function importTargets( {
+  digest: '2744837048'
+}
+ POST /en/campaigns/targets 500 in 472ms (next.js: 18ms, proxy.ts: 6ms, application-code: 447ms)
+  └─ ƒ importTargets({}) in 11ms actions/crm/targets/import-targets.ts 
+
+Incident date: 2026-04-12T00:18:46.263Z
+
+Last changes:
+ actions/crm/targets/import-targets.ts    | 28 ++++++++++++++++++++++------
+ components/modals/ImportTargetsModal.tsx |  9 +++++++++
+ 2 files changed, 31 insertions(+), 6 deletions(-)
+
+codex
+I’m tracing the stack in `import-targets.ts` against the recent diff and the caller in `ImportTargetsModal.tsx`. I’ll inspect the changed code paths and the exact data shape that can make `parsed.min` or `parsed.max` undefined.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' actions/crm/targets/import-targets.ts" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,220p' components/modals/ImportTargetsModal.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Import Targets from CSV
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Select a CSV file to import targets."}
+            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+            {step === "preview" && "Review the import summary before proceeding."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Upload */}
+
+exec
+/usr/bin/bash -lc 'git diff --stat HEAD~1 HEAD -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+codex
+The failure is in the new `employees` normalization path, not in the core import loop. I’m checking the exact diff to confirm whether the client now allows plain CSV strings for `employees` while the server still assumes JSON with `{min,max}`.
+exec
+/usr/bin/bash -lc 'git diff HEAD~1 HEAD -- actions/crm/targets/import-targets.ts' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -8,6 +8,15 @@ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+@@ -44,9 +53,10 @@ export async function importTargets(
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+@@ -73,7 +83,7 @@ export async function importTargets(
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+
+exec
+/usr/bin/bash -lc 'git diff HEAD~1 HEAD -- components/modals/ImportTargetsModal.tsx' in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '1,120p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -293,6 +293,9 @@ const ImportTargetsModal = () => {
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+    66	    valid.push({
+    67	      last_name: last_name ?? "",
+    68	      first_name: row.first_name || null,
+    69	      email: email || null,
+    70	      mobile_phone: mobile_phone || null,
+    71	      office_phone: row.office_phone || null,
+    72	      company: row.company || null,
+    73	      position: row.position || null,
+    74	      company_website: companyDomain || null,
+    75	      personal_website: row.personal_website || null,
+    76	      social_linkedin: row.social_linkedin || null,
+    77	      social_x: row.social_x || null,
+    78	      social_instagram: row.social_instagram || null,
+    79	      social_facebook: row.social_facebook || null,
+    80	      personal_email: row.personal_email || null,
+    81	      company_email: row.company_email || null,
+    82	      company_phone: row.company_phone || null,
+    83	      city: row.city || null,
+    84	      country: row.country || null,
+    85	      industry: row.industry || null,
+    86	      employees: employees || null,
+    87	      description: row.description || null,
+    88	      created_by: (session.user as any).id,
+    89	    });
+    90	  });
+    91	
+    92	  if (valid.length > 0) {
+    93	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    94	  }
+    95	
+    96	  return { imported: valid.length, skipped: errors.length, errors };
+    97	}
+
+codex
+I’ve confirmed the crash was introduced in the last server-side change. One more pass: I’m checking what format `employees` is expected to have elsewhere in the app and whether empty or legacy CSV values are a normal case.
+exec
+/usr/bin/bash -lc 'rg -n "employees" -S .' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+./tests/e2e/campaign-targets.spec.ts:73:    await page.getByLabel("Employees").fill("50-200");
+./scripts/validation/table-schema.ts:57:  'Employees',
+./scripts/validation/table-schema.ts:344:  Employees: {
+./scripts/validation/table-schema.ts:345:    tableName: 'Employees',
+./scripts/migration/transformers/index.ts:31:export { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:61:import { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:107:  Employees: transformEmployees,
+./scripts/migration/transformers/employees-transformer.ts:2: * Employees model transformer
+./scripts/migration/transformers/employees-transformer.ts:3: * Transforms MongoDB Employees documents to PostgreSQL format
+./scripts/migration/transformers/employees-transformer.ts:8:export function transformEmployees(mongoRecord: any, uuidMapper: any): any {
+./scripts/migration/batch-processor.ts:148:      'Employees': 'employees',
+./scripts/migration/transformers/crm-accounts-transformer.ts:28:    employees: nullableString(mongoRecord.employees),
+./scripts/migration/table-config.ts:33:      'Employees',
+./scripts/MIGRATION_README.md:76:- Employees
+./locales/uk.json:428:  "EmployeesPage": {
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:11:`targetFieldMap` in `inngest/functions/enrich-target.ts` has 10 fields. The API PATCH route (`app/api/crm/targets/[id]/route.ts`) has 20 fields after adding company-search fields. The 8 new fields — `personal_email`, `company_email`, `company_phone`, `industry`, `employees`, `description`, `city`, `country` — are silently dropped in bulk Inngest enrichment jobs.
+./locales/en.json:448:  "EmployeesPage": {
+./locales/en.json:449:    "title": "Employees",
+./locales/en.json:450:    "description": "Manage your employees",
+./locales/en.json:451:    "moduleContent": "Employees module content"
+./locales/de.json:428:  "EmployeesPage": {
+./__tests__/reports/accounts.test.ts:60:        { employees: "5" },
+./__tests__/reports/accounts.test.ts:61:        { employees: "50" },
+./__tests__/reports/accounts.test.ts:62:        { employees: "500" },
+./__tests__/reports/accounts.test.ts:63:        { employees: null },
+./locales/cz.json:431:  "EmployeesPage": {
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md:21:| 2 | should create a new target with all fields | Open new target sheet, fill all field groups: first_name, last_name, email, email_2, mobile_phone, office_phone, home_phone, company, position, company_website, company_website_2, social_x, social_linkedin, social_instagram, social_facebook, city, country, industry, employees, description, status. Submit form, verify success toast |
+./prisma/schema.prisma:29:  employees            String?
+./prisma/schema.prisma:688:model Employees {
+./prisma/schema.prisma:1236:  employees        String?
+./inngest/functions/enrich-target.ts:22:  employees:        "employees",
+./inngest/functions/enrich-target.ts:74:          industry: true, employees: true, city: true,
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1107:        { employees: "5" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1108:        { employees: "50" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1109:        { employees: "500" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1110:        { employees: null },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1211:    select: { employees: true },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1227:    const emp = parseInt(a.employees ?? "", 10);
+./docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md:101:    await page.getByLabel("Employees").fill("50-200");
+./lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+./lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+./lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+./lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+./lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+./lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+./lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+./lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+./lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+./lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+./lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+./prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+./prisma/migrations/0_init/migration.sql:242:CREATE TABLE "Employees" (
+./prisma/migrations/0_init/migration.sql:251:    CONSTRAINT "Employees_pkey" PRIMARY KEY ("id")
+./lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:72:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:115:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:181:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:229:        employees: true,
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:368:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:479:    "employees": "string or null",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:600:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:643:          industry: true, employees: true, city: true,
+./components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+./lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md:18:- Campaign management (bulk assign to projects/employees)
+./actions/reports/accounts.ts:45:    select: { employees: true },
+./actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+./actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+./actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+./actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+./actions/crm/targets/update-target.ts:27:  employees?: string;
+./actions/crm/targets/suggest-mapping.ts:25:  "employees",
+./actions/crm/targets/suggest-mapping.ts:83:    headcount: "employees",
+./actions/crm/targets/suggest-mapping.ts:84:    numemployees: "employees",
+./actions/crm/targets/suggest-mapping.ts:85:    teamsize: "employees",
+./actions/crm/targets/suggest-mapping.ts:86:    companysize: "employees",
+./actions/crm/targets/convert-target.ts:39:          employees: target.employees ?? undefined,
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+./actions/get-empoloyees.ts:3:export const getEmployees = async () => {
+./actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+./app/[locale]/(routes)/page.tsx:25:import { getEmployees } from "@/actions/get-empoloyees";
+./app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+./app/[locale]/(routes)/page.tsx:115:          href="/employees"
+./app/[locale]/(routes)/page.tsx:116:          title="Employees"
+./app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+./app/[locale]/(routes)/employees/page.tsx:10:  const t = await getTranslations("EmployeesPage");
+./app/[locale]/(routes)/components/app-sidebar.tsx:39: * - Task 2.6: Added remaining module navigation items (Employees, Reports, Documents, Databox)
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:348:            <FormItem><FormLabel>Employees</FormLabel>
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:312:            <FormItem><FormLabel>Employees</FormLabel>
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:65:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:97:('personal_email','company_email','company_phone','city','country','industry','employees','description','converted_at','converted_account_id','converted_contact_id');
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:362:employees?: string;
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:378:employees: row.employees || null,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:393:  "city", "country", "industry", "employees", "description",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:425:// employees
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:427:numemployees: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:428:teamsize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:479:employees:      z.string().optional(),
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:530:  <FormField control={form.control} name="employees" render={({ field }) => (
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:531:    <FormItem><FormLabel>Employees</FormLabel>
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:628:          employees: target.employees ?? undefined,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:765:- 11 new fields on crm_Targets: personal_email, company_email, company_phone, city, country, industry, employees, description + conversion tracking fields
+
+exec
+/usr/bin/bash -lc 'git log -n 3 --oneline -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+234a54c Handle legacy employee range imports
+2e9c25e Normalize imported target values
+3a781f0 refactor(auth): update all server actions to better-auth with RBAC
+
+codex
+The broader codebase treats `employees` as a plain optional string like `50-200`, which makes the new JSON-only parser look inconsistent. I’m pulling a couple of nearby references to verify that this isn’t an established structured field anywhere else.
+exec
+/usr/bin/bash -lc "sed -n '60,90p' tests/e2e/campaign-targets.spec.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+    await page.getByLabel("X (Twitter)").fill("https://x.com/pw-target");
+    await page.getByLabel("Instagram").fill("https://instagram.com/pw-target");
+    await page.getByLabel("Facebook").fill("https://facebook.com/pw-target");
+
+    // --- Additional Contact ---
+    await page.getByLabel("Personal Email", { exact: true }).fill("pw-personal@test.example.com");
+    await page.getByLabel("Company Email", { exact: true }).fill("pw-company@test.example.com");
+    await page.getByLabel("Company Phone", { exact: true }).fill("+1 800 000 0000");
+
+    // --- Location & Industry ---
+    await page.getByLabel("City").fill("Prague");
+    await page.getByLabel("Country").fill("Czech Republic");
+    await page.getByLabel("Industry").fill("SaaS");
+    await page.getByLabel("Employees").fill("50-200");
+
+    // --- Description ---
+    await page.getByLabel("Description").fill("Playwright test target with all fields");
+
+    // Submit
+    await page.getByRole("button", { name: "Create target" }).click();
+
+    await assertSuccessToast(page);
+
+    // Verify the sheet closed and table refreshed
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  });
+
+  test("should filter targets by last name", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+
+exec
+/usr/bin/bash -lc "sed -n '300,360p' app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '330,370p' app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx" in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `sed -n '300,360p' app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx'
+
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `sed -n '330,370p' app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx'
+
+codex
+Those path reads tripped on shell metacharacters; I’m retrying with quoted paths to get the exact form field definitions.
+exec
+/usr/bin/bash -lc "sed -n '300,360p' 'app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="industry" render={({ field }) => (
+            <FormItem><FormLabel>Industry</FormLabel>
+              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="employees" render={({ field }) => (
+            <FormItem><FormLabel>Employees</FormLabel>
+              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <FormField control={form.control} name="description" render={({ field }) => (
+          <FormItem><FormLabel>Description</FormLabel>
+            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel className="text-base">Is target active?</FormLabel>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        {form.formState.errors.root?.serverError && (
+          <p className="text-sm text-destructive" aria-live="polite">
+            {form.formState.errors.root.serverError.message}
+          </p>
+        )}
+        <Button disabled={form.formState.isSubmitting} type="submit" className="w-full">
+          {form.formState.isSubmitting ? (
+            <span className="flex items-center animate-pulse">Saving data ...</span>
+          ) : (
+            "Create target"
+          )}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+exec
+/usr/bin/bash -lc "sed -n '330,370p' 'app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="country" render={({ field }) => (
+            <FormItem><FormLabel>Country</FormLabel>
+              <FormControl><Input placeholder="Czech Republic" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="industry" render={({ field }) => (
+            <FormItem><FormLabel>Industry</FormLabel>
+              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="employees" render={({ field }) => (
+            <FormItem><FormLabel>Employees</FormLabel>
+              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <FormField control={form.control} name="description" render={({ field }) => (
+          <FormItem><FormLabel>Description</FormLabel>
+            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField
+          control={form.control}
+          name="status"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel className="text-base">Is target active?</FormLabel>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+
+codex
+I have enough to isolate the bug. I’m checking the previous server implementation once, so the report can tie the incident directly to the regression introduced between the last known-good and current code.
+exec
+/usr/bin/bash -lc "git show HEAD~1:actions/crm/targets/import-targets.ts | sed -n '1,110p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = row.company?.trim();
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.trim().toLowerCase();
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: row.employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+codex
+One last check: I want the report to distinguish between “blank/plain string CSV” and “wrong JSON shape”. I’m looking for any legacy employee-range structure in migration or import code that would produce valid JSON without `min`/`max`.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' scripts/migration/transformers/employees-transformer.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+/**
+ * Employees model transformer
+ * Transforms MongoDB Employees documents to PostgreSQL format
+ */
+
+import { nullableString } from '../utils';
+
+export function transformEmployees(mongoRecord: any, uuidMapper: any): any {
+  const newUuid = uuidMapper.generateAndMapUuid(mongoRecord._id);
+
+  return {
+    id: newUuid,
+    v: mongoRecord.__v || 0,
+    avatar: mongoRecord.avatar, // Required field
+    email: nullableString(mongoRecord.email),
+    name: mongoRecord.name, // Required field
+    salary: mongoRecord.salary || 0, // Required field
+    status: mongoRecord.status, // Required field
+  };
+}
+
+exec
+/usr/bin/bash -lc 'rg -n "min|max|employee range|structured form|legacy" actions components scripts docs -S' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+actions/user/update-profile.ts:19:  // Ensure user can only update their own profile unless admin
+actions/user/update-profile.ts:20:  if (session.user.id !== userId && session.user.role !== "admin") {
+actions/user/set-language.ts:19:  // Ensure user can only update their own language unless admin
+actions/user/set-language.ts:20:  if (session.user.id !== userId && session.user.role !== "admin") {
+docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:194:## Naming Convention
+actions/user/search-users.ts:6:const PAGE_SIZE_MAX = 100;
+actions/user/search-users.ts:20:  const safeTake = Math.min(PAGE_SIZE_MAX, Math.max(1, take));
+actions/user/search-users.ts:21:  const safeSkip = Math.max(0, skip);
+components/ui/minio-uploader.tsx:8:interface MinioUploaderProps {
+components/ui/minio-uploader.tsx:11:  maxSizeMB?: number;
+components/ui/minio-uploader.tsx:16:export function MinioUploader({
+components/ui/minio-uploader.tsx:19:  maxSizeMB = 64,
+components/ui/minio-uploader.tsx:22:}: MinioUploaderProps) {
+components/ui/minio-uploader.tsx:51:        // Step 2: PUT file directly to MinIO
+components/ui/minio-uploader.tsx:75:    maxFiles: 1,
+components/ui/minio-uploader.tsx:76:    maxSize: maxSizeMB * 1024 * 1024,
+components/ui/minio-uploader.tsx:102:          <p className="text-xs text-muted-foreground/60">Max {maxSizeMB}MB</p>
+scripts/validation/table-schema.ts:91:      { name: 'role', type: 'Enum', enumValues: ['admin', 'member', 'viewer'] },
+scripts/validation/table-schema.ts:291:  // Other tables with minimal validation
+components/ui/use-toast.ts:29:  count = (count + 1) % Number.MAX_VALUE
+scripts/validation/report-generator.ts:65:  // Determine overall status
+docs/superpowers/specs/2026-04-05-products-module-design.md:205:  name: z.string().min(1).max(255),
+docs/superpowers/specs/2026-04-05-products-module-design.md:207:  sku: z.string().max(100).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:210:  unit_price: z.coerce.number().min(0),
+docs/superpowers/specs/2026-04-05-products-module-design.md:211:  unit_cost: z.coerce.number().min(0).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:213:  tax_rate: z.coerce.number().min(0).max(100).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:214:  unit: z.string().max(50).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:231:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/specs/2026-04-05-products-module-design.md:232:  custom_price: z.coerce.number().min(0).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:238:  notes: z.string().max(1000).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:256:| `name` | Required, min 1 char, max 255 |
+docs/superpowers/specs/2026-04-05-products-module-design.md:309:| Limit | Max 500 rows per import |
+components/ui/toast.tsx:19:      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+docs/superpowers/specs/2026-04-05-line-items-design.md:120:- `line_total` is clamped to a minimum of 0 (never negative)
+docs/superpowers/specs/2026-04-05-line-items-design.md:228:  name: z.string().min(1).max(255),
+docs/superpowers/specs/2026-04-05-line-items-design.md:231:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/specs/2026-04-05-line-items-design.md:312:| `name` | Required, max 255 chars |
+docs/superpowers/specs/2026-04-05-line-items-design.md:317:| `line_total` | Server-calculated, clamped to min 0 |
+components/ui/textarea.tsx:12:        "flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+docs/superpowers/specs/2026-04-04-currency-support-design.md:8:Add multi-currency support to the CRM's sales module. Admin manages currencies and exchange rates (manual or ECB auto-update). Opportunities and contracts store values in a chosen currency with a snapshot rate. A global header currency switcher lets users view all monetary values converted to their preferred display currency.
+docs/superpowers/specs/2026-04-04-currency-support-design.md:21:| isEnabled | Boolean           | Admin can enable/disable           |
+docs/superpowers/specs/2026-04-04-currency-support-design.md:79:## Admin Currency Management
+docs/superpowers/specs/2026-04-04-currency-support-design.md:81:New admin page at `/admin/currencies`, added to AdminSidebarNav alongside existing items.
+docs/superpowers/specs/2026-04-04-currency-support-design.md:85:1. **Currency table** — lists all currencies (code, name, symbol, enabled toggle, default radio). Admin can add ISO 4217 currencies beyond the seeded three.
+docs/superpowers/specs/2026-04-04-currency-support-design.md:87:2. **Exchange rates section** — shows current rate, source (Manual/ECB), last updated date for each enabled currency pair. Admin can edit rates inline in manual mode.
+docs/superpowers/specs/2026-04-04-currency-support-design.md:92:   - Admin can override individual pairs (switches source to MANUAL, excluded from auto-update)
+docs/superpowers/specs/2026-04-04-currency-support-design.md:105:- Defaults to admin-configured default currency
+docs/superpowers/specs/2026-04-04-currency-support-design.md:170:### Admin
+docs/superpowers/specs/2026-04-04-currency-support-design.md:171:- `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx` — add "Currencies" item
+docs/superpowers/specs/2026-04-04-currency-support-design.md:172:- New: `app/[locale]/(routes)/admin/currencies/page.tsx`
+docs/superpowers/specs/2026-04-04-currency-support-design.md:173:- New: `app/[locale]/(routes)/admin/currencies/_components/` — CurrencyTable, ExchangeRatesTable, ECBToggle
+docs/superpowers/specs/2026-04-04-currency-support-design.md:174:- New: `app/[locale]/(routes)/admin/currencies/_actions/` — server actions
+scripts/test-data/README.md:13:**Duration:** ~5-10 minutes to migrate
+scripts/test-data/README.md:56:  -e MONGO_INITDB_ROOT_USERNAME=admin \
+scripts/test-data/README.md:61:DATABASE_URL_MONGODB="mongodb://admin:password@localhost:27017/nextcrm_test?authSource=admin"
+scripts/test-data/README.md:150:- Use deterministic seeds for reproducibility
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:33:| `thumbnail_url` | `String` (nullable) | MinIO URL of generated thumbnail |
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:60:- Old version files remain in MinIO, accessible via version history.
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:77:5. Upload directly to MinIO via presigned URL
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:103:  - TXT → read directly from MinIO
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:134:  - Upload thumbnail to MinIO at thumbnails/{docId}.png
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:236:| `bulkDeleteDocuments` | New — deletes multiple documents from DB + MinIO |
+docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:254:- **MinIO** — file storage (already configured)
+components/ui/sidebar.tsx:29:const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+components/ui/sidebar.tsx:93:        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+components/ui/sidebar.tsx:150:              "group/sidebar-wrapper flex min-h-svh w-full has-[[data-variant=inset]]:bg-sidebar",
+components/ui/sidebar.tsx:335:        "relative flex min-w-0 flex-1 flex-col bg-background",
+components/ui/sidebar.tsx:417:        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+components/ui/sidebar.tsx:434:      className={cn("relative flex w-full min-w-0 flex-col py-2 px-4 group-data-[collapsible=icon]:px-2", className)}
+components/ui/sidebar.tsx:505:    className={cn("flex w-full min-w-0 flex-col gap-1", className)}
+components/ui/sidebar.tsx:644:      "pointer-events-none absolute right-1 flex h-5 min-w-5 select-none items-center justify-center rounded-md px-1 text-xs font-medium tabular-nums text-sidebar-foreground",
+components/ui/sidebar.tsx:682:        className="h-4 max-w-[var(--skeleton-width)] flex-1"
+components/ui/sidebar.tsx:703:      "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5",
+components/ui/sidebar.tsx:735:        "flex h-7 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-2 text-sidebar-foreground outline-none ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+components/ui/sheet.tsx:41:        left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
+components/ui/sheet.tsx:43:          "inset-y-0 right-0 h-full w-3/4  border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:9:Replace next-auth with better-auth across the entire application. Auth methods change from Google OAuth + GitHub OAuth + email/password to Google OAuth + Email OTP only. Sessions move from JWT to database-backed. Simple RBAC replaces boolean admin flags. Security is the top priority.
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:15:- Simple RBAC: `admin`, `member`, `viewer`
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:16:- PENDING user approval flow preserved (admin must activate new users in production)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:30:- **Admin plugin** with `createAccessControl` for RBAC
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:36:- `createAuthClient()` with `adminClient` plugin for role-aware checks
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:41:- Three roles defined via `createAccessControl`: `admin`, `member`, `viewer`
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:64:**Admin-only route handling change:**
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:65:- Current: proxy decodes JWT to check `isAdmin` claim
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:67:- Admin role enforcement moves entirely to server-side API route handlers
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:73:        → Admin API? → cookie check → no cookie = 401, has cookie = next()
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:97:- 5-minute expiry (better-auth default)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:104:| First user ever | `ACTIVE` | `admin` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:107:| Admin invitation | `ACTIVE` | `member` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:112:- `PENDING` → redirect to `/pending` page ("Your account must be allowed by Admin")
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:114:- Admin activates user via admin panel → status set to `ACTIVE`
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:116:### Admin invitation flow (updated)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:118:- Current: admin enters email/name → user created `ACTIVE` with temp password → email with password
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:119:- New: admin enters email/name → user created `ACTIVE` with role `member` → email with sign-in link (user authenticates via OTP on first visit, no password to communicate)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:138:- `actions/admin/users/invite-user.ts` — rewrite (no password generation, send OTP invite link)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:152:| Add `role` column | `String @default("member")` — values: `admin`, `member`, `viewer` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:154:| Keep `is_admin`, `is_account_admin` | Temporarily. Migration backfills `role`, then removed in cleanup |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:160:   - `is_admin = true` → `role = "admin"`
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:161:   - `is_account_admin = true` AND `is_admin = false` → `role = "member"`
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:169:- Old columns (`password`, `is_admin`, `is_account_admin`) preserved
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:179:| `admin` | Full system access: manage users, change roles, activate/deactivate, all CRUD, settings |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:185:1. **Proxy** (`proxy.ts`): admin API paths get cookie-presence check only
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:186:2. **Server-side admin API routes**: `auth.api.getSession()` + `role === "admin"` check → 403 if not
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:187:3. **Admin pages** (`/(routes)/admin/*`): server component redirect for non-admins
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:194:| `is_admin: true` | `admin` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:195:| `is_account_admin: true`, `is_admin: false` | `member` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:198:No `viewer` users exist today — available for admins to assign going forward.
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:200:### Admin panel changes
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:202:- Replace "Activate Admin" / "Deactivate Admin" buttons with role dropdown (`admin` / `member` / `viewer`)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:204:- Only `admin` role can change other users' roles
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:278:| `session.user.isAdmin` | `session.user.role === "admin"` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:290:4. Run data migration script (backfill roles from `is_admin` / `is_account_admin`)
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:304:- [ ] OTP codes expire after 5 minutes, single-use
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:307:- [ ] `BETTER_AUTH_SECRET` unique per instance, minimum 32 bytes
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:318:- [ ] Admin API routes check `role === "admin"` server-side
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:325:- [ ] Only `admin` can change user roles and activate/deactivate users
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:341:- Remove `is_admin` and `is_account_admin` columns
+components/ui/select.tsx:78:        "relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-select-content-transform-origin]",
+components/ui/select.tsx:91:            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+components/ui/select.tsx:127:      <SelectPrimitive.ItemIndicator>
+components/ui/select.tsx:129:      </SelectPrimitive.ItemIndicator>
+docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md:4:**Goal:** Replace `@tremor/react` charting with `shadcn/ui` charts across all report pages for a unified, professional UI with minimal custom code.
+docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md:69:| Users by Role | Tremor Bar | shadcn **Pie** | Only 3 categories (Admin/Account Admin/User) — pie shows proportions clearly |
+docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md:87:- Uses shadcn `ChartContainer` with a `ChartConfig` for color theming
+actions/reports/accounts.ts:48:    { label: "1-10", min: 1, max: 10 },
+actions/reports/accounts.ts:49:    { label: "11-50", min: 11, max: 50 },
+actions/reports/accounts.ts:50:    { label: "51-200", min: 51, max: 200 },
+actions/reports/accounts.ts:51:    { label: "201-500", min: 201, max: 500 },
+actions/reports/accounts.ts:52:    { label: "500+", min: 501, max: Infinity },
+actions/reports/accounts.ts:53:    { label: "Unknown", min: -1, max: -1 },
+actions/reports/accounts.ts:60:    const range = ranges.find((r) => emp >= r.min && emp <= r.max);
+components/ui/modal.tsx:34:      <DialogContent className="max-w-md">
+docs/superpowers/specs/2026-03-31-reports-remaster-design.md:23:- Mini sparkline
+docs/superpowers/specs/2026-03-31-reports-remaster-design.md:47:| **Campaigns** | `/reports/campaigns` | Campaign performance (sent/opened/clicked), campaign ROI, best performing templates, target list growth |
+docs/superpowers/specs/2026-03-31-reports-remaster-design.md:218:├── Cron trigger: runs every 15 minutes
+docs/superpowers/specs/2026-03-31-reports-remaster-design.md:263:- No admin approval needed for sharing — any user can share
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:17:Also fix a latent Zod schema bug in `UpdateOpportunityForm` (`id: max(30)` → `uuid()`).
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:48:**Change:** `id: z.string().min(5).max(30)` → `id: z.string().uuid()`
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:50:**Reason:** UUID-format IDs are 36 chars; `max(30)` silently blocks all form submissions. Same bug was fixed for accounts in `ea58212`.
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:59:- `fillIfEmpty(page, label, value)` — fills only if empty, avoids overwriting + avoids Zod `min()` failures
+scripts/migration/utils.ts:179:  const minutes = Math.floor((ms / (1000 * 60)) % 60);
+scripts/migration/utils.ts:184:  if (minutes > 0) parts.push(`${minutes}m`);
+scripts/migration/utils.ts:245:export function sanitizeForLog(value: unknown, maxLength = 200): string {
+scripts/migration/utils.ts:247:  if (str.length <= maxLength) return str;
+scripts/migration/utils.ts:248:  return str.substring(0, maxLength) + '...';
+docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:160:- **Sheet timing:** After clicking trigger button, wait for `page.waitForSelector('[role="dialog"], [data-state="open"]')` before filling fields.
+docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:175:- No flakiness from timing — all waits use explicit `waitFor*` calls, no `waitForTimeout`
+components/ui/file-uploader.tsx:1:// Legacy component — no longer used.
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:27:- Activity notifications / reminders — deferred
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:29:- Global activities admin page — deferred
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:57:  duration    Int?                 // minutes — calls and meetings only
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:171:  cursor?: { date: string; id: string }  // compound cursor for deterministic pagination
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:176:- Joins `crm_Activities` ordered by `date DESC, id DESC` (compound sort for determinism when multiple activities share the same date)
+docs/superpowers/specs/2026-03-28-crm-activities-design.md:198:- Call + Meeting: Duration (minutes), Outcome (Input)
+components/ui/file-uploader-dropzone.tsx:2:import { MinioUploader } from "@/components/ui/minio-uploader";
+components/ui/file-uploader-dropzone.tsx:17:  { folder: "avatars" | "images" | "documents"; accept: Record<string, string[]>; maxSizeMB: number }
+components/ui/file-uploader-dropzone.tsx:19:  profilePhotoUploader: { folder: "avatars", accept: { "image/*": [] }, maxSizeMB: 4 },
+components/ui/file-uploader-dropzone.tsx:20:  imageUploader: { folder: "images", accept: { "image/*": [] }, maxSizeMB: 4 },
+components/ui/file-uploader-dropzone.tsx:21:  pdfUploader: { folder: "documents", accept: { "application/pdf": [".pdf"] }, maxSizeMB: 64 },
+components/ui/file-uploader-dropzone.tsx:29:    maxSizeMB: 64,
+components/ui/file-uploader-dropzone.tsx:36:    <MinioUploader
+components/ui/file-uploader-dropzone.tsx:39:      maxSizeMB={config.maxSizeMB}
+components/ui/dropdown-menu.tsx:50:      "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-dropdown-menu-content-transform-origin]",
+components/ui/dropdown-menu.tsx:68:        "z-50 max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[8rem] overflow-y-auto overflow-x-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-dropdown-menu-content-transform-origin]",
+components/ui/dropdown-menu.tsx:109:      <DropdownMenuPrimitive.ItemIndicator>
+components/ui/dropdown-menu.tsx:111:      </DropdownMenuPrimitive.ItemIndicator>
+components/ui/dropdown-menu.tsx:132:      <DropdownMenuPrimitive.ItemIndicator>
+components/ui/dropdown-menu.tsx:134:      </DropdownMenuPrimitive.ItemIndicator>
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:1:# CRM Settings Admin Feature — Design Spec
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:10:Add a CRM Settings section to the admin area (`/admin/crm-settings`) where admins can manage default configuration values used across CRM modules. This includes converting four plain `String?` fields (and cleaning up orphaned Prisma enums) into DB-backed FK relations, and providing a full CRUD UI for all seven config types.
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:185:## Admin UI
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:190:app/[locale]/(routes)/admin/crm-settings/
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:237:Add to `AdminSidebarNav.tsx`:
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:240:{ label: "CRM Settings", href: "/admin/crm-settings", icon: SlidersHorizontal }
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:243:The existing `pathname.includes(href)` active-state logic works correctly with locale-prefixed paths (e.g., `/en/admin/crm-settings` includes `/admin/crm-settings`).
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:278:**Cache invalidation:** All mutating actions call `revalidatePath('/admin/crm-settings', 'page')` — Next.js 15 accepts a path pattern without the locale segment when using the App Router's `revalidatePath`. Alternatively, pass the locale from the client and call `revalidatePath(`/${locale}/admin/crm-settings`)` explicitly.
+docs/superpowers/specs/2026-03-27-crm-settings-design.md:283:- `name`: non-empty string, max 100 characters, trimmed
+components/ui/dialog.tsx:41:        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:11:Add a complete audit trail to the NextCRM sales module. Every field change, creation, deletion, and relationship mutation on any CRM record is permanently recorded. Deleted records are soft-deleted (hidden from the app, recoverable by admins). History is visible inline on every record detail page and in a global admin audit log page.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:19:- Admin restore capability for soft-deleted records
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:21:- Global `/admin/audit-log` page with filtering and inline diff expansion
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:143:**New admin actions:**
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:145:- `actions/crm/accounts/restore-account.ts` — checks `session.user.is_admin`, returns unauthorized error if false, then sets `deletedAt: null, deletedBy: null`, writes `restored` audit entry
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:148:> **Authorization:** All restore actions must verify `session.user.is_admin === true` (matching the `Users.is_admin` field) before executing. Return a 403/unauthorized response otherwise. This is the same guard used in existing admin actions.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:152:Every `getXxx()` action for the 5 entities adds `where: { deletedAt: null }` (or merges with existing where clause). This includes both list actions and single-record detail actions (e.g. `get-account.ts`) — a direct URL to a soft-deleted record must return null/404, not render the record. Admin-facing queries (audit log page) omit this filter.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:154:> **Legacy flat-namespace actions** (`actions/crm/get-accounts.ts`, `get-contacts.ts`, `get-contact.ts`, etc.) are read-only fetch helpers — they do not mutate data and do not need audit log calls, but they **do** need the `deletedAt: null` filter added.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:159:- `actions/crm/audit-log/get-audit-log-admin.ts` — paginated 50/page, filterable by entityType/action/userId/dateRange, includes soft-deleted records
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:184:- `deleted` entries show a **[Restore]** button — admin only
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:193:### Admin Audit Log Page — `/admin/audit-log`
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:195:New page at `app/[locale]/(routes)/admin/audit-log/page.tsx`.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:197:Linked from existing admin sidebar/nav.
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:214:- Restore action available inline on `deleted` rows (admin only)
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:217:**Component:** `components/crm/audit-log/AdminTable.tsx`
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:229:  get-audit-log-admin.ts
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:249:  AdminTable.tsx
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:251:app/[locale]/(routes)/admin/audit-log/
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:280:7. Build `AdminTable` + admin page
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:289:- Soft-deleted records are invisible to all non-admin queries — `deletedAt: null` filter on all detail and list actions ensures direct URL access also returns 404
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:291:- `crm_Contacts` has legacy inconsistencies (`cratedAt` typo, dual `created_on`/`cratedAt` fields) — the migration adds `deletedAt`/`deletedBy` cleanly and does not touch existing fields
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:300:- [ ] Deleted records do not appear in any list view or detail page — direct URL to a soft-deleted record returns 404 (except admin audit log page)
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:301:- [ ] Admin can restore a soft-deleted record
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:303:- [ ] Admin audit log page supports filtering by entity type, action, user, date range
+components/ui/dialog-document-view.tsx:42:        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-5xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg md:w-full",
+components/ui/data-table.tsx:81:          className="max-w-sm"
+docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:51:Add a module-level cache in `agent-enrichment-strategy.ts`: store the loaded result and a timestamp. Re-use the cached value if it is less than 5 minutes old; otherwise reload. If `loadSkipList()` throws, the error propagates normally — no stale cache is written.
+docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:106:`AgentOrchestrator.enrichRow()` has no maximum execution time. A slow or hung Firecrawl/OpenAI call can block a streaming SSE connection indefinitely.
+docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:152:- `shouldSkipTargetEnrichment()` naming
+components/ui/command.tsx:63:    className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
+docs/superpowers/specs/2026-03-26-e2b-agent-enrichment-design.md:23:Given a Target with at minimum a company name, enrich it with:
+docs/superpowers/specs/2026-03-26-e2b-agent-enrichment-design.md:90:5. Timeout: 5 minutes hard limit per target
+docs/superpowers/specs/2026-03-26-e2b-agent-enrichment-design.md:223:| Sandbox timeout (5 min) | Mark as FAILED, store error, continue with partial results |
+components/ui/chart.tsx:182:          "grid min-w-[8rem] items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
+scripts/migration/transformers/users-transformer.ts:14:  const isAdmin = toBoolean(mongoRecord.is_admin);
+scripts/migration/transformers/users-transformer.ts:15:  const role = isAdmin ? "admin" : "member";
+scripts/migration/transformers/users-transformer.ts:23:    is_account_admin: toBoolean(mongoRecord.is_account_admin),
+scripts/migration/transformers/users-transformer.ts:24:    is_admin: isAdmin,
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:51:Add fields to the existing minimal model:
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:249:  generate-template.ts      Call LLM via user's configured API key (30s timeout, non-streaming); returns { html, json, subject }
+docs/superpowers/specs/2026-03-23-target-enrichment-design.md:20:- SSE streaming route for single-target enrichment with real-time progress
+docs/superpowers/specs/2026-03-23-target-enrichment-design.md:215:| Bulk rate limit | Inngest retries (max 3, exponential backoff) |
+components/ui/calendar.tsx:204:        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 flex aspect-square h-auto w-full min-w-[var(--cell-size)] flex-col gap-1 font-normal leading-none data-[range-end=true]:rounded-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] [&>span]:text-xs [&>span]:opacity-70",
+actions/get-users.ts:3://Get all users  for admin module
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:9:Remove the hard requirement for `FIRECRAWL_API_KEY` and `OPENAI_API_KEY` environment variables. Instead, implement a 3-tier priority system where API keys can be configured at the ENV level, by an admin system-wide, or by individual users in their profile. The app builds and runs without any AI keys in `.env`; enrichment features gracefully degrade when no key is found.
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:14:ENV variable  →  Admin system-wide  →  User profile
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:18:ENV always wins. System-wide admin keys take precedence over individual user keys. User-profile keys are the last resort — used only when neither ENV nor a system-wide key is configured for that provider.
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:23:- Admins can configure system-wide keys at `/en/admin` (new redesigned UI)
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:126:### Admin (system-wide keys)
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:128:File: `app/[locale]/(routes)/admin/actions/api-keys.ts`
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:133:| `upsertSystemApiKey(provider, key)` | Encrypts key, upserts row with `scope=SYSTEM`. Calls `revalidatePath` using the locale-aware path pattern matching other admin actions in the codebase. |
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:136:Guard: each action checks `session.user.is_admin` and throws if not admin.
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:205:    data: { status: "FAILED", error: "NO_API_KEY: configure keys in admin or profile settings" }
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:217:### Admin Page Redesign
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:219:**Existing admin structure:** The current admin page already contains `OpenAiCard`, `GptCard`, and `SetGptModel` — these are the old per-admin OpenAI key management UI. They are superseded by the new `llm-keys` page and **must be removed** from `admin/page.tsx` and `admin/_components/` when the new page is added. `ResendCard` (email service config) is unrelated and stays. The existing `admin/users/` and `admin/modules/` sub-pages are preserved and will be wrapped by the new `layout.tsx` sidebar.
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:221:The existing `admin/page.tsx` should redirect to `admin/llm-keys` as the new default, or be repurposed as the LLM keys page directly.
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:223:**New layout:** `app/[locale]/(routes)/admin/layout.tsx`
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:228:**LLM Keys page:** `app/[locale]/(routes)/admin/llm-keys/page.tsx`
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:260:- Content: "Enrichment requires API keys. Configure them in your profile settings, or ask your admin to set a system-wide key."
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:285:  admin/
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:289:      page.tsx                           NEW — LLM keys admin page
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:325:| ENV key set | Admin/profile pages show it as read-only with `ENV` badge; system/user keys for that provider are stored but never resolved |
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:328:| Admin deletes system key when user has one | Enrichment falls back to user key |
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:338:- Server actions validate session on every call; admin actions additionally check `is_admin`
+components/ui/alert-dialog.tsx:44:        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:49:│   │   └── route.ts                     ← SSE streaming endpoint (single contact)
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:188:1. Validate contactIds (max 100 per batch)
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:214:7. Write enriched values directly to `crm_Contacts` — **only empty fields** (never overwrite existing data). A field is considered empty if its current DB value is `null` or an empty string after trimming (`"".trim() === ""`)
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:266:| Jane Doe | ✅ Completed | industry, linkedin | 2 min ago | Pavel |
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:268:| Alice Brown | ❌ Failed | tech_stack | 5 min ago | Pavel |
+docs/superpowers/specs/2026-03-23-contact-enrichment-design.md:285:| Bulk Firecrawl rate limit | Inngest retries with exponential backoff (max 3 attempts) |
+components/ui/account-search-combobox.tsx:35:const PAGE_SIZE_MAX = 100;
+components/ui/account-search-combobox.tsx:97:      const data = await searchAccounts({ search: "", skip: 0, take: PAGE_SIZE_MAX });
+actions/fulltext/unified-search.ts:227:                   MAX(1 - (c.embedding <=> ${queryVec}::vector)) AS similarity
+actions/fulltext/unified-search.ts:344:        existing.similarity = Math.max(existing.similarity, chunk.similarity);
+docs/superpowers/specs/2026-03-22-emails-design.md:5:**Author:** Brainstorming session
+docs/superpowers/specs/2026-03-22-emails-design.md:24:- Scheduled sync (every 15 min) + manual on-demand sync
+docs/superpowers/specs/2026-03-22-emails-design.md:78:| rfcMessageId | String | RFC 822 `Message-ID` header — stable global identifier. If the header is absent (malformed/legacy messages), synthesize a fallback: `<emailAccountId>-<folder>-<imapUid>@local`. The unique constraint still holds. |
+docs/superpowers/specs/2026-03-22-emails-design.md:215:- **Trigger:** Cron, every 15 minutes
+docs/superpowers/specs/2026-03-22-emails-design.md:265:- `sandbox` — blocks all scripts (XSS prevention). Note: because `allow-same-origin` and `allow-scripts` are intentionally absent, `contentDocument` is inaccessible — do NOT attempt to auto-resize via `onLoad + scrollHeight`. Use a fixed `max-height` (e.g. 600px) with `overflow-y: auto` on the iframe instead.
+docs/superpowers/specs/2026-03-22-emails-design.md:341:- Emails sync from Inbox + Sent every 15 min and on demand; cursor advances correctly between syncs
+docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:18:**Spinner files to eliminate:**
+docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:26:- `app/[locale]/(routes)/admin/loading.tsx`
+docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:83:### `components/skeletons/admin-skeleton.tsx`
+docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:134:| `app/[locale]/(routes)/admin/loading.tsx` | → `<AdminSkeleton />` |
+scripts/migration/transformers/invoices-transformer.ts:8:export function transformInvoices(mongoRecord: any, uuidMapper: any): any {
+components/support.tsx:15:        className="flex flex-col space-y-2 mt-3 min-w-[400px]"
+docs/superpowers/specs/2026-03-20-unified-search-design.md:140:Each entity query returns a maximum of **10 results** after merging. Raw semantic queries use `LIMIT 10`. Keyword queries use Prisma `take: 10`. After deduplication and scoring, results are sorted by `score` descending and capped at 10.
+actions/emails/messages.ts:10:const MAX_COUNT = 10_000;
+actions/emails/messages.ts:65:  const total = Math.min(rawCount, MAX_COUNT);
+scripts/migration/transformers/invoice-states-transformer.ts:6:export function transformInvoiceStates(mongoRecord: any, uuidMapper: any): any {
+docs/superpowers/specs/2026-03-20-pgvector-embeddings-design.md:83:**Note:** HNSW index is used instead of ivfflat because it has no minimum row count requirement (ivfflat degrades on small datasets). HNSW works correctly at any CRM scale.
+docs/superpowers/specs/2026-03-20-mcp-server-design.md:79:**Token limit:** Max 10 active (non-revoked, non-expired) tokens per user, enforced in `generateApiToken()`.
+docs/superpowers/specs/2026-03-20-mcp-server-design.md:152:- `list_*` accepts `limit` (default 20, max 100) and `offset` (default 0)
+docs/superpowers/specs/2026-03-20-mcp-server-design.md:204:| Session fallback dev-only | Production revocation must be absolute; session bypass would undermine it |
+docs/superpowers/specs/2026-03-20-mcp-server-design.md:206:| Max 10 tokens per user | Prevents table flooding; sufficient for all practical agent configurations |
+components/skeletons/search-skeleton.tsx:5:    <Skeleton className="h-10 w-full max-w-xl" />
+scripts/migration/transformers/index.ts:17:export { transformCrmIndustryType } from './crm-industry-type-transformer';
+scripts/migration/transformers/index.ts:25:export { transformInvoices } from './invoices-transformer';
+scripts/migration/transformers/index.ts:26:export { transformInvoiceStates } from './invoice-states-transformer';
+scripts/migration/transformers/index.ts:47:import { transformCrmIndustryType } from './crm-industry-type-transformer';
+scripts/migration/transformers/index.ts:55:import { transformInvoices } from './invoices-transformer';
+scripts/migration/transformers/index.ts:56:import { transformInvoiceStates } from './invoice-states-transformer';
+scripts/migration/transformers/index.ts:93:  crm_Industry_Type: transformCrmIndustryType,
+scripts/migration/transformers/index.ts:101:  Invoices: transformInvoices,
+scripts/migration/transformers/index.ts:102:  invoice_States: transformInvoiceStates,
+components/skeletons/admin-skeleton.tsx:4:const AdminSkeleton = () => (
+components/skeletons/admin-skeleton.tsx:30:export default AdminSkeleton;
+actions/documents/delete-document.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+actions/documents/delete-document.ts:23:    await minioClient.send(
+actions/documents/delete-document.ts:25:        Bucket: MINIO_BUCKET,
+components/sheets/form-sheet.tsx:41:      <SheetContent side={position || "right"} className="max-w-3xl overflow-y-auto">
+scripts/migration/transformers/crm-industry-type-transformer.ts:6:export function transformCrmIndustryType(mongoRecord: any, uuidMapper: any): any {
+components/sheets/form-sheet-no-trigger.tsx:31:      <SheetContent side={position || "right"} className="max-w-3xl overflow-y-auto">
+docs/superpowers/plans/2026-04-06-soft-delete-migration.md:762:These use legacy patterns that still work but could be migrated to `deletedAt` in a future cleanup.
+actions/documents/bulk-delete-documents.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+actions/documents/bulk-delete-documents.ts:17:  // Delete from MinIO
+actions/documents/bulk-delete-documents.ts:21:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+scripts/migration/transformers/crm-contracts-transformer.ts:20:    renewalReminderDate: convertDateToISO(mongoRecord.renewalReminderDate),
+scripts/migration/table-config.ts:29:    description: 'Core entity tables (independent or minimal dependencies)',
+scripts/migration/progress-tracker.ts:187:    console.log('[CHECKPOINT] Resuming from previous migration');
+components/reports/KPICard.tsx:5:import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+components/reports/KPICard.tsx:16:    return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+components/reports/KPICard.tsx:33:            {isPositive ? <ArrowUpRight className="h-4 w-4" /> : isZero ? <Minus className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+scripts/migration/orchestrator.ts:97:        console.log(`📊 Resuming from checkpoint: ${checkpoint.currentTable || 'junction tables'}`);
+scripts/migration/orchestrator.ts:133:      // Note: Skipping this check for now - assuming database is prepared
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:466:The existing `skipListCache` in this file is permanent — it never expires. Replace the simple flag with a timestamp-based TTL of 5 minutes.
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:519:git commit -m "fix: add 5-minute TTL to skip-list cache"
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:39:UUID IDs are 36 chars. `max(30)` silently blocks all form submissions. Same bug was fixed for accounts.
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:46:id: z.string().min(5).max(30),
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:63:git commit -m "fix: UpdateOpportunityForm Zod id max(30) → uuid() for UUID account IDs"
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:112:        <SheetContent className="w-full md:max-w-[771px] overflow-y-auto">
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:270:        <SheetContent className="w-full md:max-w-[771px] overflow-y-auto">
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:427:        <SheetContent className="w-full md:max-w-[771px] overflow-y-auto">
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:733:    // Update the last name (required, max 30)
+components/modals/ImportTargetsModal.tsx:205:      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+components/modals/ImportTargetsModal.tsx:297:                  Employee ranges from legacy imports are expected in structured form.
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:9:**Tech Stack:** TypeScript, Zod, Prisma ORM, `mcp-handler` + `@modelcontextprotocol/sdk`, AWS S3 (MinIO), Inngest (async jobs)
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:54:  limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:55:  offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:182:      query: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:209:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:245:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:381:    schema: z.object({ query: z.string().min(1), ...paginationSchema }),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:411:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:412:      last_name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:448:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:449:      last_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:548:    schema: z.object({ query: z.string().min(1), ...paginationSchema }),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:577:      firstName: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:578:      lastName: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:607:      firstName: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:608:      lastName: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:706:    schema: z.object({ query: z.string().min(1), ...paginationSchema }),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:731:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:734:      budget: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:735:      expected_revenue: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:773:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:776:      budget: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:777:      expected_revenue: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:891:    schema: z.object({ query: z.string().min(1), ...paginationSchema }),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:920:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:921:      last_name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:952:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:953:      last_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1078:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1082:      unit_price: z.number().min(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1083:      unit_cost: z.number().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1085:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1135:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1140:      unit_price: z.number().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1141:      unit_cost: z.number().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1143:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1212:  name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1215:  quantity: z.number().int().min(1).default(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1216:  unit_price: z.number().min(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1218:  discount_value: z.number().min(0).default(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1219:  line_total: z.number().min(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1274:      title: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1275:      value: z.number().min(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1314:      title: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1315:      value: z.number().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1460:      title: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1463:      duration: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1511:      title: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1514:      duration: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1670:      document_name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1671:      contentType: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1909:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1924:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1961:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1986:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2038:      })).min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2078:    description: "Enrich multiple contacts in bulk (max 100). Dispatches async jobs.",
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2080:      contactIds: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2084:      })).min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2112:      })).min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2152:    description: "Enrich multiple targets in bulk (max 100). Dispatches async jobs.",
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2154:      targetIds: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2158:      })).min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2260:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2290:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2404:      name: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2407:      content_html: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2432:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2461:      order: z.number().int().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2463:      subject: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2464:      delay_days: z.number().int().min(0).default(0),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2484:      order: z.number().int().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2486:      subject: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2487:      delay_days: z.number().int().min(0).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2666:      title: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2667:      description: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2695:      title: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2728:      title: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2735:      const maxPos = await prismadb.sections.aggregate({
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2737:        _max: { position: true },
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2744:          position: (maxPos._max.position ?? BigInt(0)) + BigInt(1000),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2755:      title: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2844:      title: z.string().min(1),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2856:      const maxPos = await prismadb.tasks.aggregate({
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2858:        _max: { position: true },
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2867:          position: (maxPos._max.position ?? BigInt(0)) + BigInt(1000),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2882:      title: z.string().min(1).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2948:      comment: z.string().min(1),
+components/modals/upload-file-modal.tsx:34:      <DialogContent className="max-w-3xl overflow-y-auto">
+scripts/migration/backfill-roles.ts:2: * Backfill the `role` column from existing `is_admin` / `is_account_admin` flags.
+scripts/migration/backfill-roles.ts:6: *   is_admin = true              → role = "admin"
+scripts/migration/backfill-roles.ts:7: *   is_account_admin = true      → role = "member"
+scripts/migration/backfill-roles.ts:19:  // Admins first (is_admin takes precedence)
+scripts/migration/backfill-roles.ts:20:  const adminResult = await prisma.users.updateMany({
+scripts/migration/backfill-roles.ts:21:    where: { is_admin: true, role: "member" },
+scripts/migration/backfill-roles.ts:22:    data: { role: "admin" },
+scripts/migration/backfill-roles.ts:24:  console.log(`  Updated ${adminResult.count} users to role=admin`);
+scripts/migration/backfill-roles.ts:26:  // is_account_admin users stay as "member" (already the default)
+components/modals/right-view-notrigger.tsx:29:      <SheetContent side="right" className="max-w-3xl overflow-y-auto">
+docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:514:      max_tokens: 4096,
+docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:551:  process.stderr.write('Max iterations reached\\n');
+docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:589:const SANDBOX_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:631:        data: { status: "FAILED", error: "NO_API_KEY: configure ANTHROPIC key in admin or profile settings" },
+components/modals/password-reset.tsx:27:      <DialogContent className="max-w-md">
+components/modals/loading-modal.tsx:21:      <DialogContent className="max-w-md">
+docs/superpowers/plans/2026-03-30-campaign-playwright-tests.md:47:3. **Step 3 — Audience:** Search input, checkbox list of target lists, min 1 required. Back/Next buttons.
+docs/superpowers/plans/2026-03-30-campaign-playwright-tests.md:403:    // Step 2 — fill subject and add minimal content to TipTap
+scripts/migrate-mongo-to-postgres.ts:78:    // Load checkpoint if resuming
+scripts/migrate-mongo-to-postgres.ts:82:        console.log('📊 Resuming from previous checkpoint');
+docs/superpowers/plans/2026-04-04-currency-support.md:5:**Goal:** Add multi-currency support to opportunities and contracts with admin management, ECB auto-update, a header currency switcher, and converted display across dashboard and reports.
+docs/superpowers/plans/2026-04-04-currency-support.md:7:**Architecture:** New Prisma models (Currency, ExchangeRate, crm_SystemSettings) store currency config and rates. A shared `lib/currency.ts` provides conversion utilities. Server actions snapshot exchange rates on save. A React context (`CurrencyProvider`) reads a cookie to determine display currency, and the header dropdown lets users switch it. An Inngest cron function fetches ECB rates daily.
+docs/superpowers/plans/2026-04-04-currency-support.md:26:| `app/[locale]/(routes)/admin/currencies/page.tsx` | Admin currency management page |
+docs/superpowers/plans/2026-04-04-currency-support.md:27:| `app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx` | Manage currencies (enable/disable/default) |
+docs/superpowers/plans/2026-04-04-currency-support.md:28:| `app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx` | View/edit exchange rates |
+docs/superpowers/plans/2026-04-04-currency-support.md:29:| `app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx` | Toggle ECB auto-update |
+docs/superpowers/plans/2026-04-04-currency-support.md:30:| `app/[locale]/(routes)/admin/currencies/_actions/currencies.ts` | Server actions for currency CRUD |
+docs/superpowers/plans/2026-04-04-currency-support.md:41:| `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx` | Add "Currencies" nav item |
+docs/superpowers/plans/2026-04-04-currency-support.md:424:    maximumFractionDigits: num % 1 === 0 ? 0 : 2,
+docs/superpowers/plans/2026-04-04-currency-support.md:524:      document.cookie = `display_currency=${code};path=/;max-age=${60 * 60 * 24 * 365}`;
+docs/superpowers/plans/2026-04-04-currency-support.md:654:### Task 5: Admin Currencies Page — Server Actions
+docs/superpowers/plans/2026-04-04-currency-support.md:657:- Create: `app/[locale]/(routes)/admin/currencies/_actions/currencies.ts`
+docs/superpowers/plans/2026-04-04-currency-support.md:661:Follow the pattern from `admin/crm-settings/_actions/crm-settings.ts`:
+docs/superpowers/plans/2026-04-04-currency-support.md:691:  name: z.string().min(1, "Name is required").max(100),
+docs/superpowers/plans/2026-04-04-currency-support.md:692:  symbol: z.string().min(1).max(5),
+docs/superpowers/plans/2026-04-04-currency-support.md:712:export async function getExchangeRatesAdmin(): Promise<ExchangeRateValue[]> {
+docs/superpowers/plans/2026-04-04-currency-support.md:800:git add app/\[locale\]/\(routes\)/admin/currencies/_actions/currencies.ts
+docs/superpowers/plans/2026-04-04-currency-support.md:801:git commit -m "feat(admin): add server actions for currency management"
+docs/superpowers/plans/2026-04-04-currency-support.md:806:### Task 6: Admin Currencies Page — UI Components
+docs/superpowers/plans/2026-04-04-currency-support.md:809:- Create: `app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx`
+docs/superpowers/plans/2026-04-04-currency-support.md:810:- Create: `app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx`
+docs/superpowers/plans/2026-04-04-currency-support.md:811:- Create: `app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx`
+docs/superpowers/plans/2026-04-04-currency-support.md:812:- Create: `app/[locale]/(routes)/admin/currencies/page.tsx`
+docs/superpowers/plans/2026-04-04-currency-support.md:813:- Modify: `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx`
+docs/superpowers/plans/2026-04-04-currency-support.md:933:              maxLength={3}
+docs/superpowers/plans/2026-04-04-currency-support.md:944:              maxLength={5}
+docs/superpowers/plans/2026-04-04-currency-support.md:1099:- [ ] **Step 4: Create the admin page**
+docs/superpowers/plans/2026-04-04-currency-support.md:1103:import { getCurrencies, getExchangeRatesAdmin, getEcbAutoUpdate } from "./_actions/currencies";
+docs/superpowers/plans/2026-04-04-currency-support.md:1111:    getExchangeRatesAdmin(),
+docs/superpowers/plans/2026-04-04-currency-support.md:1140:- [ ] **Step 5: Add "Currencies" to AdminSidebarNav**
+docs/superpowers/plans/2026-04-04-currency-support.md:1142:In `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx`, add `Coins` to the lucide-react import:
+docs/superpowers/plans/2026-04-04-currency-support.md:1151:  { label: "Currencies",   href: "/admin/currencies",  icon: Coins },
+docs/superpowers/plans/2026-04-04-currency-support.md:1154:- [ ] **Step 6: Verify the admin page loads**
+docs/superpowers/plans/2026-04-04-currency-support.md:1156:Run: `pnpm dev` and navigate to `/admin/currencies`.
+docs/superpowers/plans/2026-04-04-currency-support.md:1163:git add app/\[locale\]/\(routes\)/admin/currencies/ app/\[locale\]/\(routes\)/admin/_components/AdminSidebarNav.tsx
+docs/superpowers/plans/2026-04-04-currency-support.md:1164:git commit -m "feat(admin): add currencies management page with table, rates, and ECB toggle"
+docs/superpowers/plans/2026-04-04-currency-support.md:1254:  title: z.string().min(3).max(255),
+docs/superpowers/plans/2026-04-04-currency-support.md:1259:  renewalReminderDate: z.date(),
+docs/superpowers/plans/2026-04-04-currency-support.md:1262:  description: z.string().max(255),
+docs/superpowers/plans/2026-04-04-currency-support.md:1656://   maximumFractionDigits: 0,
+docs/superpowers/plans/2026-04-04-currency-support.md:1769:          maximumFractionDigits: 0,
+docs/superpowers/plans/2026-04-04-currency-support.md:1891:          // Skip if admin has manually overridden this pair
+components/modals/alert-modal.tsx:40:      <DialogContent className="max-w-md">
+docs/superpowers/plans/2026-04-05-products-playwright-tests.md:852:If any tests fail, read the error output, diagnose selector mismatches or timing issues, and fix. Common issues:
+docs/superpowers/plans/2026-04-05-products-playwright-tests.md:854:- Timing: increase timeouts if tests are flaky
+components/modals/CreateTargetListModal.tsx:53:      <DialogContent className="sm:max-w-md">
+actions/crm/targets/import-targets.ts:13:    min: number;
+actions/crm/targets/import-targets.ts:14:    max: number;
+actions/crm/targets/import-targets.ts:17:  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+scripts/VALIDATION_README.md:131:Real-time summary displayed in the terminal with:
+scripts/VALIDATION_README.md:332:NODE_OPTIONS="--max-old-space-size=4096" pnpm validate:migration
+scripts/VALIDATION_README.md:357:   - Login as admin
+scripts/VALIDATION_README.md:404:- **Small database** (< 10,000 records): 2-5 minutes
+scripts/VALIDATION_README.md:405:- **Medium database** (10,000 - 100,000 records): 5-15 minutes
+scripts/VALIDATION_README.md:406:- **Large database** (> 100,000 records): 15-45 minutes
+components/modals/AddTargetToListModal.tsx:109:      <DialogContent className="sm:max-w-lg">
+components/modals/AddTargetToListModal.tsx:129:                checked={allFilteredSelected ? true : someFilteredSelected ? "indeterminate" : false}
+components/modals/AddTargetToListModal.tsx:152:                    <div className="flex-1 min-w-0">
+scripts/VALIDATION_QUICK_START.md:96:- **Small DB** (< 10,000 records): 2-5 minutes
+scripts/VALIDATION_QUICK_START.md:97:- **Medium DB** (10K-100K records): 5-15 minutes
+scripts/VALIDATION_QUICK_START.md:98:- **Large DB** (> 100K records): 15-45 minutes
+scripts/VALIDATION_QUICK_START.md:167:NODE_OPTIONS="--max-old-space-size=4096" npm run validate:migration
+docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:666:await page.pause(); // opens Playwright Inspector — examine the DOM
+actions/crm/targets/suggest-mapping.ts:107:        model: "gpt-4o-mini",
+components/fulltext-search/result-card.tsx:27:      <div className="flex flex-col gap-1 min-w-0">
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:65:- Implemented clear PASS/FAIL status determination
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:106:   - `getExitCode()` - Determine exit code
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:200:  - Small database (< 10K records): 2-5 minutes
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:201:  - Medium database (10K-100K): 5-15 minutes
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:202:  - Large database (> 100K): 15-45 minutes
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:336:1. **ANSI Color Codes**: Using native ANSI codes instead of `chalk` eliminates dependency and works universally
+docs/superpowers/plans/2026-03-25-campaigns-module.md:737:        className="prose prose-sm max-w-none p-4 min-h-[200px] focus:outline-none"
+docs/superpowers/plans/2026-03-25-campaigns-module.md:784:        model: "gpt-4o-mini",
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1396:    // Get step 0 sends to determine eligible recipients
+docs/superpowers/plans/2026-03-28-crm-activities.md:558:      <div className="flex-1 min-w-0">
+docs/superpowers/plans/2026-03-28-crm-activities.md:560:          <div className="flex-1 min-w-0">
+docs/superpowers/plans/2026-03-28-crm-activities.md:786:      <SheetContent className="sm:max-w-[480px] overflow-y-auto">
+docs/superpowers/plans/2026-03-28-crm-activities.md:844:              <Label htmlFor="activity-duration">Duration (minutes)</Label>
+docs/superpowers/plans/2026-03-28-crm-activities.md:848:                min="1"
+docs/superpowers/plans/2026-03-28-crm-activities.md:1245:| Sonner toast | `components/crm/audit-log/AdminPageClient.tsx` |
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:9:**Tech Stack:** Next.js 16, React 19, Prisma 7.5, pgvector (1536-dim, text-embedding-3-small), Inngest (step functions), MinIO/S3, OpenAI API, pdf-parse, mammoth, sharp, pdfjs-dist, shadcn/ui, TanStack Table.
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:24:| `actions/documents/bulk-delete-documents.ts` | Server action: delete multiple docs from DB + MinIO |
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:277:// Keep legacy exports for any remaining references
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:607:  // Delete from MinIO
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:764:const MAX_SINGLE_EMBED_CHARS = 8000 * 4; // ~8000 tokens
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:767:  const response = await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:806:    const end = Math.min(start + charChunkSize, text.length);
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:882:      if (contentText.length <= MAX_SINGLE_EMBED_CHARS) {
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:921:        model: "gpt-4o-mini",
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:929:        max_tokens: 200,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:944:        model: "gpt-4o-mini",
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:956:        max_tokens: 10,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1017:  const response = await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1058:    await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1173:                   MAX(1 - (c.embedding <=> ${queryVec}::vector)) AS similarity
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1195:        existing.similarity = Math.max(existing.similarity, chunk.similarity);
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1390:          <div className="min-w-0">
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1609:    maxSize: 64 * 1024 * 1024,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1672:      // Upload to MinIO
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1721:      <DialogContent className="sm:max-w-[600px]">
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1740:          <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+components/form/from-select.tsx:20:interface FormInputProps {
+components/form/from-select.tsx:34:export const FormSelect = forwardRef<HTMLInputElement, FormInputProps>(
+docs/superpowers/plans/2026-04-05-products-module.md:9:**Tech Stack:** Next.js (App Router), Prisma, Zod, React Hook Form (via FormInput/FormSheet), TanStack Table, PapaParse, Sonner (toasts), next-intl (i18n), Inngest (events), lucide-react (icons)
+docs/superpowers/plans/2026-04-05-products-module.md:214:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-products-module.md:216:  sku: z.string().max(100).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:223:  unit: z.string().max(50).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:347:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:349:  sku: z.string().max(100).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:356:  unit: z.string().max(50).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:619:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/plans/2026-04-05-products-module.md:626:  notes: z.string().max(1000).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:765:  quantity: z.coerce.number().int().min(1).optional(),
+docs/superpowers/plans/2026-04-05-products-module.md:771:  notes: z.string().max(1000).optional().nullable(),
+docs/superpowers/plans/2026-04-05-products-module.md:972:const MAX_ROWS = 500;
+docs/superpowers/plans/2026-04-05-products-module.md:990:  if (data.length > MAX_ROWS) {
+docs/superpowers/plans/2026-04-05-products-module.md:991:    throw new Error(`Import limited to ${MAX_ROWS} rows. File contains ${data.length} rows.`);
+docs/superpowers/plans/2026-04-05-products-module.md:1642:import { FormInput } from "@/components/form/form-input";
+docs/superpowers/plans/2026-04-05-products-module.md:1711:        <FormInput id="name" label="Name" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1712:        <FormInput id="sku" label="SKU" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1736:          <FormInput id="unit_price" label="Unit Price" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1737:          <FormInput id="unit_cost" label="Unit Cost" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1750:          <FormInput id="tax_rate" label="Tax Rate (%)" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1751:          <FormInput id="unit" label="Unit" type="text" errors={fieldErrors} />
+docs/superpowers/plans/2026-04-05-products-module.md:1817:import { FormInput } from "@/components/form/form-input";
+docs/superpowers/plans/2026-04-05-products-module.md:1906:        <FormInput id="name" label="Name" type="text" errors={fieldErrors} defaultValue={product.name} />
+docs/superpowers/plans/2026-04-05-products-module.md:1907:        <FormInput id="sku" label="SKU" type="text" errors={fieldErrors} defaultValue={product.sku || ""} />
+docs/superpowers/plans/2026-04-05-products-module.md:1932:          <FormInput id="unit_price" label="Unit Price" type="text" errors={fieldErrors} defaultValue={String(product.unit_price)} />
+docs/superpowers/plans/2026-04-05-products-module.md:1933:          <FormInput id="unit_cost" label="Unit Cost" type="text" errors={fieldErrors} defaultValue={product.unit_cost ? String(product.unit_cost) : ""} />
+docs/superpowers/plans/2026-04-05-products-module.md:1947:          <FormInput id="tax_rate" label="Tax Rate (%)" type="text" errors={fieldErrors} defaultValue={product.tax_rate ? String(product.tax_rate) : ""} />
+docs/superpowers/plans/2026-04-05-products-module.md:1948:          <FormInput id="unit" label="Unit" type="text" errors={fieldErrors} defaultValue={product.unit || ""} />
+docs/superpowers/plans/2026-04-05-products-module.md:2610:      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+docs/superpowers/plans/2026-04-05-products-module.md:2614:            Upload a CSV file to bulk import products. Max 500 rows.
+docs/superpowers/plans/2026-04-05-products-module.md:2685:                <div className="max-h-40 overflow-y-auto">
+docs/superpowers/plans/2026-04-05-products-module.md:2821:import { FormInput } from "@/components/form/form-input";
+docs/superpowers/plans/2026-04-05-products-module.md:2889:        <FormInput id="quantity" label="Quantity" type="number" errors={fieldErrors} defaultValue="1" />
+docs/superpowers/plans/2026-04-05-products-module.md:2890:        <FormInput id="custom_price" label="Custom Price (optional)" type="text" errors={fieldErrors} />
+components/form/form-input.tsx:12:interface FormInputProps {
+components/form/form-input.tsx:26:export const FormInput = ({
+components/form/form-input.tsx:38:}: FormInputProps) => {
+components/form/form-input.tsx:71:FormInput.displayName = "FormInput";
+docs/superpowers/plans/2026-03-23-target-enrichment.md:7:**Architecture:** Identical to `feature/contact-enrichment`. The existing `lib/enrichment/` library is reused unchanged. A streaming SSE route handles single-target enrichment with real-time agent progress; a separate bulk route fans out to Inngest jobs. The drawer shows a diff preview before saving; bulk auto-applies to empty fields only.
+docs/superpowers/plans/2026-03-23-target-enrichment.md:667:    return NextResponse.json({ error: "Maximum 100 targets per batch" }, { status: 400 });
+docs/superpowers/plans/2026-03-23-target-enrichment.md:999:                        <td className="py-2 pr-2 text-muted-foreground max-w-[100px] truncate">
+docs/superpowers/plans/2026-03-23-target-enrichment.md:1325:      <DialogContent className="sm:max-w-[480px]">
+docs/superpowers/plans/2026-03-23-target-enrichment.md:1601:                      <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={record.error}>
+docs/superpowers/plans/2026-03-27-crm-settings.md:5:**Goal:** Add a `/admin/crm-settings` page where admins can manage CRM configuration values (Industries, Contact Types, Lead Sources, Lead Statuses, Lead Types, Opportunity Types, Sales Stages), converting four plain-string fields to DB-backed FK relations with safe data migration.
+docs/superpowers/plans/2026-03-27-crm-settings.md:7:**Architecture:** Four new Prisma models replace hardcoded string fields on `crm_Contacts` and `crm_Leads`. A single hand-written SQL migration backfills existing data before dropping old columns. The admin UI uses a tabbed page with a reusable `ConfigList` component and guarded deletion (reassign-then-delete in one transaction).
+docs/superpowers/plans/2026-03-27-crm-settings.md:19:- `app/[locale]/(routes)/admin/crm-settings/page.tsx` — admin CRM Settings page (Server Component)
+docs/superpowers/plans/2026-03-27-crm-settings.md:20:- `app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx` — tab container
+docs/superpowers/plans/2026-03-27-crm-settings.md:21:- `app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx` — reusable list with edit/delete
+docs/superpowers/plans/2026-03-27-crm-settings.md:22:- `app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx` — add value dialog
+docs/superpowers/plans/2026-03-27-crm-settings.md:23:- `app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx` — edit value dialog
+docs/superpowers/plans/2026-03-27-crm-settings.md:24:- `app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx` — reassign-then-delete dialog
+docs/superpowers/plans/2026-03-27-crm-settings.md:25:- `app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts` — all server actions
+docs/superpowers/plans/2026-03-27-crm-settings.md:31:- `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx` — add CRM Settings nav item
+docs/superpowers/plans/2026-03-27-crm-settings.md:438:- Create: `app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts`
+docs/superpowers/plans/2026-03-27-crm-settings.md:514:} from "@/app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings";
+docs/superpowers/plans/2026-03-27-crm-settings.md:586:Create `app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts`:
+docs/superpowers/plans/2026-03-27-crm-settings.md:606:const nameSchema = z.string().trim().min(1, "Name is required").max(100, "Max 100 characters");
+docs/superpowers/plans/2026-03-27-crm-settings.md:675:  revalidatePath("/admin/crm-settings");
+docs/superpowers/plans/2026-03-27-crm-settings.md:686:  revalidatePath("/admin/crm-settings");
+docs/superpowers/plans/2026-03-27-crm-settings.md:714:  revalidatePath("/admin/crm-settings");
+docs/superpowers/plans/2026-03-27-crm-settings.md:729:git add app/[locale]/\(routes\)/admin/crm-settings/_actions/crm-settings.ts __tests__/crm-settings-actions.test.ts
+docs/superpowers/plans/2026-03-27-crm-settings.md:735:## Task 5: Admin UI — Reusable Components
+docs/superpowers/plans/2026-03-27-crm-settings.md:738:- Create: `app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:739:- Create: `app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:740:- Create: `app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:741:- Create: `app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:743:Before writing these components, check `app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx` and `app/[locale]/(routes)/admin/users/components/IviteForm.tsx` for patterns (Dialog usage, form patterns, toast usage).
+docs/superpowers/plans/2026-03-27-crm-settings.md:748:// app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:805:              maxLength={100}
+docs/superpowers/plans/2026-03-27-crm-settings.md:822:// app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:874:              maxLength={100}
+docs/superpowers/plans/2026-03-27-crm-settings.md:891:// app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:980:// app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:1074:git add app/\[locale\]/\(routes\)/admin/crm-settings/_components/
+docs/superpowers/plans/2026-03-27-crm-settings.md:1075:git commit -m "feat: CRM settings admin UI components — ConfigList, Add/Edit/Delete dialogs"
+docs/superpowers/plans/2026-03-27-crm-settings.md:1080:## Task 6: Admin CRM Settings Page + Tabs
+docs/superpowers/plans/2026-03-27-crm-settings.md:1083:- Create: `app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:1084:- Create: `app/[locale]/(routes)/admin/crm-settings/page.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:1086:- [ ] **Step 1: Check admin layout for wrapper patterns**
+docs/superpowers/plans/2026-03-27-crm-settings.md:1088:Read `app/[locale]/(routes)/admin/layout.tsx` to understand the page wrapper (sidebar + content area) before writing the page.
+docs/superpowers/plans/2026-03-27-crm-settings.md:1093:// app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:1133:// app/[locale]/(routes)/admin/crm-settings/page.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:1189:git add app/\[locale\]/\(routes\)/admin/crm-settings/
+docs/superpowers/plans/2026-03-27-crm-settings.md:1190:git commit -m "feat: CRM settings admin page with 7-tab config UI"
+docs/superpowers/plans/2026-03-27-crm-settings.md:1195:## Task 7: Update Admin Sidebar Navigation
+docs/superpowers/plans/2026-03-27-crm-settings.md:1198:- Modify: `app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx`
+docs/superpowers/plans/2026-03-27-crm-settings.md:1204:In `AdminSidebarNav.tsx`, add to the `navItems` array:
+docs/superpowers/plans/2026-03-27-crm-settings.md:1210:  { label: "LLM Keys",     href: "/admin/llm-keys",      icon: Key },
+docs/superpowers/plans/2026-03-27-crm-settings.md:1211:  { label: "Users",        href: "/admin/users",          icon: Users },
+docs/superpowers/plans/2026-03-27-crm-settings.md:1212:  { label: "Services",     href: "/admin/services",       icon: Settings },
+docs/superpowers/plans/2026-03-27-crm-settings.md:1213:  { label: "CRM Settings", href: "/admin/crm-settings",   icon: SlidersHorizontal },
+docs/superpowers/plans/2026-03-27-crm-settings.md:1224:Navigate to `http://localhost:3000/admin/crm-settings` — confirm the page loads with all 7 tabs, add/edit/delete dialogs work.
+docs/superpowers/plans/2026-03-27-crm-settings.md:1229:git add app/\[locale\]/\(routes\)/admin/_components/AdminSidebarNav.tsx
+docs/superpowers/plans/2026-03-27-crm-settings.md:1230:git commit -m "feat: add CRM Settings to admin sidebar navigation"
+docs/superpowers/plans/2026-03-27-crm-settings.md:1582:- [ ] Admin CRM Settings page accessible at `/admin/crm-settings` for admin users only
+components/crm/audit-log/Timeline.tsx:41:            showRestore={role === "admin"}
+docs/superpowers/plans/2026-04-05-line-items.md:162:  // Clamp to minimum 0
+docs/superpowers/plans/2026-04-05-line-items.md:163:  return Math.max(0, Math.round(total * 100) / 100);
+docs/superpowers/plans/2026-04-05-line-items.md:234:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:237:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/plans/2026-04-05-line-items.md:380:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:382:  quantity: z.coerce.number().int().min(1).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:646:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:649:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/plans/2026-04-05-line-items.md:787:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:789:  quantity: z.coerce.number().int().min(1).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:1048:    // Get current max sort_order on contract to append after
+docs/superpowers/plans/2026-04-05-line-items.md:1319:import { FormInput } from "@/components/form/form-input";
+docs/superpowers/plans/2026-04-05-line-items.md:1413:        <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1420:        <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1428:          <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1435:          <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1457:            <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1495:import { FormInput } from "@/components/form/form-input";
+docs/superpowers/plans/2026-04-05-line-items.md:1567:          <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1575:            <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1582:            <FormInput
+docs/superpowers/plans/2026-04-05-line-items.md:1604:              <FormInput
+components/crm/audit-log/Entry.tsx:53:      <div className="flex-1 min-w-0">
+components/crm/audit-log/AdminTable.tsx:18:interface AdminTableProps {
+components/crm/audit-log/AdminTable.tsx:27:export function AuditAdminTable({
+components/crm/audit-log/AdminTable.tsx:34:}: AdminTableProps) {
+components/crm/audit-log/AdminTable.tsx:49:              {role === "admin" && (
+components/crm/audit-log/AdminTable.tsx:79:                  {role === "admin" && (
+components/crm/audit-log/AdminTable.tsx:99:                    <td colSpan={role === "admin" ? 5 : 4} className="px-4 py-2">
+components/crm/audit-log/AdminTable.tsx:111:                  colSpan={role === "admin" ? 5 : 4}
+components/campaigns/TipTapEditor.tsx:120:        className="prose prose-sm max-w-none p-4 min-h-[200px] focus:outline-none"
+components/crm/audit-log/AdminPageClient.tsx:5:import { AuditAdminTable } from "./AdminTable";
+components/crm/audit-log/AdminPageClient.tsx:12:// Pass the same props as AuditAdminTable (minus onRestore which we provide internally)
+components/crm/audit-log/AdminPageClient.tsx:13:type Props = Omit<React.ComponentProps<typeof AuditAdminTable>, "onRestore">;
+components/crm/audit-log/AdminPageClient.tsx:15:export function AdminAuditLogClient(props: Props) {
+components/crm/audit-log/AdminPageClient.tsx:50:  return <AuditAdminTable {...props} onRestore={handleRestore} />;
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:5:**Goal:** Replace hard-coded `FIRECRAWL_API_KEY` / `OPENAI_API_KEY` env requirements with a 3-tier key system (ENV → admin system-wide → user profile), including encrypted DB storage, a redesigned admin panel, a new profile LLMs tab, and a "no key configured" modal.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:7:**Architecture:** A single `ApiKeys` Prisma model with `scope` (SYSTEM|USER) and `provider` enums stores encrypted keys. A `getApiKey(provider, userId?)` resolver implements the priority chain and is called by all enrich routes and Inngest functions. Server actions handle CRUD; the admin page gets a new sidebar layout; the profile page gets a new LLMs tab alongside the existing Developer tab.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:9:**Tech Stack:** Next.js 15, Prisma/PostgreSQL, shadcn/ui, Tailwind CSS (CSS vars for theming), next-intl for translations, AES-256-GCM via Node.js `crypto` (already in `lib/email-crypto.ts`), Jest for unit tests.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:23:| `app/[locale]/(routes)/admin/actions/api-keys.ts` | Create | Server actions: get/upsert/delete system keys |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:24:| `app/[locale]/(routes)/admin/layout.tsx` | Create | Sidebar nav wrapping all admin routes |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:25:| `app/[locale]/(routes)/admin/page.tsx` | Modify | Redirect to `/admin/llm-keys` |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:26:| `app/[locale]/(routes)/admin/llm-keys/page.tsx` | Create | Provider cards page |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:27:| `app/[locale]/(routes)/admin/_components/OpenAiCard.tsx` | Delete | Superseded |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:28:| `app/[locale]/(routes)/admin/_components/GptCard.tsx` | Delete | Superseded |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:29:| `app/[locale]/(routes)/admin/forms/SetGptModel.tsx` | Delete | Superseded (verify path) |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:377:## Task 4: Admin server actions
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:380:- Create: `app/[locale]/(routes)/admin/actions/api-keys.ts`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:382:- [ ] **Step 1: Create admin actions file**
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:384:Create `app/[locale]/(routes)/admin/actions/api-keys.ts`:
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:413:async function requireAdmin() {
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:416:  if (!session.user.is_admin) throw new Error("Forbidden: admin only");
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:421:  await requireAdmin();
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:449:  await requireAdmin();
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:466:  revalidatePath("/[locale]/admin/llm-keys", "page");
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:470:  await requireAdmin();
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:476:  revalidatePath("/[locale]/admin/llm-keys", "page");
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:494:pnpm tsc --noEmit 2>&1 | grep 'admin/actions/api-keys'
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:501:git add "app/[locale]/(routes)/admin/actions/api-keys.ts"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:502:git commit -m "feat: add admin server actions for system-wide API key management"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:779:        data: { status: "FAILED", error: "NO_API_KEY: configure keys in admin settings or your profile" },
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:847:      <DialogContent className="sm:max-w-[420px]">
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:855:            settings, or ask your admin to set system-wide keys.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:946:## Task 9: Admin sidebar layout and LLM Keys page
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:949:- Create: `app/[locale]/(routes)/admin/layout.tsx`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:950:- Modify: `app/[locale]/(routes)/admin/page.tsx`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:951:- Create: `app/[locale]/(routes)/admin/llm-keys/page.tsx`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:952:- Delete: `app/[locale]/(routes)/admin/_components/OpenAiCard.tsx`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:953:- Delete: `app/[locale]/(routes)/admin/_components/GptCard.tsx`
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:954:- Delete `app/[locale]/(routes)/admin/forms/SetGptModel.tsx` (verify path exists first)
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:956:- [ ] **Step 1: Create admin layout with sidebar**
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:958:Create `app/[locale]/(routes)/admin/layout.tsx`:
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:972:export default function AdminLayout({ children }: { children: React.ReactNode }) {
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:974:    <div className="flex min-h-[600px]">
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:977:          Admin
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:999:> **Note:** To highlight the active nav item, this layout needs to become a Client Component and use `usePathname()`. However, since layouts in Next.js App Router don't receive the current path as a prop, the simplest approach is to use `usePathname` in a separate `AdminNav` client component. For now, a static layout is functional — add active-state highlighting as a follow-up if needed.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1003:Create `app/[locale]/(routes)/admin/llm-keys/page.tsx`:
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1037:Create `app/[locale]/(routes)/admin/llm-keys/_components/ProviderKeyCard.tsx`:
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1102:          <div className="flex items-center gap-3 min-w-0">
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1103:            <div className="min-w-0">
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1159:- [ ] **Step 4: Update `admin/page.tsx` to redirect**
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1161:Read the current `app/[locale]/(routes)/admin/page.tsx` first, then replace its content with a redirect:
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1166:export default function AdminPage() {
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1167:  redirect("./admin/llm-keys");
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1171:> **Note:** If the existing admin page contains content you want to keep (user management, module toggles), move those into `admin/users/page.tsx` and `admin/modules/page.tsx` respectively before replacing `admin/page.tsx`.
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1173:- [ ] **Step 5: Remove old admin OpenAI components**
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1176:rm "app/[locale]/(routes)/admin/_components/OpenAiCard.tsx"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1177:rm "app/[locale]/(routes)/admin/_components/GptCard.tsx"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1179:ls "app/[locale]/(routes)/admin/forms/" 2>/dev/null || echo "forms/ dir not found"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1187:pnpm tsc --noEmit 2>&1 | grep -E 'admin/' | head -20
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1189:Fix any import errors from the deleted files (update `admin/page.tsx` to not import the deleted components).
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1194:git add "app/[locale]/(routes)/admin/"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1195:git commit -m "feat: redesign admin panel — sidebar layout, LLM Keys page, remove old OpenAI cards"
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1489:| Admin actions | `app/[locale]/(routes)/admin/actions/api-keys.ts` |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1492:| Admin layout | `app/[locale]/(routes)/admin/layout.tsx` |
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:1493:| Admin LLM page | `app/[locale]/(routes)/admin/llm-keys/page.tsx` |
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:5:**Goal:** Replace next-auth with better-auth using Google OAuth + Email OTP, database sessions, and simple RBAC (admin/member/viewer).
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:7:**Architecture:** Big-bang swap per instance. better-auth instance in `lib/auth.ts` with Prisma adapter, `emailOTP` and `admin` plugins. New `session`, `account`, `verification` DB tables. Existing `users` table gets `role` column. All `getServerSession(authOptions)` calls replaced with `auth.api.getSession()`. `proxy.ts` updated from JWT decode to cookie-presence check.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:122:  role         String       @default("member")  // "admin", "member", "viewer"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:129:Add the `role` field after `is_account_admin` and the `sessions`/`accounts` relations at the end of the relations block.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:167: * Backfill the `role` column from existing `is_admin` / `is_account_admin` flags.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:171: *   is_admin = true              → role = "admin"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:172: *   is_account_admin = true      → role = "member"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:184:  // Admins first (is_admin takes precedence)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:185:  const adminResult = await prisma.users.updateMany({
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:186:    where: { is_admin: true, role: "member" },
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:187:    data: { role: "admin" },
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:189:  console.log(`  Updated ${adminResult.count} users to role=admin`);
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:191:  // is_account_admin users stay as "member" (already the default)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:225:Check the Users table — `is_admin: true` users should have `role: "admin"`, all others `role: "member"`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:258:export const admin = ac.newRole({
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:287:git commit -m "feat(auth): add RBAC permission definitions for admin/member/viewer"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:305:import { admin as adminPlugin } from "better-auth/plugins";
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:307:import { ac, admin, member, viewer } from "@/lib/auth-permissions";
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:367:          text: `Your one-time verification code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you did not request this, please ignore this email.`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:371:    adminPlugin({
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:373:      roles: { admin, member, viewer },
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:387:      // Check if this is the first user — make them admin
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:392:          data: { role: "admin", userStatus: "ACTIVE" },
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:395:        // Notify admins about new pending user
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:436:import { emailOTPClient, adminClient } from "better-auth/client/plugins";
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:437:import { ac, admin, member, viewer } from "@/lib/auth-permissions";
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:443:    adminClient({
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:445:      roles: { admin, member, viewer },
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:457:git commit -m "feat(auth): add better-auth client with email OTP and admin plugins"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:543:// Admin-only API paths — cookie presence checked here, role checked server-side
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:544:const ADMIN_ONLY_PATHS = [
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:545:  "/api/user/activateAdmin",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:546:  "/api/user/deactivateAdmin",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:550:  "/api/admin",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:568:  // Admin-only routes — require session cookie (role checked server-side)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:569:  if (ADMIN_ONLY_PATHS.some((p) => path.startsWith(p))) {
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:594:    // Admin-only API paths
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:595:    "/api/user/activateAdmin/:path*",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:596:    "/api/user/deactivateAdmin/:path*",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:600:    "/api/admin/:path*",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:618:### Task 10: Update new-user-notify to use role instead of is_admin
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:623:- [ ] **Step 1: Replace is_admin query with role query**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:634:  const admins = await prismadb.users.findMany({
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:636:      role: "admin",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:640:  admins.forEach(async (admin) => {
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:643:      to: admin.email,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:645:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:648:    console.log("Email sent to admin");
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:657:git commit -m "refactor(auth): use role field instead of is_admin in new-user-notify"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:845:                maxLength={6}
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:975:Also update the session property accesses — `session.user.isAdmin` is no longer used in this file (the layout only checks `userStatus`), so no other changes needed. The `session.user.id`, `session.user.userLanguage`, `session.user.image` properties are available via better-auth's `additionalFields`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1029:Any reference to `session.user.isAdmin` becomes `session.user.role === "admin"`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1047:### Task 16: Update all server-side page auth checks (batch 2 — projects, emails, admin, other)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1057:- Modify: `app/[locale]/(routes)/admin/audit-log/page.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1058:- Modify: `app/[locale]/(routes)/admin/llm-keys/page.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1059:- Modify: `app/[locale]/(routes)/admin/users/page.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1068:- Replace `session.user.isAdmin` with `session.user.role === "admin"`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1071:Special case for `admin/users/page.tsx` (line 22):
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1074:if (!session?.user?.isAdmin) {
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1076:if (session?.user?.role !== "admin") {
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1118:Also update admin query in pending page — replace `is_admin: true` with `role: "admin"` in the Prisma query that fetches admin contacts.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1197:- Modify: `actions/admin/users/activate-admin.ts` → rename to `actions/admin/users/set-role.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1198:- Delete: `actions/admin/users/deactivate-admin.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1199:- Modify: `actions/admin/users/invite-user.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1200:- Modify: `actions/admin/users/activate-user.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1201:- Modify: `actions/admin/users/deactivate-user.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1202:- Modify: `actions/admin/users/delete-user.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1203:- Modify: `actions/admin/update-gpt-model.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1204:- Modify: `actions/admin/send-mail-to-all/index.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1208:- Modify: `app/[locale]/(routes)/admin/actions/api-keys.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1211:- [ ] **Step 1: Replace activate-admin and deactivate-admin with set-role**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1213:Delete `actions/admin/users/deactivate-admin.ts` and replace `actions/admin/users/activate-admin.ts` with a new `actions/admin/users/set-role.ts`:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1221:const VALID_ROLES = ["admin", "member", "viewer"] as const;
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1227:  if (session.user.role !== "admin") return { error: "Forbidden" };
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1232:  // Prevent removing own admin role
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1233:  if (userId === session.user.id && role !== "admin") {
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1234:    return { error: "Cannot remove your own admin role" };
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1252:    revalidatePath("/[locale]/(routes)/admin", "page");
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1263:Replace `actions/admin/users/invite-user.ts`:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1281:  if (session.user.role !== "admin") return { error: "Forbidden" };
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1334:        invitedByUsername: session.user?.name || "admin",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1340:    revalidatePath("/[locale]/(routes)/admin", "page");
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1366:Replace `session.user.isAdmin` with `session.user.role === "admin"` wherever used.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1380:git add actions/ "app/[locale]/(routes)/admin/actions/" "app/[locale]/(routes)/profile/actions/"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1422:### Task 21: Update admin user management UI for RBAC
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1425:- Modify: `app/[locale]/(routes)/admin/users/table-components/columns.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1426:- Modify: `app/[locale]/(routes)/admin/users/table-data/schema.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1427:- Modify: `app/[locale]/(routes)/admin/users/table-data/data.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1428:- Modify: `app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1429:- Modify: `app/[locale]/(routes)/admin/users/components/IviteForm.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1431:- Modify: `app/[locale]/(routes)/components/menu-items/Administration.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1433:- [ ] **Step 1: Update the user table columns to show role instead of is_admin/is_account_admin**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1435:In `columns.tsx`, replace the `is_admin` and `is_account_admin` column definitions with a single `role` column. Add a role change dropdown in the row actions.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1437:In `schema.tsx`, update the data schema to include `role` field instead of `is_admin`/`is_account_admin`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1439:In `data.tsx`, update filter options to use roles instead of admin flags.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1441:- [ ] **Step 2: Update sidebar and admin menu to check role instead of isAdmin**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1443:In `app-sidebar.tsx` and `Administration.tsx`, replace:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1445:session.user.isAdmin
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1449:session.user.role === "admin"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1462:git add "app/[locale]/(routes)/admin/users/" "app/[locale]/(routes)/components/"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1463:git commit -m "feat(auth): update admin UI with role dropdown replacing admin flags"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1468:### Task 22: Update remaining isAdmin references across the codebase
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1470:**Files (47 files reference is_admin or isAdmin):**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1472:- Modify: `actions/crm/audit-log/get-audit-log-admin.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1480:- Modify: `components/crm/audit-log/AdminTable.tsx`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1487:- [ ] **Step 1: Find and replace isAdmin with role-based checks**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1491:**Server actions** (restore-*, set-inactive, get-audit-log-admin):
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1497:if (!session?.user?.isAdmin) ...
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1502:if (session?.user?.role !== "admin") ...
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1505:**Prisma queries** that filter by `is_admin: true`:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1508:where: { is_admin: true }
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1510:where: { role: "admin" }
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1513:**Client components** receiving `isAdmin` prop:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1514:Update prop types from `isAdmin: boolean` to `role: string` and check `role === "admin"`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1518:**Seed file** (`prisma/seeds/seed.ts`): Update seed data to include `role: "admin"` instead of `is_admin: true`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1540:git commit -m "refactor(auth): replace all isAdmin/is_admin references with role-based checks"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1632:- Admin receives notification email
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1634:- [ ] **Step 8: Test admin panel**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1636:Log in as admin. Navigate to admin users page. Verify:
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1637:- Role dropdown shows instead of admin toggle
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1691:- [ ] **Step 4: Verify admin routes check role**
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1695:grep -r "role.*admin" --include="*.ts" --include="*.tsx" -l | head -20
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1697:Cross-reference with the admin-only paths in `proxy.ts`.
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1730:- [ ] Announce maintenance window to users (minimum 1 hour notice)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1750:3. Old auth columns (`password`, `is_admin`, `is_account_admin`) are intact
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1756:- [ ] Admin can sign in via Google
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1757:- [ ] Non-admin can sign in via Email OTP
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1758:- [ ] PENDING flow works (new user → pending → admin approves → active)
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1761:- [ ] Admin panel shows role dropdown
+components/crm/audit-log/AdminFilters.tsx:13:interface AdminFiltersProps {
+components/crm/audit-log/AdminFilters.tsx:20:export function AdminFilters({
+components/crm/audit-log/AdminFilters.tsx:25:}: AdminFiltersProps) {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:5:**Goal:** Add a complete field-level audit trail and soft delete to all 5 CRM entities (Accounts, Contacts, Leads, Opportunities, Contracts), with a per-record history timeline tab and a global admin audit log page.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:7:**Architecture:** A single `crm_AuditLog` table stores every mutation event with a JSON diff. Soft delete adds `deletedAt`/`deletedBy` to each entity model. A shared `writeAuditLog()` utility is called after every successful Prisma mutation. UI is a new "History" tab on each detail page plus an admin page at `/admin/audit-log`.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:22:| `actions/crm/audit-log/get-audit-log-admin.ts` | Fetch filterable global log |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:23:| `actions/crm/accounts/restore-account.ts` | Admin: un-soft-delete an account |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:24:| `actions/crm/contacts/restore-contact.ts` | Admin: un-soft-delete a contact |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:25:| `actions/crm/leads/restore-lead.ts` | Admin: un-soft-delete a lead |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:26:| `actions/crm/opportunities/restore-opportunity.ts` | Admin: un-soft-delete an opportunity |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:27:| `actions/crm/contracts/restore-contract/index.ts` | Admin: un-soft-delete a contract |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:30:| `components/crm/audit-log/AdminTable.tsx` | Filterable global audit table |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:31:| `app/[locale]/(routes)/admin/audit-log/page.tsx` | Admin audit log page |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:416:  if (!session.user.isAdmin) return { error: "Forbidden" };
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:432:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:518:All restore actions must include: `if (!session.user.isAdmin) return { error: "Forbidden" };`
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:590:- Create: `actions/crm/audit-log/get-audit-log-admin.ts`
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:624:- [ ] **Step 2: Create `get-audit-log-admin.ts`**
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:627:// actions/crm/audit-log/get-audit-log-admin.ts
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:633:interface AuditLogAdminFilters {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:642:export const getAuditLogAdmin = async (filters: AuditLogAdminFilters = {}) => {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:645:  if (!session.user.isAdmin) return { error: "Forbidden" };
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:687:git commit -m "feat: add audit log fetch actions (by entity + admin global)"
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:754:      <div className="flex-1 min-w-0">
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:803:  isAdmin?: boolean;
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:807:export function AuditTimeline({ entityType, entityId, initialData, isAdmin, onRestore }: TimelineProps) {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:831:            showRestore={isAdmin}
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:893:      isAdmin={session?.user?.isAdmin ?? false}
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:947:## Task 9: Admin Audit Log Page
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:950:- Create: `components/crm/audit-log/AdminTable.tsx`
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:951:- Create: `app/[locale]/(routes)/admin/audit-log/page.tsx`
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:953:- [ ] **Step 1: Create `AdminTable.tsx`**
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:956:// components/crm/audit-log/AdminTable.tsx
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:973:interface AdminTableProps {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:980:  isAdmin?: boolean;
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:983:export function AuditAdminTable({
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:984:  entries, total, page, totalPages, onPageChange, onRestore, isAdmin
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:985:}: AdminTableProps) {
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:999:              {isAdmin && <th className="px-4 py-2 text-left font-medium">Actions</th>}
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1020:                  {isAdmin && (
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1022:                      {/* Restore button on admin page is deferred — requires client wrapper */}
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1038:                    <td colSpan={isAdmin ? 5 : 4} className="px-4 py-2">
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1068:- [ ] **Step 2: Create admin audit log page**
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1071:// app/[locale]/(routes)/admin/audit-log/page.tsx
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1075:import { getAuditLogAdmin } from "@/actions/crm/audit-log/get-audit-log-admin";
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1077:import { AuditAdminTable } from "@/components/crm/audit-log/AdminTable";
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1081:  if (!session?.user?.isAdmin) redirect("/");
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1083:  const result = await getAuditLogAdmin({ page: 1 });
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1091:      <AuditAdminTable
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1097:        isAdmin
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1107:> 1. **Restore from admin page** — requires a client wrapper component. The `AuditAdminTable` `onRestore` prop is wired in the component but not connected on the server page. Restore still works from the per-record History tab.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1108:> 2. **Record Name column** — the `crm_AuditLog` schema stores only `entityId`, not a denormalized display name. Resolving names requires joins to 5 different entity tables. This column is omitted from the initial admin table. Add it in a follow-up by fetching the record name alongside the audit entry.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1109:> 3. **Filtering + pagination** — admin page renders page 1 only. Add URL search param handling in a follow-up.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1111:- [ ] **Step 3: Add audit log link to admin nav**
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1113:Find the admin sidebar/navigation component (search for `admin` links in `components/`). Add:
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1115:<Link href="/admin/audit-log">Audit Log</Link>
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1118:- [ ] **Step 4: Verify admin page in browser**
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1120:Navigate to `/admin/audit-log`. Confirm the table renders with audit entries. Confirm non-admin users are redirected.
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1125:git add components/crm/audit-log/AdminTable.tsx app/
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1126:git commit -m "feat: add admin audit log page with global filterable table"
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1147:4. Go to `/admin/audit-log` — confirm deleted entry appears with "Restore" button
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1169:| 6 | Fetch actions for timeline + admin table |
+docs/superpowers/plans/2026-03-27-crm-audit-log.md:1172:| 9 | Admin audit log page |
+actions/crm/products/update-product/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+actions/crm/products/update-product/schema.ts:7:  sku: z.string().max(100).optional(),
+actions/crm/products/update-product/schema.ts:14:  unit: z.string().max(50).optional(),
+actions/crm/products/import-products.ts:9:const MAX_ROWS = 500;
+actions/crm/products/import-products.ts:27:  if (data.length > MAX_ROWS) {
+actions/crm/products/import-products.ts:28:    throw new Error(`Import limited to ${MAX_ROWS} rows. File contains ${data.length} rows.`);
+components/crm/activities/ActivityForm.tsx:121:      <SheetContent className="sm:max-w-[480px] overflow-y-auto">
+components/crm/activities/ActivityForm.tsx:179:              <Label htmlFor="activity-duration">Duration (minutes)</Label>
+components/crm/activities/ActivityForm.tsx:183:                min="1"
+components/crm/activities/ActivityEntry.tsx:79:      <div className="flex-1 min-w-0">
+components/crm/activities/ActivityEntry.tsx:81:          <div className="flex-1 min-w-0">
+actions/crm/contracts/update-contract/schema.ts:12:  title: z.string().min(3).max(255),
+actions/crm/contracts/update-contract/schema.ts:16:  renewalReminderDate: z.date(),
+actions/crm/contracts/update-contract/schema.ts:19:  description: z.string().max(255),
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:7:**Architecture:** Copy fire-enrich's `lib/` into `lib/enrichment/`. A streaming SSE route handles single-contact enrichment with real-time agent progress; a separate bulk route fans out to Inngest jobs. The drawer shows a diff preview before saving; bulk auto-applies to empty fields only.
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:17:**Deployment note:** The SSE route uses a module-level `Map` for session tracking. This works correctly in single-process / long-running deployments (Node.js, Railway, Render). In serverless/multi-replica environments (Vercel functions with autoscaling) the cancel endpoint may land on a different process instance. For production scale-out, replace the in-memory Map with a Redis-backed session store. For now, `export const runtime = "nodejs"` is set to minimize cold-start issues.
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:303: * A contact field is considered empty if null or blank string after trimming.
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:341:// SSE streaming itself is not unit-testable; validated via smoke test in Task 13.
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:863:    return NextResponse.json({ error: "Maximum 100 contacts per batch" }, { status: 400 });
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1350:                        <td className="py-2 pr-2 text-muted-foreground max-w-[100px] truncate">
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1655:      <DialogContent className="sm:max-w-md">
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1822:                      <div className="text-xs text-muted-foreground mt-0.5 max-w-[200px] truncate" title={job.error}>
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1925:- SSE streaming route for single-contact enrichment
+actions/crm/contracts/update-contract/index.ts:40:    renewalReminderDate,
+actions/crm/contracts/update-contract/index.ts:79:        renewalReminderDate,
+actions/crm/accounts/search-accounts.ts:5:const PAGE_SIZE_MAX = 100;
+actions/crm/accounts/search-accounts.ts:16:  const safeTake = Math.min(PAGE_SIZE_MAX, Math.max(1, take));
+actions/crm/accounts/search-accounts.ts:17:  const safeSkip = Math.max(0, skip);
+actions/crm/accounts/restore-account.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/crm/accounts/restore-account.ts:26:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+actions/crm/contracts/restore-contract/index.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/crm/contracts/restore-contract/index.ts:26:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+actions/crm/products/create-product/schema.ts:4:  name: z.string().min(1).max(255),
+actions/crm/products/create-product/schema.ts:6:  sku: z.string().max(100).optional(),
+actions/crm/products/create-product/schema.ts:13:  unit: z.string().max(50).optional(),
+docs/superpowers/plans/2026-03-22-emails.md:7:**Architecture:** Full DB mirror (Option A) — all emails synced into PostgreSQL via Inngest (cron every 15 min + on-demand), UI reads exclusively from DB. IMAP credentials encrypted at rest with AES-256-GCM. Emails embedded with OpenAI and auto-linked to CRM contacts/accounts.
+docs/superpowers/plans/2026-03-22-emails.md:26:| `inngest/functions/emails/sync-all.ts` | Cron: fan out sync per active account every 15 min |
+docs/superpowers/plans/2026-03-22-emails.md:702:        <DialogContent className="max-w-md">
+docs/superpowers/plans/2026-03-22-emails.md:898:const MAX_COUNT = 10_000;
+docs/superpowers/plans/2026-03-22-emails.md:953:  const total = Math.min(rawCount, MAX_COUNT);
+docs/superpowers/plans/2026-03-22-emails.md:1310:    style={{ maxHeight: "600px", overflowY: "auto" }}
+docs/superpowers/plans/2026-03-22-emails.md:1431:      <DialogContent className="max-w-lg">
+docs/superpowers/plans/2026-03-22-emails.md:1685:    const newInboxUid = inboxMessages.reduce((m, msg) => Math.max(m, msg.uid), account.inboxLastUid ?? 0);
+docs/superpowers/plans/2026-03-22-emails.md:1686:    const newSentUid = sentMessages.reduce((m, msg) => Math.max(m, msg.uid), account.sentLastUid ?? 0);
+actions/crm/contract-line-items/update-line-item/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+actions/crm/contract-line-items/update-line-item/schema.ts:7:  quantity: z.coerce.number().int().min(1).optional(),
+docs/superpowers/plans/2026-03-31-reports-remaster.md:7:**Architecture:** Next.js server components with client-side interactivity for filters/toolbar. Data fetched via Prisma server actions. Charts via Tremor. Exports via `@react-pdf/renderer` + CSV streaming. Scheduling via Inngest cron + Resend.
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1215:    { label: "1-10", min: 1, max: 10 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1216:    { label: "11-50", min: 11, max: 50 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1217:    { label: "51-200", min: 51, max: 200 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1218:    { label: "201-500", min: 201, max: 500 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1219:    { label: "500+", min: 501, max: Infinity },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1220:    { label: "Unknown", min: -1, max: -1 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1232:    const range = ranges.find((r) => emp >= r.min && emp <= r.max);
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1776:    it("groups users by admin status", async () => {
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1778:        { is_admin: true, is_account_admin: false },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1779:        { is_admin: false, is_account_admin: true },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1780:        { is_admin: false, is_account_admin: false },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1781:        { is_admin: false, is_account_admin: false },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1786:        { name: "Admin", Number: 1 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1787:        { name: "Account Admin", Number: 1 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1859:    select: { is_admin: true, is_account_admin: true },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1862:  let admins = 0;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1863:  let accountAdmins = 0;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1867:    if (u.is_admin) admins++;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1868:    else if (u.is_account_admin) accountAdmins++;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1873:  if (admins > 0) result.push({ name: "Admin", Number: admins });
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1874:  if (accountAdmins > 0)
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1875:    result.push({ name: "Account Admin", Number: accountAdmins });
+docs/superpowers/plans/2026-03-31-reports-remaster.md:2904:import { ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+docs/superpowers/plans/2026-03-31-reports-remaster.md:2913:      maximumFractionDigits: 0,
+docs/superpowers/plans/2026-03-31-reports-remaster.md:2953:              <Minus className="h-4 w-4" />
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3683:      <Skeleton className="h-10 w-full max-w-lg mb-6" />
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3771:            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(revenue)}
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3777:            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(pipeline)}
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3783:            {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(avgDeal)}
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4602:  const FIFTEEN_MINUTES = 15 * 60 * 1000;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4604:  // Map common cron patterns to minimum intervals
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4609:  return elapsed >= FIFTEEN_MINUTES;
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4891:- [ ] **Step 2: Add minimal keys to other locales**
+docs/superpowers/plans/2026-03-22-email-sync-overhaul.md:267:        const highest = validUids.length > 0 ? Math.max(...validUids) : lastUid;
+docs/superpowers/plans/2026-03-22-email-sync-overhaul.md:408:    // Fan out link-crm for each new email — use step.sendEvent for deterministic replay
+docs/superpowers/plans/2026-03-22-email-sync-overhaul.md:722:Expected: run completes quickly (seconds, not minutes). Steps visible: `fetch-account`, `search-uids`, `fetch-headers`, `upsert-metadata`.
+actions/crm/opportunity/dashboard/set-inactive.ts:31:    if (session.user.role !== "admin" && opportunity.assigned_to !== session.user.id) {
+actions/crm/contracts/create-new-contract/schema.ts:4:  title: z.string().min(3).max(255),
+actions/crm/contracts/create-new-contract/schema.ts:8:  renewalReminderDate: z.date(),
+actions/crm/contracts/create-new-contract/schema.ts:11:  description: z.string().max(255),
+actions/crm/contract-line-items/add-line-item/schema.ts:6:  name: z.string().min(1).max(255),
+actions/crm/contract-line-items/add-line-item/schema.ts:9:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:18:- `components/skeletons/admin-skeleton.tsx`
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:30:- `app/[locale]/(routes)/admin/loading.tsx`
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:157:## Task 2: Route skeletons — admin, projects, documents
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:160:- Create: `components/skeletons/admin-skeleton.tsx`
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:164:- [ ] **Step 1: Create `admin-skeleton.tsx`**
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:170:const AdminSkeleton = () => (
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:196:export default AdminSkeleton;
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:257:git add components/skeletons/admin-skeleton.tsx components/skeletons/projects-skeleton.tsx components/skeletons/documents-skeleton.tsx
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:258:git commit -m "feat: add AdminSkeleton, ProjectsSkeleton, DocumentsSkeleton components"
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:454:    <Skeleton className="h-10 w-full max-w-xl" />
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:499:- [ ] **Step 2: Update `app/[locale]/(routes)/admin/loading.tsx`**
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:503:import AdminSkeleton from "@/components/skeletons/admin-skeleton";
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:506:  return <AdminSkeleton />;
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:575:  "app/[locale]/(routes)/admin/loading.tsx" \
+docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:816:- Check: `/admin`, `/projects`, `/documents`, `/profile`, `/reports`, `/crm/accounts`, `/crm/contacts`, `/crm/leads`, `/crm/opportunities`, `/crm`, `/emails`, `/search`.
+actions/crm/account-products/update-assignment/schema.ts:5:  quantity: z.coerce.number().int().min(1).optional(),
+actions/crm/account-products/update-assignment/schema.ts:11:  notes: z.string().max(1000).optional().nullable(),
+actions/crm/contracts/create-new-contract/index.ts:38:    renewalReminderDate,
+actions/crm/contracts/create-new-contract/index.ts:65:        renewalReminderDate,
+docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:68:  "role": "Admin"
+docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:338:    <div className="flex min-h-[480px]">
+actions/crm/contacts/restore-contact.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/crm/contacts/restore-contact.ts:26:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+docs/superpowers/plans/2026-03-20-unified-search.md:419:      <div className="flex flex-col gap-1 min-w-0">
+actions/crm/opportunity-line-items/update-line-item/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+actions/crm/opportunity-line-items/update-line-item/schema.ts:7:  quantity: z.coerce.number().int().min(1).optional(),
+actions/crm/account-products/assign-product/schema.ts:6:  quantity: z.coerce.number().int().min(1).default(1),
+actions/crm/account-products/assign-product/schema.ts:13:  notes: z.string().max(1000).optional(),
+actions/crm/leads/restore-lead.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/crm/leads/restore-lead.ts:26:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+actions/crm/opportunity-line-items/add-line-item/schema.ts:6:  name: z.string().min(1).max(255),
+actions/crm/opportunity-line-items/add-line-item/schema.ts:9:  quantity: z.coerce.number().int().min(1).default(1),
+docs/superpowers/plans/2026-03-20-pgvector-embeddings.md:1269:- [ ] **Step 2: Start the Inngest dev server** (in a separate terminal)
+actions/crm/audit-log/get-audit-log-admin.ts:5:interface AuditLogAdminFilters {
+actions/crm/audit-log/get-audit-log-admin.ts:14:export const getAuditLogAdmin = async (filters: AuditLogAdminFilters = {}) => {
+actions/crm/audit-log/get-audit-log-admin.ts:17:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/campaigns/templates/generate-template.ts:33:        model: "gpt-4o-mini",
+docs/deployment/better-auth-migration-runbook.md:4:- [ ] Announce maintenance window to users (minimum 1 hour notice)
+docs/deployment/better-auth-migration-runbook.md:24:3. Old auth columns (`password`, `is_admin`, `is_account_admin`) are intact
+docs/deployment/better-auth-migration-runbook.md:30:- [ ] Admin can sign in via Google
+docs/deployment/better-auth-migration-runbook.md:31:- [ ] Non-admin can sign in via Email OTP
+docs/deployment/better-auth-migration-runbook.md:32:- [ ] PENDING flow works (new user → pending → admin approves → active)
+docs/deployment/better-auth-migration-runbook.md:35:- [ ] Admin panel shows role dropdown
+actions/crm/opportunities/restore-opportunity.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/crm/opportunities/restore-opportunity.ts:26:    revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
+docs/superpowers/plans/2026-03-20-mcp-server.md:183:      "Maximum 10 active tokens allowed per user"
+docs/superpowers/plans/2026-03-20-mcp-server.md:279:const MAX_TOKENS_PER_USER = 10;
+docs/superpowers/plans/2026-03-20-mcp-server.md:298:  if (activeCount >= MAX_TOKENS_PER_USER) {
+docs/superpowers/plans/2026-03-20-mcp-server.md:299:    throw new Error("Maximum 10 active tokens allowed per user");
+docs/superpowers/plans/2026-03-20-mcp-server.md:528:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:529:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:560:      query: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:561:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:562:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:584:      name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:610:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:661:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:662:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:693:      query: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:694:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:695:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:718:      first_name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:719:      last_name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:740:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:741:      last_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:790:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:791:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:822:      query: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:823:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:824:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:847:      firstName: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:848:      lastName: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:869:      firstName: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:870:      lastName: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:919:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:920:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:951:      query: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:952:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:953:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:976:      name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1001:      name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1053:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1054:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1085:      query: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1086:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1087:      offset: z.number().min(0).default(0),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1109:      first_name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1110:      last_name: z.string().min(1),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1129:      first_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1130:      last_name: z.string().min(1).optional(),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1239:In a separate terminal, test with a valid token (replace `TOKEN`):
+docs/superpowers/plans/2026-03-20-mcp-server.md:1371:            className="max-w-xs"
+docs/superpowers/plans/2026-03-20-mcp-server.md:1377:            className="max-w-[160px]"
+actions/admin/send-mail-to-all/index.ts:12:import MessageToAllUsers from "@/emails/admin/MessageToAllUser";
+actions/admin/send-mail-to-all/index.ts:24:  //Only admin can send mail to all users
+actions/admin/send-mail-to-all/index.ts:25:  if (session.user.role !== "admin") {
+docs/specs/2026-03-23-bulk-actions-contacts-design.md:4:**Author:** Chopper (via Superpowers Brainstorming Skill)  
+docs/specs/2026-03-23-bulk-actions-contacts-design.md:102:*Spec generated via Superpowers Brainstorming Skill test*
+actions/admin/send-mail-to-all/schema.ts:8:    .min(3, {
+actions/admin/send-mail-to-all/schema.ts:15:    .min(3, {
+actions/admin/users/set-role.ts:6:const VALID_ROLES = ["admin", "member", "viewer"] as const;
+actions/admin/users/set-role.ts:12:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/admin/users/set-role.ts:17:  if (userId === session.user.id && role !== "admin") {
+actions/admin/users/set-role.ts:18:    return { error: "Cannot remove your own admin role" };
+actions/admin/users/set-role.ts:36:    revalidatePath("/[locale]/(routes)/admin", "page");
+actions/admin/users/deactivate-user.ts:17:    revalidatePath("/[locale]/(routes)/admin", "page");
+actions/admin/users/delete-user.ts:10:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/admin/users/delete-user.ts:24:        is_admin: true,
+actions/admin/users/delete-user.ts:25:        is_account_admin: true,
+actions/admin/users/delete-user.ts:31:    revalidatePath("/[locale]/(routes)/admin", "page");
+actions/admin/users/activate-user.ts:39:    revalidatePath("/[locale]/(routes)/admin", "page");
+actions/admin/users/invite-user.ts:16:  if (session.user.role !== "admin") return { error: "Forbidden" };
+actions/admin/users/invite-user.ts:69:        invitedByUsername: session.user?.name || "admin",
+actions/admin/users/invite-user.ts:75:    revalidatePath("/[locale]/(routes)/admin", "page");
+
+codex
+**Most Likely Root Cause**
+
+The 500 on `POST /en/campaigns/targets` was introduced by the new `parseEmployeesValue()` helper in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That helper now assumes every imported `employees` cell is valid JSON with this exact shape:
+
+```ts
+{ min: number; max: number }
+```
+
+It then immediately does:
+
+```ts
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The crash means `JSON.parse(...)` returned something that did not contain `min` and/or `max`, so `parsed.min` was `undefined` and `.toString()` threw. This matches the stack exactly at line 17.
+
+**Why this is the likely regression**
+
+The previous implementation stored `row.employees` directly and did not parse it at all. The failing behavior appeared only after the last change set, which added `parseEmployeesValue()` and switched the import path to use it. The rest of the codebase still treats `employees` as a plain string field, not a structured object:
+
+- Manual create/update forms use a normal text input with placeholder `50-200`.
+- E2E coverage fills `Employees` with the plain string `50-200`.
+- Prisma stores `employees` as `String?`.
+
+So the server-side import path became stricter than the rest of the app and is now incompatible with normal or legacy CSV content.
+
+**Contributing factors**
+
+- `parseEmployeesValue()` runs before row validation, so one bad `employees` value aborts the entire import instead of skipping a row.
+- There is no shape check or fallback for empty cells, plain strings, or alternate JSON formats.
+- The modal text added in the same change mentions “legacy imports” expecting structured employee ranges, but there is no corresponding enforcement or conversion on the client side; the server still receives raw CSV strings.
+
+**Conclusion**
+
+The incident was most likely caused by a regression in the April 12, 2026 import change: `employees` import values were changed from pass-through strings to mandatory JSON `{min,max}` parsing, but actual CSV data still contains non-matching values.
+tokens used
+17,398
+**Most Likely Root Cause**
+
+The 500 on `POST /en/campaigns/targets` was introduced by the new `parseEmployeesValue()` helper in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That helper now assumes every imported `employees` cell is valid JSON with this exact shape:
+
+```ts
+{ min: number; max: number }
+```
+
+It then immediately does:
+
+```ts
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The crash means `JSON.parse(...)` returned something that did not contain `min` and/or `max`, so `parsed.min` was `undefined` and `.toString()` threw. This matches the stack exactly at line 17.
+
+**Why this is the likely regression**
+
+The previous implementation stored `row.employees` directly and did not parse it at all. The failing behavior appeared only after the last change set, which added `parseEmployeesValue()` and switched the import path to use it. The rest of the codebase still treats `employees` as a plain string field, not a structured object:
+
+- Manual create/update forms use a normal text input with placeholder `50-200`.
+- E2E coverage fills `Employees` with the plain string `50-200`.
+- Prisma stores `employees` as `String?`.
+
+So the server-side import path became stricter than the rest of the app and is now incompatible with normal or legacy CSV content.
+
+**Contributing factors**
+
+- `parseEmployeesValue()` runs before row validation, so one bad `employees` value aborts the entire import instead of skipping a row.
+- There is no shape check or fallback for empty cells, plain strings, or alternate JSON formats.
+- The modal text added in the same change mentions “legacy imports” expecting structured employee ranges, but there is no corresponding enforcement or conversion on the client side; the server still receives raw CSV strings.
+
+**Conclusion**
+
+The incident was most likely caused by a regression in the April 12, 2026 import change: `employees` import values were changed from pass-through strings to mandatory JSON `{min,max}` parsing, but actual CSV data still contains non-matching values.

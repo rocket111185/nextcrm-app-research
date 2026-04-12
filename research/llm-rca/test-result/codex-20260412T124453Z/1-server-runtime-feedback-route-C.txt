@@ -1,0 +1,768 @@
+run_name: 1-server-runtime-feedback-route-C
+case_name: 1-server-runtime-feedback-route
+variant: C
+target_branch: research-1
+model: default
+started_utc: 2026-04-12T12:46:26Z
+elapsed_seconds: 65
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/1-server-runtime-feedback-route/C/context.json
+
+===== RESPONSE =====
+Most likely root cause: a request payload contract regression introduced by commit `3e3a3e1` (`Refine feedback submission flow`, authored April 11, 2026 22:25:34 +03:00).
+
+Evidence:
+- The client submits:
+  - `feedback`
+  - `page`
+  - `submittedAt`
+- In [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:45), the POST body is built as:
+  - `page: window.location.pathname`
+  - `submittedAt: new Date().toISOString()`
+- The server now expects a different shape. In [route.ts](/home/user/nextcrm-app-research/app/api/feedback/route.ts:34), it reads `body.context.pathname`.
+
+Why this causes the 500:
+- The submitted body has no `context` object.
+- `body.context` is therefore `undefined`.
+- `body.context.pathname.replace(...)` throws before the mail-sending `try/catch`.
+- That uncaught runtime error is the most likely source of the `AxiosError: Request failed with status code 500` seen from `FeedbackForm.tsx:45`.
+
+Most probable thrown error:
+- `TypeError: Cannot read properties of undefined (reading 'pathname')`
+
+Why this is the best fit for the incident:
+- The failing stack points to the Axios POST call, not to client rendering.
+- The regression is in one of the three last changed files listed in the incident.
+- `git blame` shows the problematic `body.context.pathname` line was added in the April 11, 2026 change, before the incident timestamp `2026-04-11T21:37:43.644Z`.
+
+Secondary issue:
+- [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:53) shows a success toast in `finally`, so users are told “Thank you for your feedback” even when the request fails. That does not cause the 500, but it can mask the incident and make reports inconsistent.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81ba-a6d2-7c50-a9b2-a2f923561ebc
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+{
+  "error_message": "AxiosError: Request failed with status code 500",
+  "stacktrace": [
+    "httpMethod@http://localhost:3000/_next/static/chunks/0inl_axios_lib_0bqsryd._.js:3428:25",
+    "app/[locale]/(routes)/components/FeedbackForm.tsx:45:19"
+  ],
+  "incident_date": "2026-04-11T21:37:43.644Z",
+  "last_changed_files": [
+    "app/[locale]/(routes)/components/Feedback.tsx",
+    "app/[locale]/(routes)/components/FeedbackForm.tsx",
+    "app/api/feedback/route.ts"
+  ]
+}
+
+codex
+I’m treating this as an incident investigation against the current repo state. First I’ll inspect the relevant files and any repo guidance that affects debugging, then I’ll trace how the feedback form reaches the API route and where a 500 is most likely coming from.
+exec
+/usr/bin/bash -lc "sed -n '1,160p' .claude/skills/systematic-debugging/SKILL.md" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,160p' .claude/skills/using-superpowers/SKILL.md" in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+codex
+The repo-local skill paths referenced in `AGENTS.md` don’t exist at the current working directory, so I’m proceeding with direct code inspection. Next I’m narrowing the request path from `FeedbackForm.tsx` into `app/api/feedback/route.ts` and checking the recent diffs on those files.
+exec
+/usr/bin/bash -lc 'git log --oneline -n 5 -- app/[locale]/(routes)/components/Feedback.tsx app/[locale]/(routes)/components/FeedbackForm.tsx app/api/feedback/route.ts' in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc 'git diff -- app/[locale]/(routes)/components/Feedback.tsx app/[locale]/(routes)/components/FeedbackForm.tsx app/api/feedback/route.ts' in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `git log --oneline -n 5 -- app/[locale]/(routes)/components/Feedback.tsx app/[locale]/(routes)/components/FeedbackForm.tsx app/api/feedback/route.ts'
+
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `git diff -- app/[locale]/(routes)/components/Feedback.tsx app/[locale]/(routes)/components/FeedbackForm.tsx app/api/feedback/route.ts'
+
+exec
+/usr/bin/bash -lc "rg --files | rg 'Feedback(Form)?\\.tsx|app/api/feedback/route\\.ts|AGENTS\\.md|package\\.json|pnpm-lock|yarn.lock|package-lock\\.json'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+pnpm-lock.yaml
+package.json
+AGENTS.md
+app/api/feedback/route.ts
+app/[locale]/(routes)/components/FeedbackForm.tsx
+app/[locale]/(routes)/components/Feedback.tsx
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(routes)/components/Feedback.tsx'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/api/feedback/route.ts'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(routes)/components/FeedbackForm.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use client";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import FeedbackForm from "./FeedbackForm";
+
+import { Button } from "@/components/ui/button";
+import { ChatBubbleIcon } from "@radix-ui/react-icons";
+import { useState } from "react";
+
+const Feedback = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild className="hidden sm:flex">
+        <Button variant={"secondary"} onClick={() => setOpen(false)}>
+          <ChatBubbleIcon className="w-4 h-4 mr-2" />
+          Feedback
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96">
+        <FeedbackForm setOpen={setOpen} />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+export default Feedback;
+
+ succeeded in 0ms:
+"use client";
+
+import * as z from "zod";
+import axios from "axios";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Icons } from "@/components/ui/icons";
+
+const formSchema = z.object({
+  feedback: z.string().min(1, {
+    message: "Feedback must be at least 1 character.",
+  }),
+});
+
+interface FeedbackFormProps {
+  setOpen: (open: boolean) => void;
+}
+
+const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+  const [loading, setLoading] = useState(false);
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+  });
+  const feedbackValue = form.watch("feedback") || "";
+
+  const onSubmit = async (data: any) => {
+    setLoading(true);
+    try {
+      await axios.post("/api/feedback", {
+        ...data,
+        page: window.location.pathname,
+        submittedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error(error);
+      toast.error("Something went wrong. Please try again later.");
+    } finally {
+      toast.success("Thank you for your feedback.");
+      setOpen(false);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <FormField
+          control={form.control}
+          name="feedback"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Send us a feedback</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Your feedback"
+                  disabled={loading}
+                  maxLength={1000}
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription className="text-xs text-muted-foreground">
+                We appreciate every feedback. Thank you for helping us make this
+                app better
+              </FormDescription>
+              <div className="text-right text-xs text-muted-foreground">
+                {feedbackValue.length}/1000
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="flex justify-end space-x-2">
+          <Button
+            variant={"outline"}
+            onClick={() => setOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant={"secondary"} disabled={loading}>
+            {loading ? (
+              <div className="flex space-x-2">
+                <Icons.spinner className="h-4 w-4 animate-spin" />
+                <span>Sending ...</span>
+              </div>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+};
+
+export default FeedbackForm;
+
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import resendHelper from "@/lib/resend";
+import { NextResponse } from "next/server";
+
+function buildFeedbackSubject(sourcePath: string) {
+  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+}
+
+export async function POST(req: Request) {
+  /*
+  Resend.com function init - this is a helper function that will be used to send emails
+  */
+  let resend;
+  try {
+    resend = await resendHelper();
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message || "Resend API key is not configured" },
+      { status: 500 }
+    );
+  }
+  
+  const session = await getSession();
+  if (!session) {
+    return new NextResponse("Unauthenticated", { status: 401 });
+  }
+  const body = await req.json();
+  if (!body) {
+    return new NextResponse("Missing body", { status: 400 });
+  }
+  const { feedback } = body;
+  const normalizedFeedback =
+    typeof feedback === "string" ? feedback.trim() : "";
+  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+
+  if (!normalizedFeedback) {
+    return new NextResponse("Missing feedback", { status: 400 });
+  }
+
+  try {
+    //Send mail via Resend to info@softbase.cz
+    await resend.emails.send({
+      from:
+        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+      to: "info@softbase.cz",
+      subject: buildFeedbackSubject(sourcePath),
+      text: normalizedFeedback,
+    });
+    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+  } catch (error) {
+    console.log("[FEEDBACK_POST]", error);
+    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+  }
+}
+
+codex
+I’ve narrowed the failure to a contract mismatch rather than Axios itself. The form posts one payload shape, while the API route now reads a different one; I’m checking the recent history to confirm that this was introduced by the last changes rather than being an older latent bug.
+exec
+/usr/bin/bash -lc "git blame -L 30,34 'app/api/feedback/route.ts'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 30)   }
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 31)   const { feedback } = body;
+3e3a3e1c (Dmytro Rekechynskyi 2026-04-11 22:25:34 +0300 32)   const normalizedFeedback =
+3e3a3e1c (Dmytro Rekechynskyi 2026-04-11 22:25:34 +0300 33)     typeof feedback === "string" ? feedback.trim() : "";
+3e3a3e1c (Dmytro Rekechynskyi 2026-04-11 22:25:34 +0300 34)   const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+
+exec
+/usr/bin/bash -lc "git log --oneline -n 5 -- 'app/[locale]/(routes)/components/Feedback.tsx' 'app/[locale]/(routes)/components/FeedbackForm.tsx' 'app/api/feedback/route.ts'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+3e3a3e1 Refine feedback submission flow
+ffda828 refactor(auth): update all API routes to use better-auth session
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+c18e3a2 Fix bugs #44, #30, #22
+4700d33 [Update] - Header component - added support links (Discord and GitHub Issue)
+
+exec
+/usr/bin/bash -lc "git blame -L 36,43 'app/[locale]/(routes)/components/FeedbackForm.tsx'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 36) 
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 37)   const form = useForm({
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 38)     resolver: zodResolver(formSchema),
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 39)   });
+3e3a3e1c app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-04-11 22:25:34 +0300 40)   const feedbackValue = form.watch("feedback") || "";
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 41) 
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 42)   const onSubmit = async (data: any) => {
+2fb0ca2d app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 08:24:51 +0200 43)     setLoading(true);
+
+exec
+/usr/bin/bash -lc "git show --unified=20 3e3a3e1 -- 'app/api/feedback/route.ts'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "git show --unified=20 3e3a3e1 -- 'app/[locale]/(routes)/components/FeedbackForm.tsx'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --summary 3e3a3e1' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+commit 3e3a3e1c3065df1e74931cf7cb18c4a48b767562
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Sat Apr 11 22:25:34 2026 +0300
+
+    Refine feedback submission flow
+
+diff --git a/app/api/feedback/route.ts b/app/api/feedback/route.ts
+index 9321493..b6f3880 100644
+--- a/app/api/feedback/route.ts
++++ b/app/api/feedback/route.ts
+@@ -1,47 +1,54 @@
+ import { getSession } from "@/lib/auth-server";
+ import resendHelper from "@/lib/resend";
+ import { NextResponse } from "next/server";
+ 
++function buildFeedbackSubject(sourcePath: string) {
++  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
++}
++
+ export async function POST(req: Request) {
+   /*
+   Resend.com function init - this is a helper function that will be used to send emails
+   */
+   let resend;
+   try {
+     resend = await resendHelper();
+   } catch (error: any) {
+     return NextResponse.json(
+       { error: error?.message || "Resend API key is not configured" },
+       { status: 500 }
+     );
+   }
+   
+   const session = await getSession();
+   if (!session) {
+     return new NextResponse("Unauthenticated", { status: 401 });
+   }
+   const body = await req.json();
+   if (!body) {
+     return new NextResponse("Missing body", { status: 400 });
+   }
+   const { feedback } = body;
++  const normalizedFeedback =
++    typeof feedback === "string" ? feedback.trim() : "";
++  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+ 
+-  if (!feedback) {
++  if (!normalizedFeedback) {
+     return new NextResponse("Missing feedback", { status: 400 });
+   }
+ 
+   try {
+     //Send mail via Resend to info@softbase.cz
+     await resend.emails.send({
+       from:
+         process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+       to: "info@softbase.cz",
+-      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
+-      text: feedback, // Add this line to fix the types issue
++      subject: buildFeedbackSubject(sourcePath),
++      text: normalizedFeedback,
+     });
+     return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+   } catch (error) {
+     console.log("[FEEDBACK_POST]", error);
+     return NextResponse.json({ error: "Initial error" }, { status: 500 });
+   }
+ }
+
+ succeeded in 0ms:
+3e3a3e1 Refine feedback submission flow
+ app/[locale]/(routes)/components/Feedback.tsx     |  2 +-
+ app/[locale]/(routes)/components/FeedbackForm.tsx | 11 ++++++++++-
+ app/api/feedback/route.ts                         | 13 ++++++++++---
+ 3 files changed, 21 insertions(+), 5 deletions(-)
+
+ succeeded in 0ms:
+commit 3e3a3e1c3065df1e74931cf7cb18c4a48b767562
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Sat Apr 11 22:25:34 2026 +0300
+
+    Refine feedback submission flow
+
+diff --git a/app/[locale]/(routes)/components/FeedbackForm.tsx b/app/[locale]/(routes)/components/FeedbackForm.tsx
+index da26d7e..82a2b69 100644
+--- a/app/[locale]/(routes)/components/FeedbackForm.tsx
++++ b/app/[locale]/(routes)/components/FeedbackForm.tsx
+@@ -20,75 +20,84 @@ import { Button } from "@/components/ui/button";
+ import { Textarea } from "@/components/ui/textarea";
+ import { toast } from "sonner";
+ import { Icons } from "@/components/ui/icons";
+ 
+ const formSchema = z.object({
+   feedback: z.string().min(1, {
+     message: "Feedback must be at least 1 character.",
+   }),
+ });
+ 
+ interface FeedbackFormProps {
+   setOpen: (open: boolean) => void;
+ }
+ 
+ const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+   const [loading, setLoading] = useState(false);
+ 
+   const form = useForm({
+     resolver: zodResolver(formSchema),
+   });
++  const feedbackValue = form.watch("feedback") || "";
+ 
+   const onSubmit = async (data: any) => {
+     setLoading(true);
+     try {
+-      await axios.post("/api/feedback", data);
++      await axios.post("/api/feedback", {
++        ...data,
++        page: window.location.pathname,
++        submittedAt: new Date().toISOString(),
++      });
+     } catch (error) {
+       console.error(error);
+       toast.error("Something went wrong. Please try again later.");
+     } finally {
+       toast.success("Thank you for your feedback.");
+       setOpen(false);
+       setLoading(false);
+     }
+   };
+ 
+   return (
+     <Form {...form}>
+       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+         <FormField
+           control={form.control}
+           name="feedback"
+           render={({ field }) => (
+             <FormItem>
+               <FormLabel>Send us a feedback</FormLabel>
+               <FormControl>
+                 <Textarea
+                   placeholder="Your feedback"
+                   disabled={loading}
++                  maxLength={1000}
+                   {...field}
+                 />
+               </FormControl>
+               <FormDescription className="text-xs text-muted-foreground">
+                 We appreciate every feedback. Thank you for helping us make this
+                 app better
+               </FormDescription>
++              <div className="text-right text-xs text-muted-foreground">
++                {feedbackValue.length}/1000
++              </div>
+               <FormMessage />
+             </FormItem>
+           )}
+         />
+         <div className="flex justify-end space-x-2">
+           <Button
+             variant={"outline"}
+             onClick={() => setOpen(false)}
+             disabled={loading}
+           >
+             Cancel
+           </Button>
+           <Button type="submit" variant={"secondary"} disabled={loading}>
+             {loading ? (
+               <div className="flex space-x-2">
+                 <Icons.spinner className="h-4 w-4 animate-spin" />
+                 <span>Sending ...</span>
+               </div>
+             ) : (
+               "Submit"
+
+codex
+The commit history confirms the regression was introduced on April 11, 2026 in `3e3a3e1 Refine feedback submission flow`. I’m doing one last pass on surrounding auth/session and email helper behavior so the report can rank this mismatch against other possible 500 sources instead of assuming a single-path failure.
+exec
+/usr/bin/bash -lc "sed -n '1,200p' 'lib/resend.ts'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { Resend } from "resend";
+import { prismadb } from "./prisma";
+
+export default async function resendHelper() {
+  const resendKey = await prismadb.systemServices.findFirst({
+    where: {
+      name: "resend_smtp",
+    },
+  });
+
+  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+
+  if (!apiKey) {
+    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+  }
+
+  const resend = new Resend(apiKey);
+
+  return resend;
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'lib/auth-server.ts'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+
+// TODO: Add requireRole() helper for viewer restriction enforcement
+// when viewer role is first assigned to users
+
+export async function getSession() {
+  return auth.api.getSession({
+    headers: await headers(),
+  });
+}
+
+exec
+/usr/bin/bash -lc 'git show 3e3a3e1''^:'"'app/api/feedback/route.ts' | sed -n '1,220p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import resendHelper from "@/lib/resend";
+import { NextResponse } from "next/server";
+
+export async function POST(req: Request) {
+  /*
+  Resend.com function init - this is a helper function that will be used to send emails
+  */
+  let resend;
+  try {
+    resend = await resendHelper();
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message || "Resend API key is not configured" },
+      { status: 500 }
+    );
+  }
+  
+  const session = await getSession();
+  if (!session) {
+    return new NextResponse("Unauthenticated", { status: 401 });
+  }
+  const body = await req.json();
+  if (!body) {
+    return new NextResponse("Missing body", { status: 400 });
+  }
+  const { feedback } = body;
+
+  if (!feedback) {
+    return new NextResponse("Missing feedback", { status: 400 });
+  }
+
+  try {
+    //Send mail via Resend to info@softbase.cz
+    await resend.emails.send({
+      from:
+        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+      to: "info@softbase.cz",
+      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
+      text: feedback, // Add this line to fix the types issue
+    });
+    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+  } catch (error) {
+    console.log("[FEEDBACK_POST]", error);
+    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+  }
+}
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/api/feedback/route.ts' | sed -n '1,120p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/FeedbackForm.tsx' | sed -n '35,60p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import resendHelper from "@/lib/resend";
+     3	import { NextResponse } from "next/server";
+     4	
+     5	function buildFeedbackSubject(sourcePath: string) {
+     6	  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+     7	}
+     8	
+     9	export async function POST(req: Request) {
+    10	  /*
+    11	  Resend.com function init - this is a helper function that will be used to send emails
+    12	  */
+    13	  let resend;
+    14	  try {
+    15	    resend = await resendHelper();
+    16	  } catch (error: any) {
+    17	    return NextResponse.json(
+    18	      { error: error?.message || "Resend API key is not configured" },
+    19	      { status: 500 }
+    20	    );
+    21	  }
+    22	  
+    23	  const session = await getSession();
+    24	  if (!session) {
+    25	    return new NextResponse("Unauthenticated", { status: 401 });
+    26	  }
+    27	  const body = await req.json();
+    28	  if (!body) {
+    29	    return new NextResponse("Missing body", { status: 400 });
+    30	  }
+    31	  const { feedback } = body;
+    32	  const normalizedFeedback =
+    33	    typeof feedback === "string" ? feedback.trim() : "";
+    34	  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+    35	
+    36	  if (!normalizedFeedback) {
+    37	    return new NextResponse("Missing feedback", { status: 400 });
+    38	  }
+    39	
+    40	  try {
+    41	    //Send mail via Resend to info@softbase.cz
+    42	    await resend.emails.send({
+    43	      from:
+    44	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    45	      to: "info@softbase.cz",
+    46	      subject: buildFeedbackSubject(sourcePath),
+    47	      text: normalizedFeedback,
+    48	    });
+    49	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    50	  } catch (error) {
+    51	    console.log("[FEEDBACK_POST]", error);
+    52	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    53	  }
+    54	}
+
+ succeeded in 0ms:
+    35	  const [loading, setLoading] = useState(false);
+    36	
+    37	  const form = useForm({
+    38	    resolver: zodResolver(formSchema),
+    39	  });
+    40	  const feedbackValue = form.watch("feedback") || "";
+    41	
+    42	  const onSubmit = async (data: any) => {
+    43	    setLoading(true);
+    44	    try {
+    45	      await axios.post("/api/feedback", {
+    46	        ...data,
+    47	        page: window.location.pathname,
+    48	        submittedAt: new Date().toISOString(),
+    49	      });
+    50	    } catch (error) {
+    51	      console.error(error);
+    52	      toast.error("Something went wrong. Please try again later.");
+    53	    } finally {
+    54	      toast.success("Thank you for your feedback.");
+    55	      setOpen(false);
+    56	      setLoading(false);
+    57	    }
+    58	  };
+    59	
+    60	  return (
+
+codex
+Most likely root cause: a request payload contract regression introduced by commit `3e3a3e1` (`Refine feedback submission flow`, authored April 11, 2026 22:25:34 +03:00).
+
+Evidence:
+- The client submits:
+  - `feedback`
+  - `page`
+  - `submittedAt`
+- In [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:45), the POST body is built as:
+  - `page: window.location.pathname`
+  - `submittedAt: new Date().toISOString()`
+- The server now expects a different shape. In [route.ts](/home/user/nextcrm-app-research/app/api/feedback/route.ts:34), it reads `body.context.pathname`.
+
+Why this causes the 500:
+- The submitted body has no `context` object.
+- `body.context` is therefore `undefined`.
+- `body.context.pathname.replace(...)` throws before the mail-sending `try/catch`.
+- That uncaught runtime error is the most likely source of the `AxiosError: Request failed with status code 500` seen from `FeedbackForm.tsx:45`.
+
+Most probable thrown error:
+- `TypeError: Cannot read properties of undefined (reading 'pathname')`
+
+Why this is the best fit for the incident:
+- The failing stack points to the Axios POST call, not to client rendering.
+- The regression is in one of the three last changed files listed in the incident.
+- `git blame` shows the problematic `body.context.pathname` line was added in the April 11, 2026 change, before the incident timestamp `2026-04-11T21:37:43.644Z`.
+
+Secondary issue:
+- [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:53) shows a success toast in `finally`, so users are told “Thank you for your feedback” even when the request fails. That does not cause the 500, but it can mask the incident and make reports inconsistent.
+tokens used
+11,762
+Most likely root cause: a request payload contract regression introduced by commit `3e3a3e1` (`Refine feedback submission flow`, authored April 11, 2026 22:25:34 +03:00).
+
+Evidence:
+- The client submits:
+  - `feedback`
+  - `page`
+  - `submittedAt`
+- In [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:45), the POST body is built as:
+  - `page: window.location.pathname`
+  - `submittedAt: new Date().toISOString()`
+- The server now expects a different shape. In [route.ts](/home/user/nextcrm-app-research/app/api/feedback/route.ts:34), it reads `body.context.pathname`.
+
+Why this causes the 500:
+- The submitted body has no `context` object.
+- `body.context` is therefore `undefined`.
+- `body.context.pathname.replace(...)` throws before the mail-sending `try/catch`.
+- That uncaught runtime error is the most likely source of the `AxiosError: Request failed with status code 500` seen from `FeedbackForm.tsx:45`.
+
+Most probable thrown error:
+- `TypeError: Cannot read properties of undefined (reading 'pathname')`
+
+Why this is the best fit for the incident:
+- The failing stack points to the Axios POST call, not to client rendering.
+- The regression is in one of the three last changed files listed in the incident.
+- `git blame` shows the problematic `body.context.pathname` line was added in the April 11, 2026 change, before the incident timestamp `2026-04-11T21:37:43.644Z`.
+
+Secondary issue:
+- [FeedbackForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/components/FeedbackForm.tsx:53) shows a success toast in `finally`, so users are told “Thank you for your feedback” even when the request fails. That does not cause the 500, but it can mask the incident and make reports inconsistent.

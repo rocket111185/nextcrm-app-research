@@ -1,0 +1,321 @@
+run_name: 3-env-runtime-upload-A
+case_name: 3-env-runtime-upload
+variant: A
+target_branch: research-3
+model: default
+started_utc: 2026-04-12T12:49:49Z
+elapsed_seconds: 47
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/3-env-runtime-upload/A/context.md
+
+===== RESPONSE =====
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the active local environment, and that empty value is passed into `new URL(...)`.
+
+Evidence:
+- The thrown error includes `input: ''`, which means `buildPublicFileUrl()` received an empty string, not a malformed hostname.
+- In [app/api/upload/presigned-url/route.ts](/home/user/nextcrm-app-research/app/api/upload/presigned-url/route.ts:13), the failure is exactly `new URL(MINIO_PUBLIC_URL!)`.
+- In [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:19), `MINIO_PUBLIC_URL` is sourced from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`.
+- In [.env.local](/home/user/nextcrm-app-research/.env.local:77), `NEXT_PUBLIC_MINIO_ENDPOINT=` is blank.
+- `.env` and `.env.example` contain a non-empty placeholder/default, but in Next.js `.env.local` overrides `.env`, so the blank value in `.env.local` wins.
+
+Why this produces the observed behavior:
+- The route successfully gets far enough to attempt URL construction, so the MinIO client config is loading.
+- `getSignedUrl(...)` can succeed without validating the public file URL.
+- The 500 happens only when composing the returned public URL, because `new URL("")` throws `ERR_INVALID_URL`.
+
+Secondary contributing issue:
+- [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:3) validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`. That allows the app to start and only fail at request time in this route.
+
+Conclusion:
+The incident is most likely caused by a local/deployed env misconfiguration: `NEXT_PUBLIC_MINIO_ENDPOINT` is set to an empty string, likely via `.env.local`, overriding the valid value from `.env`.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81bd-c205-7302-91e7-4d93bd84698b
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+Failed to generate presigned URL: TypeError: Invalid URL
+    at buildPublicFileUrl (app/api/upload/presigned-url/route.ts:13:25)
+    at POST (app/api/upload/presigned-url/route.ts:61:21)
+  11 |
+  12 | function buildPublicFileUrl(key: string) {
+> 13 |   const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+     |                         ^
+  14 |   publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  15 |   return publicBaseUrl.toString();
+  16 | } {
+  code: 'ERR_INVALID_URL',
+  input: ''
+}
+ POST /api/upload/presigned-url 500 in 778ms (next.js: 506ms, application-code: 271ms)
+ 
+
+codex
+I’m tracing the failing upload route and the env/config path that feeds `MINIO_PUBLIC_URL`. I’ll inspect the route, then check where that variable is defined or documented so I can isolate the most likely misconfiguration.
+exec
+/usr/bin/bash -lc "sed -n '1,140p' app/api/upload/presigned-url/route.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = buildPublicFileUrl(key);
+
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+  } catch (err) {
+    console.error("Failed to generate presigned URL:", err);
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+exec
+/usr/bin/bash -lc "rg -n \"MINIO_PUBLIC_URL|buildPublicFileUrl|presigned-url\" app env* . -g '"'!node_modules'"'" in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+rg: env*: No such file or directory (os error 2)
+app/api/upload/presigned-url/route.ts:6:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:12:function buildPublicFileUrl(key: string) {
+app/api/upload/presigned-url/route.ts:13:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:61:    const fileUrl = buildPublicFileUrl(key);
+./lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:76:4. Request presigned URL from existing `/api/upload/presigned-url`
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:222:| POST | `/api/upload/presigned-url` | Accept all supported MIME types in a single upload flow |
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+./lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+./components/ui/minio-uploader.tsx:38:        const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:44:| `app/api/upload/presigned-url/route.ts` | Accept all MIME types in unified flow |
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1657:      const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2473:- Modify: `app/api/upload/presigned-url/route.ts`
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2495:git add app/api/upload/presigned-url/route.ts
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1147:- Modify: `app/api/upload/presigned-url/route.ts`
+./app/api/upload/presigned-url/route.ts:6:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./app/api/upload/presigned-url/route.ts:12:function buildPublicFileUrl(key: string) {
+./app/api/upload/presigned-url/route.ts:13:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+./app/api/upload/presigned-url/route.ts:61:    const fileUrl = buildPublicFileUrl(key);
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+
+codex
+The stack trace matches a direct `new URL(...)` failure, so I’m checking the MinIO config module and any env examples/docs next. That will tell us whether this is a bad value, a missing value, or a naming mismatch.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' lib/minio.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { S3Client } from "@aws-sdk/client-s3";
+
+if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+
+export const minioClient = new S3Client({
+  endpoint: process.env.MINIO_ENDPOINT,
+  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  },
+  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+});
+
+export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc "rg -n \"NEXT_PUBLIC_MINIO_ENDPOINT|MINIO_ENDPOINT|MINIO_BUCKET|MINIO_REGION\" . -g '"'!node_modules'"' -g '"'!.next'"' -g '"'!docs/superpowers/plans/*'"' -g '"'!docs/superpowers/specs/*'"'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+./app/api/upload/presigned-url/route.ts:6:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./app/api/upload/presigned-url/route.ts:14:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+./app/api/upload/presigned-url/route.ts:51:    Bucket: MINIO_BUCKET,
+./lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+./lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+./lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+./lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+./lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+./inngest/functions/documents/generate-thumbnail.ts:4:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./inngest/functions/documents/generate-thumbnail.ts:12:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./inngest/functions/documents/generate-thumbnail.ts:53:        Bucket: MINIO_BUCKET,
+./inngest/functions/documents/generate-thumbnail.ts:60:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+./inngest/functions/documents/enrich-document.ts:9:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./inngest/functions/documents/enrich-document.ts:20:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+./lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+./lib/mcp/tools/crm-documents.ts:162:        Bucket: MINIO_BUCKET,
+./lib/mcp/tools/crm-documents.ts:181:        Bucket: MINIO_BUCKET,
+./actions/documents/delete-document.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./actions/documents/delete-document.ts:25:        Bucket: MINIO_BUCKET,
+./actions/documents/bulk-delete-documents.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./actions/documents/bulk-delete-documents.ts:21:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+
+exec
+/usr/bin/bash -lc "rg --files -g '.env*' -g '"'!node_modules'"'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+.env.local
+.env
+.env.local.example
+.env.example
+
+exec
+/usr/bin/bash -lc "rg -n \"NEXT_PUBLIC_MINIO_ENDPOINT\" .env* . -g '"'!node_modules'"' -g '"'!.next'"'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+./lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+./inngest/functions/documents/generate-thumbnail.ts:60:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+
+codex
+I found the likely failure path in the env files: the variable exists in examples, but the local runtime file may be blank. I’m opening only the relevant lines to confirm whether this is an unset value versus an invalidly formatted one.
+exec
+/usr/bin/bash -lc "sed -n '70,82p' .env.local" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '28,36p' .env" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '28,36p' .env.example" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+ROSSUM_USERNAME="your-rossum-username"
+ROSSUM_PASSWORD="your-rossum-password"
+
+# MinIO Object Storage
+NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+
+ succeeded in 0ms:
+ROSSUM_USERNAME="your-rossum-username"
+ROSSUM_PASSWORD="your-rossum-password"
+
+# MinIO Object Storage
+NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+
+ succeeded in 0ms:
+INNGEST_ID=nextcrm
+INNGEST_APP_NAME=NextCRM
+INNGEST_BASE_URL=
+INNGEST_EVENT_KEY=
+INNGEST_SIGNING_KEY=
+
+#MINIO
+NEXT_PUBLIC_MINIO_ENDPOINT=
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+MINIO_ACCESS_KEY="your-access-key"
+
+codex
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the active local environment, and that empty value is passed into `new URL(...)`.
+
+Evidence:
+- The thrown error includes `input: ''`, which means `buildPublicFileUrl()` received an empty string, not a malformed hostname.
+- In [app/api/upload/presigned-url/route.ts](/home/user/nextcrm-app-research/app/api/upload/presigned-url/route.ts:13), the failure is exactly `new URL(MINIO_PUBLIC_URL!)`.
+- In [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:19), `MINIO_PUBLIC_URL` is sourced from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`.
+- In [.env.local](/home/user/nextcrm-app-research/.env.local:77), `NEXT_PUBLIC_MINIO_ENDPOINT=` is blank.
+- `.env` and `.env.example` contain a non-empty placeholder/default, but in Next.js `.env.local` overrides `.env`, so the blank value in `.env.local` wins.
+
+Why this produces the observed behavior:
+- The route successfully gets far enough to attempt URL construction, so the MinIO client config is loading.
+- `getSignedUrl(...)` can succeed without validating the public file URL.
+- The 500 happens only when composing the returned public URL, because `new URL("")` throws `ERR_INVALID_URL`.
+
+Secondary contributing issue:
+- [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:3) validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`. That allows the app to start and only fail at request time in this route.
+
+Conclusion:
+The incident is most likely caused by a local/deployed env misconfiguration: `NEXT_PUBLIC_MINIO_ENDPOINT` is set to an empty string, likely via `.env.local`, overriding the valid value from `.env`.
+tokens used
+14,340
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the active local environment, and that empty value is passed into `new URL(...)`.
+
+Evidence:
+- The thrown error includes `input: ''`, which means `buildPublicFileUrl()` received an empty string, not a malformed hostname.
+- In [app/api/upload/presigned-url/route.ts](/home/user/nextcrm-app-research/app/api/upload/presigned-url/route.ts:13), the failure is exactly `new URL(MINIO_PUBLIC_URL!)`.
+- In [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:19), `MINIO_PUBLIC_URL` is sourced from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`.
+- In [.env.local](/home/user/nextcrm-app-research/.env.local:77), `NEXT_PUBLIC_MINIO_ENDPOINT=` is blank.
+- `.env` and `.env.example` contain a non-empty placeholder/default, but in Next.js `.env.local` overrides `.env`, so the blank value in `.env.local` wins.
+
+Why this produces the observed behavior:
+- The route successfully gets far enough to attempt URL construction, so the MinIO client config is loading.
+- `getSignedUrl(...)` can succeed without validating the public file URL.
+- The 500 happens only when composing the returned public URL, because `new URL("")` throws `ERR_INVALID_URL`.
+
+Secondary contributing issue:
+- [lib/minio.ts](/home/user/nextcrm-app-research/lib/minio.ts:3) validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`. That allows the app to start and only fail at request time in this route.
+
+Conclusion:
+The incident is most likely caused by a local/deployed env misconfiguration: `NEXT_PUBLIC_MINIO_ENDPOINT` is set to an empty string, likely via `.env.local`, overriding the valid value from `.env`.

@@ -1,0 +1,1240 @@
+run_name: 5-data-shape-target-import-B
+case_name: 5-data-shape-target-import
+variant: B
+target_branch: research-5
+model: default
+started_utc: 2026-04-12T12:55:48Z
+elapsed_seconds: 88
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/5-data-shape-target-import/B/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+The import regression was introduced by the new `parseEmployeesValue()` path in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That function now assumes every imported `employees` cell is JSON with the exact shape `{ min, max }`, then immediately does `parsed.min.toString()` and `parsed.max.toString()`.
+
+The rest of the app does not use that shape. `employees` is stored as a nullable `String` in Prisma ([prisma/schema.prisma](/home/user/nextcrm-app-research/prisma/schema.prisma:1236)), the create/update target forms treat it as free text with placeholder `50-200` ([NewTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311), [UpdateTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)), and e2e coverage also enters `50-200` as a plain string ([campaign-targets.spec.ts](/home/user/nextcrm-app-research/tests/e2e/campaign-targets.spec.ts:73)).
+
+**Why This Produced This Exact Error**
+
+The stack trace is `Cannot read properties of undefined (reading 'toString')` at `parsed.min.toString()`, not a JSON parse error. That means the CSV cell was likely valid JSON, but not an object containing both `min` and `max`. Examples that would produce this exact failure are a JSON string like `"50-200"` or an object missing one of those keys. In other words, the importer accepted a value shape that `JSON.parse()` can read, but `parseEmployeesValue()` cannot safely dereference.
+
+**Contributing Factors**
+
+`parseEmployeesValue(row.employees)` is executed for every row before row validation and before any row can be skipped ([import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:41)). So one malformed `employees` value causes the entire import request to fail with HTTP 500 instead of skipping a row or preserving the original string.
+
+The preview flow in [components/modals/ImportTargetsModal.tsx](/home/user/nextcrm-app-research/components/modals/ImportTargetsModal.tsx:140) only checks for missing `last_name` or `company`; it never validates `employees`. That allowed the bad file to pass preview and fail only at server import time.
+
+**Conclusion**
+
+The most likely root cause is a bad assumption added in the latest change: the importer now requires `employees` CSV values to be structured JSON `{ min, max }`, while actual application behavior and likely CSV inputs use plain strings or other legacy JSON shapes. That mismatch is what triggered the 2026-04-12 00:18:46Z incident.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81c3-3b09-7102-bb71-f214bbe17329
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+Error message:
+⨯ TypeError: Cannot read properties of undefined (reading 'toString')
+    at parseEmployeesValue (actions/crm/targets/import-targets.ts:17:24)
+    at <unknown> (actions/crm/targets/import-targets.ts:59:23)
+    at Array.forEach (<anonymous>)
+    at importTargets (actions/crm/targets/import-targets.ts:41:8)
+  15 |   };
+  16 |
+> 17 |   return `${parsed.min.toString()}-${parsed.max.toString()}`;
+     |                        ^
+  18 | }
+  19 |
+  20 | export async function importTargets( {
+  digest: '2744837048'
+}
+ POST /en/campaigns/targets 500 in 472ms (next.js: 18ms, proxy.ts: 6ms, application-code: 447ms)
+  └─ ƒ importTargets({}) in 11ms actions/crm/targets/import-targets.ts 
+
+Incident date: 2026-04-12T00:18:46.263Z
+
+Last changes:
+ actions/crm/targets/import-targets.ts    | 28 ++++++++++++++++++++++------
+ components/modals/ImportTargetsModal.tsx |  9 +++++++++
+ 2 files changed, 31 insertions(+), 6 deletions(-)
+
+codex
+I’m tracing the stack in `actions/crm/targets/import-targets.ts` and comparing it with the last change set to identify the failure path and the most likely bad input shape.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' actions/crm/targets/import-targets.ts" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,220p' components/modals/ImportTargetsModal.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Import Targets from CSV
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Select a CSV file to import targets."}
+            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+            {step === "preview" && "Review the import summary before proceeding."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Upload */}
+
+exec
+/usr/bin/bash -lc 'git diff --stat HEAD~1..HEAD -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx && git diff HEAD~1..HEAD -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -8,6 +8,15 @@ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+@@ -44,9 +53,10 @@ export async function importTargets(
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+@@ -73,7 +83,7 @@ export async function importTargets(
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -293,6 +293,9 @@ const ImportTargetsModal = () => {
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+
+codex
+The failure is inside a newly added normalization path for `employees`. I’m checking what shape the app actually stores/expects for that field and whether the import UI ever converts CSV values into that shape before submission.
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '1,140p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '1,260p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+    66	    valid.push({
+    67	      last_name: last_name ?? "",
+    68	      first_name: row.first_name || null,
+    69	      email: email || null,
+    70	      mobile_phone: mobile_phone || null,
+    71	      office_phone: row.office_phone || null,
+    72	      company: row.company || null,
+    73	      position: row.position || null,
+    74	      company_website: companyDomain || null,
+    75	      personal_website: row.personal_website || null,
+    76	      social_linkedin: row.social_linkedin || null,
+    77	      social_x: row.social_x || null,
+    78	      social_instagram: row.social_instagram || null,
+    79	      social_facebook: row.social_facebook || null,
+    80	      personal_email: row.personal_email || null,
+    81	      company_email: row.company_email || null,
+    82	      company_phone: row.company_phone || null,
+    83	      city: row.city || null,
+    84	      country: row.country || null,
+    85	      industry: row.industry || null,
+    86	      employees: employees || null,
+    87	      description: row.description || null,
+    88	      created_by: (session.user as any).id,
+    89	    });
+    90	  });
+    91	
+    92	  if (valid.length > 0) {
+    93	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    94	  }
+    95	
+    96	  return { imported: valid.length, skipped: errors.length, errors };
+    97	}
+
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import { useState, useRef, useCallback } from "react";
+     4	import { useRouter } from "next/navigation";
+     5	import { importTargets } from "@/actions/crm/targets/import-targets";
+     6	import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+     7	import Papa from "papaparse";
+     8	import { toast } from "sonner";
+     9	import { Button } from "@/components/ui/button";
+    10	import {
+    11	  Dialog,
+    12	  DialogContent,
+    13	  DialogDescription,
+    14	  DialogFooter,
+    15	  DialogHeader,
+    16	  DialogTitle,
+    17	  DialogTrigger,
+    18	} from "@/components/ui/dialog";
+    19	import {
+    20	  Select,
+    21	  SelectContent,
+    22	  SelectItem,
+    23	  SelectTrigger,
+    24	  SelectValue,
+    25	} from "@/components/ui/select";
+    26	import { Upload, Loader2 } from "lucide-react";
+    27	
+    28	type Step = "upload" | "mapping" | "preview";
+    29	
+    30	interface TargetField {
+    31	  key: string;
+    32	  label: string;
+    33	  required: boolean;
+    34	}
+    35	
+    36	const TARGET_FIELDS: TargetField[] = [
+    37	  { key: "last_name", label: "Last Name", required: false },
+    38	  { key: "first_name", label: "First Name", required: false },
+    39	  { key: "email", label: "Email", required: false },
+    40	  { key: "mobile_phone", label: "Mobile Phone", required: false },
+    41	  { key: "office_phone", label: "Office Phone", required: false },
+    42	  { key: "company", label: "Company", required: false },
+    43	  { key: "position", label: "Position", required: false },
+    44	  { key: "company_website", label: "Company Website", required: false },
+    45	  { key: "personal_website", label: "Personal Website", required: false },
+    46	  { key: "social_linkedin", label: "LinkedIn", required: false },
+    47	  { key: "social_x", label: "X / Twitter", required: false },
+    48	  { key: "social_instagram", label: "Instagram", required: false },
+    49	  { key: "social_facebook", label: "Facebook", required: false },
+    50	  { key: "personal_email", label: "Personal Email", required: false },
+    51	  { key: "company_email",  label: "Company Email",  required: false },
+    52	  { key: "company_phone",  label: "Company Phone",  required: false },
+    53	  { key: "city",           label: "City",           required: false },
+    54	  { key: "country",        label: "Country",        required: false },
+    55	  { key: "industry",       label: "Industry",       required: false },
+    56	  { key: "employees",      label: "Employees",      required: false },
+    57	  { key: "description",    label: "Description",    required: false },
+    58	];
+    59	
+    60	const SKIP_VALUE = "__skip__";
+    61	
+    62	const ImportTargetsModal = () => {
+    63	  const router = useRouter();
+    64	  const fileInputRef = useRef<HTMLInputElement>(null);
+    65	
+    66	  const [open, setOpen] = useState(false);
+    67	  const [step, setStep] = useState<Step>("upload");
+    68	  const [isLoading, setIsLoading] = useState(false);
+    69	  const [isSuggesting, setIsSuggesting] = useState(false);
+    70	
+    71	  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    72	  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+    73	  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+    74	  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+    75	  const [mapping, setMapping] = useState<Record<string, string>>({});
+    76	  const previewRows = csvRows.slice(0, 3);
+    77	
+    78	  const resetState = () => {
+    79	    setStep("upload");
+    80	    setSelectedFile(null);
+    81	    setCsvHeaders([]);
+    82	    setCsvRows([]);
+    83	    setMapping({});
+    84	    setIsLoading(false);
+    85	    setIsSuggesting(false);
+    86	    if (fileInputRef.current) fileInputRef.current.value = "";
+    87	  };
+    88	
+    89	  const handleOpenChange = (val: boolean) => {
+    90	    setOpen(val);
+    91	    if (!val) resetState();
+    92	  };
+    93	
+    94	  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    95	    const file = e.target.files?.[0];
+    96	    if (!file) return;
+    97	    setSelectedFile(file);
+    98	
+    99	    Papa.parse<Record<string, string>>(file, {
+   100	      header: true,
+   101	      skipEmptyLines: true,
+   102	      complete: (results) => {
+   103	        const headers = results.meta.fields ?? [];
+   104	        setCsvHeaders(headers);
+   105	        setCsvRows(results.data);
+   106	        fetchSuggestedMapping(headers);
+   107	      },
+   108	    });
+   109	  };
+   110	
+   111	  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+   112	    setIsSuggesting(true);
+   113	    setStep("mapping");
+   114	    try {
+   115	      const res = await suggestMapping(headers);
+   116	      const suggested: Record<string, string | null> = res.mapping ?? {};
+   117	      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+   118	      const newMapping: Record<string, string> = {};
+   119	      for (const field of TARGET_FIELDS) {
+   120	        newMapping[field.key] = SKIP_VALUE;
+   121	      }
+   122	      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+   123	        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+   124	          newMapping[targetField] = csvHeader;
+   125	        }
+   126	      }
+   127	      setMapping(newMapping);
+   128	    } catch {
+   129	      // Set all to skip on error
+   130	      const newMapping: Record<string, string> = {};
+   131	      for (const field of TARGET_FIELDS) {
+   132	        newMapping[field.key] = SKIP_VALUE;
+   133	      }
+   134	      setMapping(newMapping);
+   135	    } finally {
+   136	      setIsSuggesting(false);
+   137	    }
+   138	  }, []);
+   139	
+   140	  const computePreview = () => {
+   141	    let valid = 0;
+   142	    let skipped = 0;
+   143	    const skipReasons: string[] = [];
+   144	
+   145	    for (let i = 0; i < csvRows.length; i++) {
+   146	      const raw = csvRows[i];
+   147	      const row: Record<string, string> = {};
+   148	      for (const field of TARGET_FIELDS) {
+   149	        const csvCol = mapping[field.key];
+   150	        if (csvCol && csvCol !== SKIP_VALUE) {
+   151	          row[field.key] = raw[csvCol] ?? "";
+   152	        }
+   153	      }
+   154	
+   155	      if (!row.last_name && !row.company) {
+   156	        skipped++;
+   157	        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+   158	        continue;
+   159	      }
+   160	      valid++;
+   161	    }
+   162	
+   163	    return { valid, skipped, skipReasons };
+   164	  };
+   165	
+   166	  const handleImport = async () => {
+   167	    if (!selectedFile) return;
+   168	    setIsLoading(true);
+   169	
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+   171	    const apiMapping: Record<string, string> = {};
+   172	    for (const [targetField, csvCol] of Object.entries(mapping)) {
+   173	      if (csvCol && csvCol !== SKIP_VALUE) {
+   174	        apiMapping[csvCol] = targetField;
+   175	      }
+   176	    }
+   177	
+   178	    const formData = new FormData();
+   179	    formData.append("file", selectedFile);
+   180	    formData.append("mapping", JSON.stringify(apiMapping));
+   181	
+   182	    try {
+   183	      const { imported, skipped, errors } = await importTargets(formData);
+   184	      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+   185	      setOpen(false);
+   186	      resetState();
+   187	      router.refresh();
+   188	    } catch (error: any) {
+   189	      toast.error(error?.message || "Something went wrong");
+   190	    } finally {
+   191	      setIsLoading(false);
+   192	    }
+   193	  };
+   194	
+   195	  const preview = step === "preview" ? computePreview() : null;
+   196	
+   197	  return (
+   198	    <Dialog open={open} onOpenChange={handleOpenChange}>
+   199	      <DialogTrigger asChild>
+   200	        <Button variant="outline" size="sm">
+   201	          <Upload className="h-4 w-4 mr-2" />
+   202	          Import CSV
+   203	        </Button>
+   204	      </DialogTrigger>
+   205	      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+   206	        <DialogHeader>
+   207	          <DialogTitle>
+   208	            Import Targets from CSV
+   209	            <span className="ml-2 text-sm font-normal text-muted-foreground">
+   210	              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+   211	            </span>
+   212	          </DialogTitle>
+   213	          <DialogDescription>
+   214	            {step === "upload" && "Select a CSV file to import targets."}
+   215	            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+   216	            {step === "preview" && "Review the import summary before proceeding."}
+   217	          </DialogDescription>
+   218	        </DialogHeader>
+   219	
+   220	        {/* Step 1: Upload */}
+   221	        {step === "upload" && (
+   222	          <div className="space-y-4 py-2">
+   223	            <div className="border-2 border-dashed rounded-md p-8 text-center">
+   224	              <input
+   225	                ref={fileInputRef}
+   226	                type="file"
+   227	                accept=".csv"
+   228	                onChange={handleFileChange}
+   229	                className="hidden"
+   230	              />
+   231	              <Button
+   232	                variant="outline"
+   233	                onClick={() => fileInputRef.current?.click()}
+   234	              >
+   235	                Select CSV file
+   236	              </Button>
+   237	              {selectedFile && (
+   238	                <p className="mt-2 text-sm text-muted-foreground">
+   239	                  Selected: {selectedFile.name}
+   240	                </p>
+   241	              )}
+   242	            </div>
+   243	          </div>
+   244	        )}
+   245	
+   246	        {/* Step 2: Map Columns */}
+   247	        {step === "mapping" && (
+   248	          <div className="space-y-3 py-2">
+   249	            {isSuggesting ? (
+   250	              <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+   251	                <Loader2 className="h-5 w-5 animate-spin" />
+   252	                <span>AI is suggesting column mappings…</span>
+   253	              </div>
+   254	            ) : (
+   255	              <div className="space-y-1">
+   256	                <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+   257	                  <span>CRM Field</span>
+   258	                  <span>CSV Column</span>
+   259	                </div>
+   260	                {TARGET_FIELDS.map((field) => (
+
+exec
+/usr/bin/bash -lc 'rg -n "employees" -S .' in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+./tests/e2e/campaign-targets.spec.ts:73:    await page.getByLabel("Employees").fill("50-200");
+./scripts/validation/table-schema.ts:57:  'Employees',
+./scripts/validation/table-schema.ts:344:  Employees: {
+./scripts/validation/table-schema.ts:345:    tableName: 'Employees',
+./scripts/migration/transformers/index.ts:31:export { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:61:import { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:107:  Employees: transformEmployees,
+./scripts/migration/transformers/employees-transformer.ts:2: * Employees model transformer
+./scripts/migration/transformers/employees-transformer.ts:3: * Transforms MongoDB Employees documents to PostgreSQL format
+./scripts/migration/transformers/employees-transformer.ts:8:export function transformEmployees(mongoRecord: any, uuidMapper: any): any {
+./scripts/migration/transformers/crm-accounts-transformer.ts:28:    employees: nullableString(mongoRecord.employees),
+./scripts/migration/table-config.ts:33:      'Employees',
+./scripts/migration/batch-processor.ts:148:      'Employees': 'employees',
+./scripts/MIGRATION_README.md:76:- Employees
+./prisma/schema.prisma:29:  employees            String?
+./prisma/schema.prisma:688:model Employees {
+./prisma/schema.prisma:1236:  employees        String?
+./__tests__/reports/accounts.test.ts:60:        { employees: "5" },
+./__tests__/reports/accounts.test.ts:61:        { employees: "50" },
+./__tests__/reports/accounts.test.ts:62:        { employees: "500" },
+./__tests__/reports/accounts.test.ts:63:        { employees: null },
+./locales/uk.json:428:  "EmployeesPage": {
+./locales/en.json:448:  "EmployeesPage": {
+./locales/en.json:449:    "title": "Employees",
+./locales/en.json:450:    "description": "Manage your employees",
+./locales/en.json:451:    "moduleContent": "Employees module content"
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md:21:| 2 | should create a new target with all fields | Open new target sheet, fill all field groups: first_name, last_name, email, email_2, mobile_phone, office_phone, home_phone, company, position, company_website, company_website_2, social_x, social_linkedin, social_instagram, social_facebook, city, country, industry, employees, description, status. Submit form, verify success toast |
+./locales/de.json:428:  "EmployeesPage": {
+./locales/cz.json:431:  "EmployeesPage": {
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:11:`targetFieldMap` in `inngest/functions/enrich-target.ts` has 10 fields. The API PATCH route (`app/api/crm/targets/[id]/route.ts`) has 20 fields after adding company-search fields. The 8 new fields — `personal_email`, `company_email`, `company_phone`, `industry`, `employees`, `description`, `city`, `country` — are silently dropped in bulk Inngest enrichment jobs.
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./inngest/functions/enrich-target.ts:22:  employees:        "employees",
+./inngest/functions/enrich-target.ts:74:          industry: true, employees: true, city: true,
+./lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+./lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+./lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+./lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+./lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+./lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+./lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+./lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+./lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+./lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+./prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+./prisma/migrations/0_init/migration.sql:242:CREATE TABLE "Employees" (
+./prisma/migrations/0_init/migration.sql:251:    CONSTRAINT "Employees_pkey" PRIMARY KEY ("id")
+./lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+./lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+./lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1107:        { employees: "5" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1108:        { employees: "50" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1109:        { employees: "500" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1110:        { employees: null },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1211:    select: { employees: true },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1227:    const emp = parseInt(a.employees ?? "", 10);
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+./docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md:101:    await page.getByLabel("Employees").fill("50-200");
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md:18:- Campaign management (bulk assign to projects/employees)
+./actions/reports/accounts.ts:45:    select: { employees: true },
+./actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+./components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:72:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:115:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:181:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:229:        employees: true,
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:368:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:479:    "employees": "string or null",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:600:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:643:          industry: true, employees: true, city: true,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:65:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:97:('personal_email','company_email','company_phone','city','country','industry','employees','description','converted_at','converted_account_id','converted_contact_id');
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:362:employees?: string;
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:378:employees: row.employees || null,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:393:  "city", "country", "industry", "employees", "description",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:425:// employees
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:427:numemployees: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:428:teamsize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:479:employees:      z.string().optional(),
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:530:  <FormField control={form.control} name="employees" render={({ field }) => (
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:531:    <FormItem><FormLabel>Employees</FormLabel>
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:628:          employees: target.employees ?? undefined,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:765:- 11 new fields on crm_Targets: personal_email, company_email, company_phone, city, country, industry, employees, description + conversion tracking fields
+./actions/get-empoloyees.ts:3:export const getEmployees = async () => {
+./actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+./actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+./actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+./actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+./actions/crm/targets/update-target.ts:27:  employees?: string;
+./actions/crm/targets/suggest-mapping.ts:25:  "employees",
+./actions/crm/targets/suggest-mapping.ts:83:    headcount: "employees",
+./actions/crm/targets/suggest-mapping.ts:84:    numemployees: "employees",
+./actions/crm/targets/suggest-mapping.ts:85:    teamsize: "employees",
+./actions/crm/targets/suggest-mapping.ts:86:    companysize: "employees",
+./actions/crm/targets/convert-target.ts:39:          employees: target.employees ?? undefined,
+./app/[locale]/(routes)/page.tsx:25:import { getEmployees } from "@/actions/get-empoloyees";
+./app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+./app/[locale]/(routes)/page.tsx:115:          href="/employees"
+./app/[locale]/(routes)/page.tsx:116:          title="Employees"
+./app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+./app/[locale]/(routes)/components/app-sidebar.tsx:39: * - Task 2.6: Added remaining module navigation items (Employees, Reports, Documents, Databox)
+./app/[locale]/(routes)/employees/page.tsx:10:  const t = await getTranslations("EmployeesPage");
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:348:            <FormItem><FormLabel>Employees</FormLabel>
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:312:            <FormItem><FormLabel>Employees</FormLabel>
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+
+codex
+The rest of the codebase treats `employees` as a plain string field, not a structured object. I’m verifying that against the target forms and reports code so the report can distinguish code regression from bad data.
+exec
+/usr/bin/bash -lc "nl -ba actions/reports/accounts.ts | sed -n '45,75p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba tests/e2e/campaign-targets.spec.ts | sed -n '60,85p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx | sed -n '290,335p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+    45	    select: { employees: true },
+    46	  });
+    47	  const ranges = [
+    48	    { label: "1-10", min: 1, max: 10 },
+    49	    { label: "11-50", min: 11, max: 50 },
+    50	    { label: "51-200", min: 51, max: 200 },
+    51	    { label: "201-500", min: 201, max: 500 },
+    52	    { label: "500+", min: 501, max: Infinity },
+    53	    { label: "Unknown", min: -1, max: -1 },
+    54	  ];
+    55	  const counts: Record<string, number> = {};
+    56	  for (const r of ranges) counts[r.label] = 0;
+    57	  for (const a of accounts) {
+    58	    const emp = parseInt(a.employees ?? "", 10);
+    59	    if (isNaN(emp)) { counts["Unknown"]++; continue; }
+    60	    const range = ranges.find((r) => emp >= r.min && emp <= r.max);
+    61	    if (range) counts[range.label]++;
+    62	  }
+    63	  const result: ChartDataPoint[] = [];
+    64	  for (const key of Object.keys(counts)) {
+    65	    if (counts[key] > 0) result.push({ name: key, Number: counts[key] });
+    66	  }
+    67	  return result;
+    68	}
+
+ succeeded in 0ms:
+    60	    await page.getByLabel("X (Twitter)").fill("https://x.com/pw-target");
+    61	    await page.getByLabel("Instagram").fill("https://instagram.com/pw-target");
+    62	    await page.getByLabel("Facebook").fill("https://facebook.com/pw-target");
+    63	
+    64	    // --- Additional Contact ---
+    65	    await page.getByLabel("Personal Email", { exact: true }).fill("pw-personal@test.example.com");
+    66	    await page.getByLabel("Company Email", { exact: true }).fill("pw-company@test.example.com");
+    67	    await page.getByLabel("Company Phone", { exact: true }).fill("+1 800 000 0000");
+    68	
+    69	    // --- Location & Industry ---
+    70	    await page.getByLabel("City").fill("Prague");
+    71	    await page.getByLabel("Country").fill("Czech Republic");
+    72	    await page.getByLabel("Industry").fill("SaaS");
+    73	    await page.getByLabel("Employees").fill("50-200");
+    74	
+    75	    // --- Description ---
+    76	    await page.getByLabel("Description").fill("Playwright test target with all fields");
+    77	
+    78	    // Submit
+    79	    await page.getByRole("button", { name: "Create target" }).click();
+    80	
+    81	    await assertSuccessToast(page);
+    82	
+    83	    // Verify the sheet closed and table refreshed
+    84	    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    85	  });
+
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `nl -ba app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx | sed -n '290,335p''
+
+exec
+/usr/bin/bash -lc "nl -ba app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx | sed -n '340,385p'" in /home/user/nextcrm-app-research
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `nl -ba app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx | sed -n '340,385p''
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx' | sed -n '300,325p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba prisma/schema.prisma | sed -n '1228,1244p'" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx' | sed -n '344,370p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+   300	              <FormMessage />
+   301	            </FormItem>
+   302	          )} />
+   303	        </div>
+   304	        <div className="grid grid-cols-2 gap-4">
+   305	          <FormField control={form.control} name="industry" render={({ field }) => (
+   306	            <FormItem><FormLabel>Industry</FormLabel>
+   307	              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+   308	              <FormMessage />
+   309	            </FormItem>
+   310	          )} />
+   311	          <FormField control={form.control} name="employees" render={({ field }) => (
+   312	            <FormItem><FormLabel>Employees</FormLabel>
+   313	              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+   314	              <FormMessage />
+   315	            </FormItem>
+   316	          )} />
+   317	        </div>
+   318	        <FormField control={form.control} name="description" render={({ field }) => (
+   319	          <FormItem><FormLabel>Description</FormLabel>
+   320	            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+   321	            <FormMessage />
+   322	          </FormItem>
+   323	        )} />
+   324	        <FormField
+   325	          control={form.control}
+
+ succeeded in 0ms:
+   344	              <FormMessage />
+   345	            </FormItem>
+   346	          )} />
+   347	          <FormField control={form.control} name="employees" render={({ field }) => (
+   348	            <FormItem><FormLabel>Employees</FormLabel>
+   349	              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+   350	              <FormMessage />
+   351	            </FormItem>
+   352	          )} />
+   353	        </div>
+   354	        <FormField control={form.control} name="description" render={({ field }) => (
+   355	          <FormItem><FormLabel>Description</FormLabel>
+   356	            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+   357	            <FormMessage />
+   358	          </FormItem>
+   359	        )} />
+   360	        <FormField
+   361	          control={form.control}
+   362	          name="status"
+   363	          render={({ field }) => (
+   364	            <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+   365	              <div className="space-y-0.5">
+   366	                <FormLabel className="text-base">Is target active?</FormLabel>
+   367	              </div>
+   368	              <FormControl>
+   369	                <Switch
+   370	                  checked={field.value}
+
+ succeeded in 0ms:
+  1228	
+  1229	  // Extended contact fields
+  1230	  personal_email   String?
+  1231	  company_email    String?
+  1232	  company_phone    String?
+  1233	  city             String?
+  1234	  country          String?
+  1235	  industry         String?
+  1236	  employees        String?
+  1237	  description      String?
+  1238	
+  1239	  // Conversion tracking
+  1240	  converted_at         DateTime?
+  1241	  converted_account_id String?   @db.Uuid
+  1242	  converted_contact_id String?   @db.Uuid
+  1243	
+  1244	  deletedAt        DateTime?
+
+codex
+I have the immediate regression. One more pass is to check whether there’s an older “structured employees” format in the repo, because that affects which malformed payload is most likely in the incident CSV.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' scripts/migration/transformers/employees-transformer.ts" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,120p' actions/get-empoloyees.ts" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+/**
+ * Employees model transformer
+ * Transforms MongoDB Employees documents to PostgreSQL format
+ */
+
+import { nullableString } from '../utils';
+
+export function transformEmployees(mongoRecord: any, uuidMapper: any): any {
+  const newUuid = uuidMapper.generateAndMapUuid(mongoRecord._id);
+
+  return {
+    id: newUuid,
+    v: mongoRecord.__v || 0,
+    avatar: mongoRecord.avatar, // Required field
+    email: nullableString(mongoRecord.email),
+    name: mongoRecord.name, // Required field
+    salary: mongoRecord.salary || 0, // Required field
+    status: mongoRecord.status, // Required field
+  };
+}
+
+ succeeded in 0ms:
+import { prismadb } from "@/lib/prisma";
+
+export const getEmployees = async () => {
+  const data = await prismadb.employees.findMany({});
+  return data;
+};
+
+exec
+/usr/bin/bash -lc "rg -n 'min:|max:|\"min\"|\"max\"|employees.*label|Employee ranges|structured form' -S ." in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+./scripts/test-data/README.md:61:DATABASE_URL_MONGODB="mongodb://admin:password@localhost:27017/nextcrm_test?authSource=admin"
+./scripts/migration/transformers/users-transformer.ts:23:    is_account_admin: toBoolean(mongoRecord.is_account_admin),
+./scripts/migration/transformers/users-transformer.ts:24:    is_admin: isAdmin,
+./scripts/migration/backfill-roles.ts:21:    where: { is_admin: true, role: "member" },
+./CHANGELOG.md:131:* **admin:** add currencies management page with table, rates, and ECB toggle ([6011159](https://github.com/pdovhomilja/nextcrm-app/commit/60111591311e525f2d5857f73ce40cd9e7aca231))
+./prisma/seeds/seed.ts:128:      is_admin: true,
+./prisma/seeds/seed.ts:129:      is_account_admin: true,
+./prisma/seeds/seed.ts:136:      is_admin: true,
+./prisma/seeds/seed.ts:137:      is_account_admin: true,
+./pnpm-lock.yaml:16398:      lru.min: 1.1.4
+./pnpm-lock.yaml:16405:      lru.min: 1.1.4
+./components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+./components/modals/ImportTargetsModal.tsx:297:                  Employee ranges from legacy imports are expected in structured form.
+./lib/mcp/tools/projects.ts:150:        _max: { position: true },
+./lib/mcp/tools/projects.ts:271:        _max: { position: true },
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:194:| `is_admin: true` | `admin` |
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:195:| `is_account_admin: true`, `is_admin: false` | `member` |
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md:23:| `actions/crm/accounts/restore-account.ts` | Admin: un-soft-delete an account |
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md:24:| `actions/crm/contacts/restore-contact.ts` | Admin: un-soft-delete a contact |
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md:25:| `actions/crm/leads/restore-lead.ts` | Admin: un-soft-delete a lead |
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md:26:| `actions/crm/opportunities/restore-opportunity.ts` | Admin: un-soft-delete an opportunity |
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md:27:| `actions/crm/contracts/restore-contract/index.ts` | Admin: un-soft-delete a contract |
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2737:        _max: { position: true },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2858:        _max: { position: true },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:186:    where: { is_admin: true, role: "member" },
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:225:Check the Users table — `is_admin: true` users should have `role: "admin"`, all others `role: "member"`.
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1118:Also update admin query in pending page — replace `is_admin: true` with `role: "admin"` in the Prisma query that fetches admin contacts.
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1505:**Prisma queries** that filter by `is_admin: true`:
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1508:where: { is_admin: true }
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1514:Update prop types from `isAdmin: boolean` to `role: string` and check `role === "admin"`.
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1518:**Seed file** (`prisma/seeds/seed.ts`): Update seed data to include `role: "admin"` instead of `is_admin: true`.
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1215:    { label: "1-10", min: 1, max: 10 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1216:    { label: "11-50", min: 11, max: 50 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1217:    { label: "51-200", min: 51, max: 200 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1218:    { label: "201-500", min: 201, max: 500 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1219:    { label: "500+", min: 501, max: Infinity },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1220:    { label: "Unknown", min: -1, max: -1 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1778:        { is_admin: true, is_account_admin: false },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1779:        { is_admin: false, is_account_admin: true },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1780:        { is_admin: false, is_account_admin: false },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1781:        { is_admin: false, is_account_admin: false },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1859:    select: { is_admin: true, is_account_admin: true },
+./actions/reports/accounts.ts:48:    { label: "1-10", min: 1, max: 10 },
+./actions/reports/accounts.ts:49:    { label: "11-50", min: 11, max: 50 },
+./actions/reports/accounts.ts:50:    { label: "51-200", min: 51, max: 200 },
+./actions/reports/accounts.ts:51:    { label: "201-500", min: 201, max: 500 },
+./actions/reports/accounts.ts:52:    { label: "500+", min: 501, max: Infinity },
+./actions/reports/accounts.ts:53:    { label: "Unknown", min: -1, max: -1 },
+./actions/admin/users/delete-user.ts:24:        is_admin: true,
+./actions/admin/users/delete-user.ts:25:        is_account_admin: true,
+./actions/crm/targets/import-targets.ts:13:    min: number;
+./actions/crm/targets/import-targets.ts:14:    max: number;
+
+codex
+**Most Likely Root Cause**
+
+The import regression was introduced by the new `parseEmployeesValue()` path in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That function now assumes every imported `employees` cell is JSON with the exact shape `{ min, max }`, then immediately does `parsed.min.toString()` and `parsed.max.toString()`.
+
+The rest of the app does not use that shape. `employees` is stored as a nullable `String` in Prisma ([prisma/schema.prisma](/home/user/nextcrm-app-research/prisma/schema.prisma:1236)), the create/update target forms treat it as free text with placeholder `50-200` ([NewTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311), [UpdateTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)), and e2e coverage also enters `50-200` as a plain string ([campaign-targets.spec.ts](/home/user/nextcrm-app-research/tests/e2e/campaign-targets.spec.ts:73)).
+
+**Why This Produced This Exact Error**
+
+The stack trace is `Cannot read properties of undefined (reading 'toString')` at `parsed.min.toString()`, not a JSON parse error. That means the CSV cell was likely valid JSON, but not an object containing both `min` and `max`. Examples that would produce this exact failure are a JSON string like `"50-200"` or an object missing one of those keys. In other words, the importer accepted a value shape that `JSON.parse()` can read, but `parseEmployeesValue()` cannot safely dereference.
+
+**Contributing Factors**
+
+`parseEmployeesValue(row.employees)` is executed for every row before row validation and before any row can be skipped ([import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:41)). So one malformed `employees` value causes the entire import request to fail with HTTP 500 instead of skipping a row or preserving the original string.
+
+The preview flow in [components/modals/ImportTargetsModal.tsx](/home/user/nextcrm-app-research/components/modals/ImportTargetsModal.tsx:140) only checks for missing `last_name` or `company`; it never validates `employees`. That allowed the bad file to pass preview and fail only at server import time.
+
+**Conclusion**
+
+The most likely root cause is a bad assumption added in the latest change: the importer now requires `employees` CSV values to be structured JSON `{ min, max }`, while actual application behavior and likely CSV inputs use plain strings or other legacy JSON shapes. That mismatch is what triggered the 2026-04-12 00:18:46Z incident.
+tokens used
+21,081
+**Most Likely Root Cause**
+
+The import regression was introduced by the new `parseEmployeesValue()` path in [actions/crm/targets/import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:11). That function now assumes every imported `employees` cell is JSON with the exact shape `{ min, max }`, then immediately does `parsed.min.toString()` and `parsed.max.toString()`.
+
+The rest of the app does not use that shape. `employees` is stored as a nullable `String` in Prisma ([prisma/schema.prisma](/home/user/nextcrm-app-research/prisma/schema.prisma:1236)), the create/update target forms treat it as free text with placeholder `50-200` ([NewTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311), [UpdateTargetForm.tsx](/home/user/nextcrm-app-research/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)), and e2e coverage also enters `50-200` as a plain string ([campaign-targets.spec.ts](/home/user/nextcrm-app-research/tests/e2e/campaign-targets.spec.ts:73)).
+
+**Why This Produced This Exact Error**
+
+The stack trace is `Cannot read properties of undefined (reading 'toString')` at `parsed.min.toString()`, not a JSON parse error. That means the CSV cell was likely valid JSON, but not an object containing both `min` and `max`. Examples that would produce this exact failure are a JSON string like `"50-200"` or an object missing one of those keys. In other words, the importer accepted a value shape that `JSON.parse()` can read, but `parseEmployeesValue()` cannot safely dereference.
+
+**Contributing Factors**
+
+`parseEmployeesValue(row.employees)` is executed for every row before row validation and before any row can be skipped ([import-targets.ts](/home/user/nextcrm-app-research/actions/crm/targets/import-targets.ts:41)). So one malformed `employees` value causes the entire import request to fail with HTTP 500 instead of skipping a row or preserving the original string.
+
+The preview flow in [components/modals/ImportTargetsModal.tsx](/home/user/nextcrm-app-research/components/modals/ImportTargetsModal.tsx:140) only checks for missing `last_name` or `company`; it never validates `employees`. That allowed the bad file to pass preview and fail only at server import time.
+
+**Conclusion**
+
+The most likely root cause is a bad assumption added in the latest change: the importer now requires `employees` CSV values to be structured JSON `{ min, max }`, while actual application behavior and likely CSV inputs use plain strings or other legacy JSON shapes. That mismatch is what triggered the 2026-04-12 00:18:46Z incident.

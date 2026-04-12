@@ -1,0 +1,624 @@
+run_name: 2-client-hydration-kanban-A
+case_name: 2-client-hydration-kanban
+variant: A
+target_branch: research-2
+model: default
+started_utc: 2026-04-12T13:32:19Z
+elapsed_seconds: 27
+exit_code: 0
+context_file: /home/user/nextcrm-app-research/research/llm-rca/test-input/2-client-hydration-kanban/A/context.md
+
+===== RESPONSE =====
+Most likely root cause: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` intentionally renders different text on the server and client.
+
+Evidence:
+- The error shows SSR rendered `Login` and the client rendered `Sign in` inside `CardTitle`.
+- That exact branch exists at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+  - `typeof window === "undefined" ? "Login" : "Sign in"`
+- The same component has a second server/client text split at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37):
+  - `Or continue with email` vs `Or continue with Email`
+
+Why this is the root cause:
+- `LoginComponent` is a `"use client"` component, but it is still prerendered on the server for the initial HTML.
+- During hydration, React expects the client’s first render to match that server HTML exactly.
+- Because the component branches on `typeof window`, the server sends one string and the browser immediately renders a different one, producing the hydration mismatch.
+
+Conclusion:
+- This is not primarily a Next.js/router/card component issue.
+- The incident is caused by nondeterministic render output in `LoginComponent`, specifically the `typeof window` text branches. The `CardTitle` mismatch is the first visible failure; `dividerLabel` is an additional latent mismatch in the same component.
+===== CLI LOG =====
+OpenAI Codex v0.120.0 (research preview)
+--------
+workdir: /home/user/nextcrm-app-research
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: medium
+reasoning summaries: none
+session id: 019d81e4-aa39-7213-bd94-abd663f19355
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+ GET /en/sign-in 200 in 1538ms (next.js: 539ms, proxy.ts: 5ms, application-code: 994ms)
+[browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>
+      <RedirectBoundary>
+        <RedirectErrorBoundary router={{...}}>
+          <InnerLayoutRouter url="/en/sign-in" tree={[...]} params={{locale:"en"}} cacheNode={{rsc:{...}, ...}} ...>
+            <SegmentViewNode type="page" pagePath="[locale]/(...">
+              <SegmentTrieNode>
+              <SignInPage>
+                <div className="h-full">
+                  <div>
+                  <div>
+                    <LoginComponent>
+                      <Card className="shadow-lg ...">
+                        <div ref={undefined} className="rounded-lg...">
+                          <CardHeader className="space-y-1">
+                            <div ref={undefined} className="flex flex-...">
+                              <CardTitle className="text-2xl">
+                                <div ref={undefined} className="font-semibold tracking-tight text-2xl">
++                                 Sign in
+-                                 Login
+                              ...
+                          ...
+            ...
+          ...
+
+    at div (unknown)
+    at CardTitle (components/ui/card.tsx:39:3)
+    at LoginComponent (app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:9)
+    at SignInPage (app/[locale]/(auth)/sign-in/page.tsx:14:9)
+  37 |   ...props
+  38 | }: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+> 39 |   <div
+     |   ^
+  40 |     ref={ref}
+  41 |     className={cn(
+  42 |       "text-2xl font-semibold leading-none tracking-tight",
+
+codex
+I’m tracing the `sign-in` render path and the translation sources to isolate why SSR produces `Login` while the client hydrates to `Sign in`.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' app/[locale]/\\(auth\\)/sign-in/components/LoginComponent.tsx" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,120p' app/[locale]/\\(auth\\)/sign-in/page.tsx" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "sed -n '1,120p' components/ui/card.tsx" in /home/user/nextcrm-app-research
+exec
+/usr/bin/bash -lc "rg -n \"Login|Sign in|sign-in|login\" app components messages src --glob '"'!node_modules'"'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+ succeeded in 0ms:
+import * as React from "react"
+
+import { cn } from "@/lib/utils"
+
+const Card = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div
+    ref={ref}
+    className={cn(
+      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      className
+    )}
+    {...props}
+  />
+)
+Card.displayName = "Card"
+
+const CardHeader = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div
+    ref={ref}
+    className={cn("flex flex-col space-y-1.5 p-6", className)}
+    {...props}
+  />
+)
+CardHeader.displayName = "CardHeader"
+
+const CardTitle = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div
+    ref={ref}
+    className={cn(
+      "text-2xl font-semibold leading-none tracking-tight",
+      className
+    )}
+    {...props}
+  />
+)
+CardTitle.displayName = "CardTitle"
+
+const CardDescription = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div
+    ref={ref}
+    className={cn("text-sm text-muted-foreground", className)}
+    {...props}
+  />
+)
+CardDescription.displayName = "CardDescription"
+
+const CardContent = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div ref={ref} className={cn("p-6 pt-0", className)} {...props} />
+)
+CardContent.displayName = "CardContent"
+
+const CardFooter = ({
+  className,
+  ref,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) => (
+  <div
+    ref={ref}
+    className={cn("flex items-center p-6 pt-0", className)}
+    {...props}
+  />
+)
+CardFooter.displayName = "CardFooter"
+
+export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+
+ exited 2 in 0ms:
+rg: messages: No such file or directory (os error 2)
+rg: src: No such file or directory (os error 2)
+components/CommandComponent.tsx:67:        signOut().then(() => { window.location.href = "/sign-in"; });
+components/CommandComponent.tsx:139:            <CommandItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:64:        <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:42:  const loginWithGoogle = async () => {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:50:      toast.error("Something went wrong with Google sign-in.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:        type: "sign-in",
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:113:          onClick={loginWithGoogle}
+app/[locale]/(routes)/components/nav-user.tsx:138:            <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:39:      <DataTableColumnHeader column={column} title="Last login" />
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+app/[locale]/(auth)/pending/page.tsx:59:          <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+app/[locale]/(auth)/inactive/page.tsx:59:            <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(routes)/layout.tsx:56:    return redirect("/sign-in");
+app/[locale]/(routes)/projects/page.tsx:17:  if (!session) return redirect("/sign-in");
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:39:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:31:  if (!session) redirect("/sign-in");
+
+codex
+The mismatch is already visible in the component: this page is a client component, but it renders different literal strings on the server and client by branching on `typeof window`. I’m checking whether there are any additional SSR/client text branches in the same path that would compound the issue.
+exec
+/usr/bin/bash -lc "nl -ba app/[locale]/\\(auth\\)/sign-in/components/LoginComponent.tsx | sed -n '1,80p'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import React, { useState } from "react";
+     4	import { authClient } from "@/lib/auth-client";
+     5	
+     6	import { Icons } from "@/components/ui/icons";
+     7	import { Button } from "@/components/ui/button";
+     8	import {
+     9	  Card,
+    10	  CardContent,
+    11	  CardDescription,
+    12	  CardHeader,
+    13	  CardTitle,
+    14	} from "@/components/ui/card";
+    15	import { Input } from "@/components/ui/input";
+    16	import { Label } from "@/components/ui/label";
+    17	import { toast } from "sonner";
+    18	import { MailIcon } from "lucide-react";
+    19	import {
+    20	  InputOTP,
+    21	  InputOTPGroup,
+    22	  InputOTPSlot,
+    23	} from "@/components/ui/input-otp";
+    24	
+    25	type Step = "email" | "otp";
+    26	
+    27	function getSubmitLabel(step: Step) {
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+    46	        provider: "google",
+    47	        callbackURL: "/",
+    48	      });
+    49	    } catch (error) {
+    50	      toast.error("Something went wrong with Google sign-in.");
+    51	    } finally {
+    52	      setIsLoading(false);
+    53	    }
+    54	  };
+    55	
+    56	  const sendOtp = async () => {
+    57	    if (!email) {
+    58	      toast.error("Please enter your email address.");
+    59	      return;
+    60	    }
+    61	    setIsLoading(true);
+    62	    try {
+    63	      const { error } = await authClient.emailOtp.sendVerificationOtp({
+    64	        email,
+    65	        type: "sign-in",
+    66	      });
+    67	      if (error) {
+    68	        toast.error(error.message || "Failed to send verification code.");
+    69	        return;
+    70	      }
+    71	      setStep("otp");
+    72	      toast.success("Verification code sent to your email.");
+    73	    } catch (error) {
+    74	      toast.error("Failed to send verification code.");
+    75	    } finally {
+    76	      setIsLoading(false);
+    77	    }
+    78	  };
+    79	
+    80	  const verifyOtp = async () => {
+
+exec
+/usr/bin/bash -lc "rg -n \"typeof window|Math\\.random|Date\\.now|new Date\\(|toLocale|navigator|window "'!== '"'undefined'|window === 'undefined'\" app/[locale]/\\(auth\\)/sign-in components lib --glob '"'!node_modules'"'" in /home/user/nextcrm-app-research
+ succeeded in 0ms:
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:38:    typeof window === "undefined"
+lib/mcp/tools/reports.ts:54:      const now = new Date();
+lib/mcp/tools/reports.ts:55:      const thirtyDaysAgo = new Date();
+lib/mcp/tools/reports.ts:58:        dateFrom: args.dateFrom ? new Date(args.dateFrom) : thirtyDaysAgo,
+lib/mcp/tools/reports.ts:59:        dateTo: args.dateTo ? new Date(args.dateTo) : now,
+lib/mcp/tools/projects.ts:284:          ...(args.dueDateAt && { dueDateAt: new Date(args.dueDateAt) }),
+lib/mcp/tools/projects.ts:309:          ...(dueDateAt !== undefined && { dueDateAt: new Date(dueDateAt) }),
+lib/api-tokens.ts:21:      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+lib/api-tokens.ts:57:  if (token.expiresAt && token.expiresAt < new Date()) throw new Error("Invalid token");
+lib/api-tokens.ts:61:    prismadb.apiToken.update({ where: { id: token.id }, data: { lastUsedAt: new Date() } })
+lib/api-tokens.ts:76:    data: { revokedAt: new Date() },
+lib/mcp/tools/crm-products.ts:151:        data: { deletedAt: new Date(), deletedBy: userId, status: "ARCHIVED" as any },
+lib/__tests__/audit-log.test.ts:6:    const before = { name: "Acme", status: "Active", updatedAt: new Date() };
+lib/__tests__/audit-log.test.ts:7:    const after  = { name: "Acme Corp", status: "Active", updatedAt: new Date() };
+lib/__tests__/audit-log.test.ts:14:    const before = { name: "X", updatedAt: new Date("2020-01-01"), createdAt: new Date(), v: 0 };
+lib/__tests__/audit-log.test.ts:15:    const after  = { name: "X", updatedAt: new Date("2025-01-01"), createdAt: new Date(), v: 1 };
+lib/mcp/tools/crm-opportunities.ts:99:          ...(close_date !== undefined && { close_date: new Date(close_date) }),
+lib/mcp/tools/crm-opportunities.ts:146:          ...(close_date !== undefined && { close_date: new Date(close_date) }),
+components/ui/sidebar.tsx:665:  const widthRef = React.useRef(`${Math.floor(Math.random() * 40) + 50}%`)
+lib/mcp/helpers.ts:23:  return { deletedAt: new Date(), deletedBy: userId };
+lib/mcp/tools/crm-contracts.ts:92:          ...(startDate && { startDate: new Date(startDate) }),
+lib/mcp/tools/crm-contracts.ts:93:          ...(endDate && { endDate: new Date(endDate) }),
+lib/mcp/tools/crm-contracts.ts:137:          ...(startDate !== undefined && { startDate: new Date(startDate) }),
+lib/mcp/tools/crm-contracts.ts:138:          ...(endDate !== undefined && { endDate: new Date(endDate) }),
+lib/mcp/tools/crm-contracts.ts:156:        data: { deletedAt: new Date(), deletedBy: userId },
+lib/mcp/tools/crm-activities.ts:109:          date: new Date(date),
+lib/mcp/tools/crm-activities.ts:161:          ...(date !== undefined && { date: new Date(date) }),
+lib/mcp/tools/campaigns.ts:122:      return itemResponse({ id: args.id, deletedAt: new Date().toISOString() });
+lib/mcp/tools/campaigns.ts:139:      const now = new Date();
+lib/mcp/tools/campaigns.ts:263:      return itemResponse({ id: args.id, deletedAt: new Date().toISOString() });
+lib/enrichment/utils/source-context.ts:29:      Number(value).toLocaleString(), // 1000 -> 1,000
+lib/enrichment/utils/source-context.ts:122:      value.toLocaleString(), // 1000 -> 1,000
+lib/enrichment/utils/skip-list.ts:8:  if (skipListCache && Date.now() - skipListCache.loadedAt < SKIP_LIST_TTL_MS) {
+lib/enrichment/utils/skip-list.ts:26:    skipListCache = { data: skipDomains, loadedAt: Date.now() };
+components/ui/chart.tsx:245:                            {item.value.toLocaleString()}
+components/ui/calendar.tsx:40:          date.toLocaleString("default", { month: "short" }),
+components/ui/calendar.tsx:193:      data-day={day.date.toLocaleDateString()}
+lib/enrichment/services/openai.ts:288:            const currentYear = new Date().getFullYear();
+lib/enrichment/services/openai.ts:875:      const currentDate = new Date().toISOString().split('T')[0];
+lib/enrichment/services/openai.ts:884:If the question is about recent/current data (funding, metrics, etc.), include the current year (${new Date().getFullYear()}) in the search query to get the most up-to-date results.
+lib/enrichment/services/openai.ts:963:        content: `Current Date: ${new Date().toISOString().split('T')[0]}
+lib/enrichment/services/openai.ts:1043:      const currentDate = new Date().toISOString().split('T')[0];
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:113:    const year = new Date().getFullYear();
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:163:  const currentYear = new Date().getFullYear();
+components/reports/DateRangePicker.tsx:22:    currentFrom ? new Date(currentFrom) : undefined
+components/reports/DateRangePicker.tsx:25:    currentTo ? new Date(currentTo) : undefined
+lib/enrichment/agent-architecture/orchestrator.ts:882:    const year = new Date().getFullYear();
+lib/enrichment/agent-architecture/agents/company-profile-agent.ts:9:  yearFounded: z.number().min(1800).max(new Date().getFullYear()).describe('Year the company was founded'),
+lib/enrichment/agent-architecture/agents/general-agent.ts:249:      queries.push(`"${companyName}" news announcement ${new Date().getFullYear()}`);
+components/form/form-datepicker.tsx:49:    const defaultDate = defaultValue ? new Date(defaultValue) : undefined;
+components/form/form-datepicker.tsx:51:    const [date, setDate] = useState<Date>(defaultDate || new Date());
+components/crm/audit-log/Entry.tsx:60:            {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+components/crm/audit-log/AdminTable.tsx:75:                    {formatDistanceToNow(new Date(entry.createdAt), {
+components/crm/activities/ActivityForm.tsx:51:    activity ? new Date(activity.date).toISOString().slice(0, 16) : ""
+components/crm/activities/ActivityForm.tsx:92:      date: new Date(date),
+components/crm/activities/ActivityEntry.tsx:96:                  {formatDistanceToNow(new Date(activity.date), { addSuffix: true })}
+components/crm/activities/ActivityEntry.tsx:100:                {new Date(activity.date).toLocaleString()}
+
+codex
+Most likely root cause: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` intentionally renders different text on the server and client.
+
+Evidence:
+- The error shows SSR rendered `Login` and the client rendered `Sign in` inside `CardTitle`.
+- That exact branch exists at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+  - `typeof window === "undefined" ? "Login" : "Sign in"`
+- The same component has a second server/client text split at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37):
+  - `Or continue with email` vs `Or continue with Email`
+
+Why this is the root cause:
+- `LoginComponent` is a `"use client"` component, but it is still prerendered on the server for the initial HTML.
+- During hydration, React expects the client’s first render to match that server HTML exactly.
+- Because the component branches on `typeof window`, the server sends one string and the browser immediately renders a different one, producing the hydration mismatch.
+
+Conclusion:
+- This is not primarily a Next.js/router/card component issue.
+- The incident is caused by nondeterministic render output in `LoginComponent`, specifically the `typeof window` text branches. The `CardTitle` mismatch is the first visible failure; `dividerLabel` is an additional latent mismatch in the same component.
+tokens used
+15,312
+Most likely root cause: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` intentionally renders different text on the server and client.
+
+Evidence:
+- The error shows SSR rendered `Login` and the client rendered `Sign in` inside `CardTitle`.
+- That exact branch exists at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+  - `typeof window === "undefined" ? "Login" : "Sign in"`
+- The same component has a second server/client text split at [LoginComponent.tsx](/home/user/nextcrm-app-research/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37):
+  - `Or continue with email` vs `Or continue with Email`
+
+Why this is the root cause:
+- `LoginComponent` is a `"use client"` component, but it is still prerendered on the server for the initial HTML.
+- During hydration, React expects the client’s first render to match that server HTML exactly.
+- Because the component branches on `typeof window`, the server sends one string and the browser immediately renders a different one, producing the hydration mismatch.
+
+Conclusion:
+- This is not primarily a Next.js/router/card component issue.
+- The incident is caused by nondeterministic render output in `LoginComponent`, specifically the `typeof window` text branches. The `CardTitle` mismatch is the first visible failure; `dividerLabel` is an additional latent mismatch in the same component.
