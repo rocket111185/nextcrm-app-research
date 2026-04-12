@@ -1,0 +1,14 @@
+{
+  "error_message": "TypeError: Cannot read properties of undefined (reading 'toString')",
+  "stacktrace": [
+    "actions/crm/targets/import-targets.ts:17:24",
+    "actions/crm/targets/import-targets.ts:59:23",
+    "<anonymous>",
+    "actions/crm/targets/import-targets.ts:41:8"
+  ],
+  "incident_date": "2026-04-12T00:18:46.263Z",
+  "last_changed_files": [
+    "actions/crm/targets/import-targets.ts",
+    "components/modals/ImportTargetsModal.tsx"
+  ]
+}

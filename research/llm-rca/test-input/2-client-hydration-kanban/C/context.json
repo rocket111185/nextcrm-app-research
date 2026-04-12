@@ -1,0 +1,16 @@
+{
+  "error_message": "Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client.",
+  "stacktrace": [
+    "components/ui/card.tsx:39:3",
+    "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:9",
+    "app/[locale]/(auth)/sign-in/page.tsx:14:9"
+  ],
+  "incident_date": "2026-04-11T22:12:13.950Z",
+  "last_changed_files": [
+    "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx",
+    "app/[locale]/(auth)/sign-in/page.tsx",
+    "app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx",
+    "app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx"
+  ]
+}
+

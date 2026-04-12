@@ -1,0 +1,26 @@
+[
+  {
+    "error_message": "Nullish coalescing operator(??) requires parens when mixing with logical operators",
+    "stacktrace": [
+      "./app/[locale]/(routes)/components/Footer.tsx:21:12",
+    ],
+    "incident_date": "2026-04-11T23:46:55.311Z",
+    "last_changed_files": [
+      "app/[locale]/(routes)/components/Footer.tsx",
+      "app/[locale]/(routes)/components/footer-links.ts"
+    ]
+  },
+  {
+    "error_message": "Parsing ecmascript source code failed",
+    "stacktrace": [
+      "./app/[locale]/(routes)/components/Footer.tsx",
+      "./app/[locale]/(routes)/layout.tsx "
+    ],
+    "incident_date": "2026-04-11T23:46:55.311Z",
+    "last_changed_files": [
+      "app/[locale]/(routes)/components/Footer.tsx",
+      "app/[locale]/(routes)/components/footer-links.ts"
+    ]
+  },
+]
+
