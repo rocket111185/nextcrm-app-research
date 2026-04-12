@@ -103,7 +103,7 @@ For scoring fields, use the rubric file and keep grading blinded if possible.
 ## Case 1
 
 Case ID: `server-runtime-feedback-route`
-Branch: `research-server-runtime-feedback`
+Branch: `research-1`
 Commit: `3e3a3e1`
 
 ### Intent
@@ -118,7 +118,7 @@ This branch simulates a server-side runtime failure in the feedback submission p
 
 ### Reproduction
 
-1. `git switch research-server-runtime-feedback`
+1. `git switch research-1`
 2. Start the app with `pnpm dev`
 3. Sign in with a valid user account
 4. Open any page where the feedback popover is available in the header
@@ -159,31 +159,30 @@ This branch simulates a server-side runtime failure in the feedback submission p
 ## Case 2
 
 Case ID: `client-hydration-kanban`
-Branch: `research-client-hydration-kanban`
-Commit: `3553ef7`
+Branch: `research-2`
+Commit: `5bd2de5`
 
 ### Intent
 
-This branch simulates a client-side hydration mismatch on the board page.
+This branch simulates a client-side hydration mismatch on the public sign-in page.
 
 ### Changed files
 
-1. [`app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx`](/app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx)
-2. [`app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx`](/app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx)
+1. [`app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`](/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx)
+2. [`app/[locale]/(auth)/sign-in/page.tsx`](/app/[locale]/(auth)/sign-in/page.tsx)
 
 ### Reproduction
 
-1. `git switch research-client-hydration-kanban`
+1. `git switch research-2`
 2. Start the app with `pnpm dev`
-3. Sign in if the board area requires auth
-4. Open a project board page
-5. Wait for the board to render
+3. Open `/sign-in`
+4. Wait for the sign-in page to render
 6. Open the browser console immediately
 7. Refresh the page once to confirm the symptom is reproducible
 
 ### Expected symptom
 
-1. The board page produces a hydration warning or hydration failure in the browser console.
+1. The sign-in page produces a hydration warning or hydration failure in the browser console.
 2. The UI may still partially render, but the console evidence matters.
 
 ### Where to collect evidence
@@ -193,24 +192,24 @@ This branch simulates a client-side hydration mismatch on the board page.
 2. Browser page source or DOM:
    note the conflicting rendered text if visible
 3. Git diff:
-   capture the client component render change
+   capture the sign-in component render change
 
 ### Important notes
 
 1. This is not a server exception case.
 2. The primary evidence is in the browser console, not only the terminal.
-3. Record the exact page URL you used.
+3. Record the exact page URL you used, including locale if present.
 
 ### Suggested `symptom.txt`
 
-1. Opening a board page triggers a hydration warning in the browser.
+1. Opening the sign-in page triggers a hydration warning in the browser.
 2. The mismatch is reproducible on refresh.
-3. The problem originates in the client-rendered board UI.
+3. The problem originates in the client-rendered sign-in UI.
 
 ## Case 3
 
 Case ID: `env-runtime-minio-upload`
-Branch: `research-env-runtime-upload`
+Branch: `research-3`
 Commit: `0dc39fc`
 
 ### Intent
@@ -234,7 +233,7 @@ Examples:
 
 ### Reproduction
 
-1. `git switch research-env-runtime-upload`
+1. `git switch research-3`
 2. Ensure `NEXT_PUBLIC_MINIO_ENDPOINT` is invalid for this run
 3. Start the app with `pnpm dev`
 4. Open a screen that uses the MinIO uploader
@@ -271,7 +270,7 @@ Examples:
 ## Case 4
 
 Case ID: `build-failure-invalid-import-footer`
-Branch: `research-build-invalid-import`
+Branch: `research-4`
 Commit: `875c7a6`
 
 ### Intent
@@ -285,7 +284,7 @@ This branch simulates a build-time failure caused by an invalid import or export
 
 ### Reproduction
 
-1. `git switch research-build-invalid-import`
+1. `git switch research-4`
 2. Run `pnpm build`
 3. Wait for compilation to fail
 
@@ -314,8 +313,8 @@ This branch simulates a build-time failure caused by an invalid import or export
 ## Case 5
 
 Case ID: `data-shape-target-import`
-Branch: `research-data-shape-target-import`
-Commit: `2e9c25e`
+Branch: `research-5`
+Commit: `234a54c`
 
 ### Intent
 
@@ -331,18 +330,19 @@ This branch simulates a data-processing failure caused by a null or missing fiel
 Prepare a CSV with at least one row like this:
 
 ```csv
-last_name,first_name,email,company
-Smith,John,john@example.com,
+last_name,first_name,email,company,employees
+Smith,John,john@example.com,Acme,50
 ```
 
 The important condition is:
 
 1. `last_name` present
-2. `company` missing or empty
+2. `company` present or mapped normally
+3. `employees` contains a plain scalar such as `50`, `100`, or an empty value instead of a structured object shape
 
 ### Reproduction
 
-1. `git switch research-data-shape-target-import`
+1. `git switch research-5`
 2. Start the app with `pnpm dev`
 3. Open the target import modal
 4. Upload the crafted CSV
@@ -351,7 +351,7 @@ The important condition is:
 
 ### Expected symptom
 
-1. Import processing fails for rows that have `last_name` but missing `company`.
+1. Import processing fails for rows that have a non-structured `employees` value.
 2. The failure is caused by an unsafe assumption during normalization.
 3. The terminal should show the thrown exception.
 
@@ -369,13 +369,13 @@ The important condition is:
 ### Important notes
 
 1. This case depends on the input shape.
-2. If you use rows where `company` is present, the crash may not happen.
+2. The easiest trigger is a normal scalar `employees` cell such as `50`.
 3. Preserve the exact CSV content as evidence.
 
 ### Suggested `symptom.txt`
 
-1. Importing a CSV with `last_name` present and `company` empty causes the import flow to fail.
-2. The failure occurs during server-side data normalization.
+1. Importing a CSV with a plain `employees` value such as `50` causes the import flow to fail.
+2. The failure occurs during server-side data normalization of the employee range field.
 3. The error is input-shape dependent.
 
 ## After collecting evidence
