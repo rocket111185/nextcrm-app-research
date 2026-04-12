@@ -8,6 +8,15 @@ function normalizeCellValue(value?: string) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
 export async function importTargets(
   formData: FormData
 ): Promise<{ imported: number; skipped: number; errors: string[] }> {
@@ -44,9 +53,10 @@ export async function importTargets(
     const last_name = normalizeCellValue(row.last_name);
     const email = normalizeCellValue(row.email).toLowerCase();
     const mobile_phone = normalizeCellValue(row.mobile_phone);
-    const company = row.company?.trim();
+    const company = normalizeCellValue(row.company);
     const company_website = normalizeCellValue(row.company_website);
-    const companyDomain = company_website || company.trim().toLowerCase();
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
 
     if (!last_name && !company) {
       errors.push(`Row ${index + 2}: missing last_name or company`);
@@ -73,7 +83,7 @@ export async function importTargets(
       city: row.city || null,
       country: row.country || null,
       industry: row.industry || null,
-      employees: row.employees || null,
+      employees: employees || null,
       description: row.description || null,
       created_by: (session.user as any).id,
     });

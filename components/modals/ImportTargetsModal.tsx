@@ -293,6 +293,9 @@ const ImportTargetsModal = () => {
                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
                   </p>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Employee ranges from legacy imports are expected in structured form.
+                </p>
               </div>
             )}
           </div>
