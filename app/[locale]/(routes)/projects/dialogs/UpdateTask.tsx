@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { UserSearchCombobox } from "@/components/ui/user-search-combobox";
@@ -40,6 +41,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { updateTask } from "@/actions/projects/update-task";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.UpdateTask" });
 type Props = {
   boards: any;
   boardId?: string;
@@ -91,7 +94,7 @@ const UpdateTaskDialog = ({
   }
 
   //Actions
-  console.log("BoardId:", boardId);
+  logger.debug({ boardId }, "Rendering update task dialog");
 
   const onSubmit = async (data: UpdatedTaskForm) => {
     setIsLoading(true);

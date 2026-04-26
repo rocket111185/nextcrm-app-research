@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,8 @@ import sendEmail from "@/lib/sendmail";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.contacts.create-contact" });
 export const createContact = async (data: {
   assigned_to?: string;
   assigned_account?: string;
@@ -93,7 +96,7 @@ export const createContact = async (data: {
     revalidatePath("/[locale]/crm/contacts", "page");
     return { data: contact };
   } catch (error) {
-    console.log("[CREATE_CONTACT]", error);
+    logger.error({ err: error }, "CREATE_CONTACT");
     return { error: "Failed to create contact" };
   }
 };

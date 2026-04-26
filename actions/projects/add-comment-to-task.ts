@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { junctionTableHelpers } from "@/lib/junction-helpers";
@@ -6,6 +7,8 @@ import { revalidatePath } from "next/cache";
 import NewTaskCommentEmail from "@/emails/NewTaskComment";
 import resendHelper from "@/lib/resend";
 
+
+const logger = createLogger({ module: "actions.projects.add-comment-to-task" });
 export const addCommentToTask = async (data: {
   taskId: string;
   comment: string;
@@ -103,7 +106,7 @@ export const addCommentToTask = async (data: {
           }
         }
       } catch (emailError) {
-        console.log("[ADD_COMMENT_EMAIL]", emailError);
+        logger.error({ err: emailError }, "ADD_COMMENT_EMAIL");
       }
 
       revalidatePath("/[locale]/(routes)/projects", "page");
@@ -123,7 +126,7 @@ export const addCommentToTask = async (data: {
       return { data: newComment };
     }
   } catch (error) {
-    console.log("[ADD_COMMENT_TO_TASK]", error);
+    logger.error({ err: error }, "ADD_COMMENT_TO_TASK");
     return { error: "Failed to add comment" };
   }
 };

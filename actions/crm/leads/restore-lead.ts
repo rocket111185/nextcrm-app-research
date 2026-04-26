@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.leads.restore-lead" });
 export const restoreLead = async (leadId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -26,7 +29,7 @@ export const restoreLead = async (leadId: string) => {
     revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
     return { success: true };
   } catch (error) {
-    console.log("[RESTORE_LEAD]", error);
+    logger.error({ err: error }, "RESTORE_LEAD");
     return { error: "Failed to restore lead" };
   }
 };

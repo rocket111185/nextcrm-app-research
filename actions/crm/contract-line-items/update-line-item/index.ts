@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { UpdateContractLineItem } from "./schema";
@@ -8,6 +9,8 @@ import { writeAuditLog } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 import { calculateLineTotal, sumLineTotals } from "@/lib/line-items";
 
+
+const logger = createLogger({ module: "actions.crm.contract-line-items.update-line-item" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -70,7 +73,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     revalidatePath("/[locale]/(routes)/crm/contracts/[contractId]", "page");
     return { data: { id: lineItem.id } };
   } catch (error) {
-    console.log("[UPDATE_CONTRACT_LINE_ITEM]", error);
+    logger.error({ err: error }, "UPDATE_CONTRACT_LINE_ITEM");
     return { error: "Failed to update line item" };
   }
 };

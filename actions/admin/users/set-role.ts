@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.admin.users.set-role" });
 const VALID_ROLES = ["admin", "member", "viewer"] as const;
 type Role = (typeof VALID_ROLES)[number];
 
@@ -36,7 +39,7 @@ export const setUserRole = async (userId: string, role: Role) => {
     revalidatePath("/[locale]/(routes)/admin", "page");
     return { data: user };
   } catch (error) {
-    console.log("[SET_USER_ROLE]", error);
+    logger.error({ err: error }, "SET_USER_ROLE");
     return { error: "Failed to update user role" };
   }
 };

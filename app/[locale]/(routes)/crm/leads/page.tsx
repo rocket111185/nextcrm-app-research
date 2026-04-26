@@ -7,14 +7,17 @@ import LeadsView from "../components/LeadsView";
 
 import { getAllCrmData } from "@/actions/crm/get-crm-data";
 import { getLeads } from "@/actions/crm/get-leads";
+import { createLogger } from "@/lib/logger";
 import { getTranslations } from "next-intl/server";
+
+const logger = createLogger({ module: "app.routes.crm.leads.page" });
 
 const LeadsPage = async () => {
   const t = await getTranslations("CrmPage");
   const crmData = await getAllCrmData();
   const leads = await getLeads();
 
-  console.log(leads[0], "leads");
+  logger.debug({ leadCount: leads.length }, "Loaded leads page");
   return (
     <Container
       title={t("leads.pageTitle")}

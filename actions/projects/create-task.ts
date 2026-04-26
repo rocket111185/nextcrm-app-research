@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import NewTaskFromProject from "@/emails/NewTaskFromProject";
 import resendHelper from "@/lib/resend";
 
+
+const logger = createLogger({ module: "actions.projects.create-task" });
 export const createTask = async (data: {
   title: string;
   user: string;
@@ -99,14 +102,14 @@ export const createTask = async (data: {
           }
         }
       } catch (emailError) {
-        console.log("[CREATE_TASK_EMAIL]", emailError);
+        logger.error({ err: emailError }, "CREATE_TASK_EMAIL");
       }
     }
 
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[CREATE_TASK]", error);
+    logger.error({ err: error }, "CREATE_TASK");
     return { error: "Failed to create task" };
   }
 };

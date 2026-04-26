@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.contacts.update-contact" });
 export const updateContact = async (data: {
   id: string;
   assigned_to?: string;
@@ -76,7 +79,7 @@ export const updateContact = async (data: {
     revalidatePath("/[locale]/(routes)/crm/contacts", "page");
     return { data: contact };
   } catch (error) {
-    console.log("[UPDATE_CONTACT]", error);
+    logger.error({ err: error }, "UPDATE_CONTACT");
     return { error: "Failed to update contact" };
   }
 };

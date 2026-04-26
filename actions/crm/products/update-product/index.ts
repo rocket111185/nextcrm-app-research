@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { UpdateProduct } from "./schema";
@@ -7,6 +8,8 @@ import { createSafeAction } from "@/lib/create-safe-action";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.products.update-product" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -68,7 +71,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     revalidatePath(`/[locale]/(routes)/crm/products/${id}`, "page");
     return { data: { id: product.id, name: product.name } };
   } catch (error) {
-    console.log("[UPDATE_PRODUCT]", error);
+    logger.error({ err: error }, "UPDATE_PRODUCT");
     return { error: "Failed to update product" };
   }
 };

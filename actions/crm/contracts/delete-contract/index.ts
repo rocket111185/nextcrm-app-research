@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 
 import { prismadb } from "@/lib/prisma";
@@ -8,6 +9,8 @@ import { InputType, ReturnType } from "./types";
 import { createSafeAction } from "@/lib/create-safe-action";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.contracts.delete-contract" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
 
@@ -50,7 +53,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
       userId: user.id,
     });
   } catch (error) {
-    console.log(error);
+    logger.error({ err: error, contractId: id }, "Delete contract failed");
     return {
       error:
         "Something went wrong while trying to run DeleteContract action. Please try again.",

@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import {
@@ -6,6 +7,8 @@ import {
   toVectorLiteral,
 } from "@/inngest/lib/embedding-utils";
 
+
+const logger = createLogger({ module: "actions.fulltext.unified-search" });
 export interface SearchResult {
   id: string;
   title: string;
@@ -57,7 +60,7 @@ export async function unifiedSearch(
     const embedding = await generateEmbedding(query.trim());
     queryVec = toVectorLiteral(embedding);
   } catch (e) {
-    console.warn("[UNIFIED_SEARCH] embedding failed, falling back to keyword-only", e);
+    logger.warn({ err: e }, "[UNIFIED_SEARCH] embedding failed, falling back to keyword-only");
   }
 
   const noSemantic = Promise.resolve([] as { id: string; similarity: number }[]);
@@ -378,7 +381,7 @@ export async function unifiedSearch(
 
     return { accounts, contacts, leads, opportunities, projects, tasks, users, documents };
   } catch (error) {
-    console.error("[UNIFIED_SEARCH]", error);
+    logger.error({ err: error }, "UNIFIED_SEARCH");
     return { error: "Search failed" };
   }
 }

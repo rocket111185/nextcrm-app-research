@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import moment from "moment";
 import { useRouter } from "next/navigation";
 import React, { ChangeEvent, useEffect, useRef, useState } from "react";
@@ -74,6 +75,8 @@ import { createTaskInBoard } from "@/actions/projects/create-task-in-board";
 import { deleteTask } from "@/actions/projects/delete-task";
 import { updateKanbanPosition } from "@/actions/projects/update-kanban-position";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].components.Kanban" });
 let timer: any;
 const timeout = 1000;
 
@@ -433,7 +436,7 @@ const Kanban = (props: any) => {
       });
       toast.success("New task saved in database");
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
       toast.error("Something went wrong, during creating task");
     } finally {
       setIsLoading(false);
@@ -473,7 +476,7 @@ const Kanban = (props: any) => {
         toast.success("Task deleted successfully");
       }
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
       toast.error("Something went wrong, during deleting task");
     } finally {
       setIsLoading(false);

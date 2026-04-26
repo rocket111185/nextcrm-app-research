@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,8 @@ import { inngest } from "@/inngest/client";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 import { getSnapshotRate, getDefaultCurrency } from "@/lib/currency";
 
+
+const logger = createLogger({ module: "actions.crm.opportunities.update-opportunity" });
 export const updateOpportunity = async (data: {
   id: string;
   account?: string;
@@ -85,7 +88,7 @@ export const updateOpportunity = async (data: {
     revalidatePath("/[locale]/(routes)/crm/opportunities", "page");
     return { data: serialize(opportunity) };
   } catch (error) {
-    console.log("[UPDATE_OPPORTUNITY]", error);
+    logger.error({ err: error }, "UPDATE_OPPORTUNITY");
     return { error: "Failed to update opportunity" };
   }
 };

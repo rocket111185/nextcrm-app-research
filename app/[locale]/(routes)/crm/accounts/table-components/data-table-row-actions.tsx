@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { Row } from "@tanstack/react-table";
 
@@ -31,6 +32,8 @@ import { deleteAccount } from "@/actions/crm/accounts/delete-account";
 import { watchAccount } from "@/actions/crm/accounts/watch-account";
 import { unwatchAccount } from "@/actions/crm/accounts/unwatch-account";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).crm.accounts.table-components.data-table-row-actions" });
 interface DataTableRowActionsProps<TData> {
   row: Row<TData>;
 }
@@ -75,7 +78,7 @@ export function DataTableRowActions<TData>({
       }
     } catch (error) {
       toast.error("Error");
-      console.log(error);
+      logger.error({ err: error, accountId: account.id }, "Account row action failed");
     } finally {
       setLoading(false);
     }
@@ -92,7 +95,7 @@ export function DataTableRowActions<TData>({
       }
     } catch (error) {
       toast.error("Error");
-      console.log(error);
+      logger.error({ err: error, accountId: account.id }, "Account row action failed");
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { Row } from "@tanstack/react-table";
 
@@ -37,6 +38,8 @@ import UpdateProjectForm from "../forms/UpdateProject";
 import { deleteProject } from "@/actions/projects/delete-project";
 import { watchProject, unwatchProject } from "@/actions/projects/watch-project";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.table-components.data-table-row-actions" });
 interface DataTableRowActionsProps<TData> {
   row: Row<TData>;
 }
@@ -64,7 +67,7 @@ export function DataTableRowActions<TData>({
       }
     } catch (error) {
       toast.error(t("dataTable.deleteError"));
-      console.log(error);
+      logger.error({ err: error, projectId: project.id }, "Project row action failed");
     } finally {
       router.refresh();
       setOpen(false);
@@ -83,7 +86,7 @@ export function DataTableRowActions<TData>({
       }
     } catch (error) {
       toast.error(t("dataTable.watchError"));
-      console.log(error);
+      logger.error({ err: error, projectId: project.id }, "Project row action failed");
     } finally {
       setLoading(false);
     }
@@ -100,7 +103,7 @@ export function DataTableRowActions<TData>({
       }
     } catch (error) {
       toast.error(t("dataTable.watchError"));
-      console.log(error);
+      logger.error({ err: error, projectId: project.id }, "Project row action failed");
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.activities.update-activity" });
 const ENTITY_SLUGS: Record<string, string> = {
   account: "accounts",
   contact: "contacts",
@@ -96,7 +99,7 @@ export const updateActivity = async (data: {
 
     return { data: fullActivity };
   } catch (error) {
-    console.error("updateActivity error:", error);
+    logger.error({ err: error }, "updateActivity error");
     return { error: "Failed to update activity" };
   }
 };

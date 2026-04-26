@@ -1,6 +1,9 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 
+
+const logger = createLogger({ module: "actions.crm.activities.get-activities-by-entity" });
 const PAGE_SIZE = 25;
 
 export type ActivityWithLinks = {
@@ -71,7 +74,7 @@ export const getActivitiesByEntity = async (
 
     return { data: activities as ActivityWithLinks[], nextCursor };
   } catch (error) {
-    console.error("getActivitiesByEntity error:", error);
+    logger.error({ err: error }, "getActivitiesByEntity error");
     return { data: [], nextCursor: null };
   }
 };

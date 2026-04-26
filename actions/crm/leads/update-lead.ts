@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,8 @@ import sendEmail from "@/lib/sendmail";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.leads.update-lead" });
 export const updateLead = async (data: {
   id: string;
   firstName?: string | null;
@@ -104,7 +107,7 @@ export const updateLead = async (data: {
     revalidatePath("/[locale]/(routes)/crm/leads", "page");
     return { data: lead };
   } catch (error) {
-    console.log("[UPDATE_LEAD]", error);
+    logger.error({ err: error }, "UPDATE_LEAD");
     return { error: "Failed to update lead" };
   }
 };

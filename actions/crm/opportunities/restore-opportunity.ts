@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.opportunities.restore-opportunity" });
 export const restoreOpportunity = async (opportunityId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -26,7 +29,7 @@ export const restoreOpportunity = async (opportunityId: string) => {
     revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
     return { success: true };
   } catch (error) {
-    console.log("[RESTORE_OPPORTUNITY]", error);
+    logger.error({ err: error }, "RESTORE_OPPORTUNITY");
     return { error: "Failed to restore opportunity" };
   }
 };

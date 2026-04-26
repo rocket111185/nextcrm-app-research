@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.opportunities.delete-opportunity" });
 export const deleteOpportunity = async (opportunityId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -25,7 +28,7 @@ export const deleteOpportunity = async (opportunityId: string) => {
     revalidatePath("/[locale]/(routes)/crm/opportunities", "page");
     return { success: true };
   } catch (error) {
-    console.log("[DELETE_OPPORTUNITY]", error);
+    logger.error({ err: error }, "DELETE_OPPORTUNITY");
     return { error: "Failed to delete opportunity" };
   }
 };

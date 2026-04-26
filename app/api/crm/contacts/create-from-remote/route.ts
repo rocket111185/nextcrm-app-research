@@ -1,5 +1,8 @@
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "app.api.crm.contacts.create-from-remote" });
 
 export async function POST(req: Request) {
   const apiKey = req.headers.get("NEXTCRM_TOKEN");
@@ -17,8 +20,6 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json();
-
-  console.log(body, "body");
 
   const { name, surname, email, phone, company, message, tag } = body;
   if (!name || !surname || !email || !phone || !company || !message || !tag) {
@@ -39,9 +40,10 @@ export async function POST(req: Request) {
         notes: ["Account: " + company, "Message: " + message],
       },
     });
+    logger.info({ tag }, "Remote contact created");
     return NextResponse.json({ message: "Contact created" });
   } catch (error) {
-    console.log("Error creating contact:", error);
+    logger.error({ err: error, tag }, "Remote contact creation failed");
     return NextResponse.json(
       { error: "Error creating contact" },
       { status: 500 }

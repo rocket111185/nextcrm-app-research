@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import InviteUserEmail from "@/emails/InviteUser";
@@ -6,6 +7,8 @@ import resendHelper from "@/lib/resend";
 import { revalidatePath } from "next/cache";
 import { Language } from "@prisma/client";
 
+
+const logger = createLogger({ module: "actions.admin.users.invite-user" });
 export const inviteUser = async (data: {
   name: string;
   email: string;
@@ -75,7 +78,7 @@ export const inviteUser = async (data: {
     revalidatePath("/[locale]/(routes)/admin", "page");
     return { data: user };
   } catch (error) {
-    console.log("[INVITE_USER]", error);
+    logger.error({ err: error }, "INVITE_USER");
     return { error: "Failed to invite user" };
   }
 };

@@ -1,7 +1,10 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 import type { SimilarityResult } from "./get-similar-accounts";
 
+
+const logger = createLogger({ module: "actions.crm.similarity.get-similar-leads" });
 export async function getSimilarLeads(
   recordId: string,
   limit = 5
@@ -37,7 +40,7 @@ export async function getSimilarLeads(
       })),
     };
   } catch (error) {
-    console.error("[GET_SIMILAR_LEADS]", error);
+    logger.error({ err: error }, "GET_SIMILAR_LEADS");
     return { status: "error", message: "Failed to fetch similar leads" };
   }
 }

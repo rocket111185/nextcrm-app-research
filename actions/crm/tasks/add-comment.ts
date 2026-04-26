@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.tasks.add-comment" });
 export const addComment = async (data: {
   taskId: string;
   comment: string;
@@ -34,7 +37,7 @@ export const addComment = async (data: {
     revalidatePath("/[locale]/(routes)/crm", "page");
     return { data: newComment };
   } catch (error) {
-    console.log("[ADD_COMMENT]", error);
+    logger.error({ err: error }, "ADD_COMMENT");
     return { error: "Failed to add comment" };
   }
 };

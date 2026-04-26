@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -52,6 +53,8 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).crm.dashboard._components.CRMKanban" });
 interface CRMKanbanProps {
   salesStages: crm_Opportunities_Sales_Stages[];
   opportunities: crm_Opportunities[];
@@ -341,7 +344,7 @@ const CRMKanban = ({
         toast.success("Opportunity stage changed");
       }
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
       toast.error("Something went wrong");
       columnsRef.current = initColumns(data, salesStages);
       setColumns(initColumns(data, salesStages));
@@ -353,7 +356,7 @@ const CRMKanban = ({
       await setInactiveOpportunity(opportunityId);
       toast.success("Opportunity has been set to inactive");
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
     } finally {
       router.refresh();
     }

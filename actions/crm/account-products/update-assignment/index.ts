@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { UpdateAssignment } from "./schema";
@@ -7,6 +8,8 @@ import { createSafeAction } from "@/lib/create-safe-action";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.account-products.update-assignment" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -51,7 +54,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     revalidatePath("/[locale]/(routes)/crm/products/[productId]", "page");
     return { data: { id: assignment.id } };
   } catch (error) {
-    console.log("[UPDATE_ASSIGNMENT]", error);
+    logger.error({ err: error }, "UPDATE_ASSIGNMENT");
     return { error: "Failed to update assignment" };
   }
 };

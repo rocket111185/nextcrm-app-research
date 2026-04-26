@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.contracts.restore-contract" });
 export const restoreContract = async (contractId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -26,7 +29,7 @@ export const restoreContract = async (contractId: string) => {
     revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
     return { success: true };
   } catch (error) {
-    console.log("[RESTORE_CONTRACT]", error);
+    logger.error({ err: error }, "RESTORE_CONTRACT");
     return { error: "Failed to restore contract" };
   }
 };

@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.contacts.unlink-opportunity" });
 export const unlinkOpportunity = async (data: {
   contactId: string;
   opportunityId: string;
@@ -27,7 +30,7 @@ export const unlinkOpportunity = async (data: {
     revalidatePath("/[locale]/(routes)/crm/contacts", "page");
     return { success: true };
   } catch (error) {
-    console.log("[UNLINK_OPPORTUNITY]", error);
+    logger.error({ err: error }, "UNLINK_OPPORTUNITY");
     return { error: "Failed to unlink opportunity" };
   }
 };

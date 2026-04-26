@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 import { sumLineTotals } from "@/lib/line-items";
 
+
+const logger = createLogger({ module: "actions.crm.opportunity-line-items.remove-line-item" });
 export const removeOpportunityLineItem = async (id: string) => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -41,7 +44,7 @@ export const removeOpportunityLineItem = async (id: string) => {
     revalidatePath("/[locale]/(routes)/crm/opportunities/[opportunityId]", "page");
     return { data: { id } };
   } catch (error) {
-    console.log("[REMOVE_OPPORTUNITY_LINE_ITEM]", error);
+    logger.error({ err: error }, "REMOVE_OPPORTUNITY_LINE_ITEM");
     return { error: "Failed to remove line item" };
   }
 };

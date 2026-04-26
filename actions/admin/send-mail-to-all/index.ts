@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 
 import { render } from "@react-email/render";
@@ -12,6 +13,8 @@ import { createSafeAction } from "@/lib/create-safe-action";
 import MessageToAllUsers from "@/emails/admin/MessageToAllUser";
 import sendEmail from "@/lib/sendmail";
 
+
+const logger = createLogger({ module: "actions.admin.send-mail-to-all" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
 
@@ -94,7 +97,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
       });
     }
   } catch (error) {
-    console.log(error);
+    logger.error({ err: error }, "Send mail to all users failed");
     return {
       error: "Failed to send mail to all users.",
     };

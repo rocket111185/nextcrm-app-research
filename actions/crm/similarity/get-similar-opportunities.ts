@@ -1,7 +1,10 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 import type { SimilarityResult } from "./get-similar-accounts";
 
+
+const logger = createLogger({ module: "actions.crm.similarity.get-similar-opportunities" });
 export async function getSimilarOpportunities(
   recordId: string,
   limit = 5
@@ -38,7 +41,7 @@ export async function getSimilarOpportunities(
       })),
     };
   } catch (error) {
-    console.error("[GET_SIMILAR_OPPORTUNITIES]", error);
+    logger.error({ err: error }, "GET_SIMILAR_OPPORTUNITIES");
     return { status: "error", message: "Failed to fetch similar opportunities" };
   }
 }

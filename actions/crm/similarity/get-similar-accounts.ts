@@ -1,6 +1,9 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 
+
+const logger = createLogger({ module: "actions.crm.similarity.get-similar-accounts" });
 export type SimilarRecord = {
   id: string;
   name: string;
@@ -49,7 +52,7 @@ export async function getSimilarAccounts(
       })),
     };
   } catch (error) {
-    console.error("[GET_SIMILAR_ACCOUNTS]", error);
+    logger.error({ err: error }, "GET_SIMILAR_ACCOUNTS");
     return { status: "error", message: "Failed to fetch similar accounts" };
   }
 }

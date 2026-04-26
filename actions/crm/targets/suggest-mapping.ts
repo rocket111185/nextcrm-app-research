@@ -1,7 +1,10 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { openAiHelper } from "@/lib/openai";
 
+
+const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
 const TARGET_FIELDS = [
   "last_name",
   "first_name",
@@ -131,7 +134,7 @@ export const suggestMapping = async (headers: string[]) => {
         return { mapping };
       }
     } catch (err) {
-      console.error("OpenAI mapping failed, falling back to fuzzy match", err);
+      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
     }
   }
 

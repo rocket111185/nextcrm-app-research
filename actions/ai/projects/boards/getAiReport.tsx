@@ -1,5 +1,6 @@
 "use server";
 
+import { createLogger } from "@/lib/logger";
 import axios from "axios";
 
 import { prismadb } from "@/lib/prisma";
@@ -7,6 +8,8 @@ import resendHelper from "@/lib/resend";
 
 import AiProjectReportEmail from "@/emails/AiProjectReport";
 
+
+const logger = createLogger({ module: "actions.ai.projects.boards.getAiReport" });
 export async function getAiReport(session: any, boardId: string) {
   /*
   Resend.com function init - this is a helper function that will be used to send emails
@@ -77,7 +80,7 @@ export async function getAiReport(session: any, boardId: string) {
 
   //skip if api response is error
   if (getAiResponse.error) {
-    console.log("Error from OpenAI API");
+    logger.error("Error from OpenAI API");
   } else {
     try {
       const data = await resend.emails.send({
@@ -94,7 +97,7 @@ export async function getAiReport(session: any, boardId: string) {
       });
       //console.log(data, "Email sent");
     } catch (error) {
-      console.log(error, "Error from get-user-ai-tasks");
+      logger.error({ err: error }, "Error from get-user-ai-tasks");
     }
   }
 

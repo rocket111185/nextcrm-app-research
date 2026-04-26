@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { useState } from "react";
 import { Row } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,8 @@ import AlertModal from "@/components/modals/alert-modal";
 import { taskSchema } from "../data/schema";
 import { deleteTask } from "@/actions/projects/delete-task";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.components.data-table-row-actions" });
 interface DataTableRowActionsProps<TData> {
   row: Row<TData>;
 }
@@ -47,7 +50,7 @@ export function DataTableRowActions<TData>({
         toast.success("Task deleted successfully");
       }
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
       toast.error("Something went wrong, during deleting task");
       setIsLoading(false);
       setOpen(false);

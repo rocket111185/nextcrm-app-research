@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import UpdatedTaskFromProject from "@/emails/UpdatedTaskFromProject";
 import resendHelper from "@/lib/resend";
 
+
+const logger = createLogger({ module: "actions.projects.update-task" });
 export const updateTask = async (data: {
   taskId: string;
   title: string;
@@ -89,14 +92,14 @@ export const updateTask = async (data: {
           }
         }
       } catch (emailError) {
-        console.log("[UPDATE_TASK_EMAIL]", emailError);
+        logger.error({ err: emailError }, "UPDATE_TASK_EMAIL");
       }
     }
 
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[UPDATE_TASK]", error);
+    logger.error({ err: error }, "UPDATE_TASK");
     return { error: "Failed to update task" };
   }
 };

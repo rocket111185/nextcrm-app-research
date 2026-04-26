@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.targets.convert-target" });
 export async function convertTarget(
   targetId: string
 ): Promise<{ accountId: string; contactId: string } | { error: string }> {
@@ -80,7 +83,7 @@ export async function convertTarget(
 
     return { accountId: account.id, contactId: contact.id };
   } catch (error) {
-    console.error("[convertTarget] Error:", error);
+    logger.error({ err: error }, "[convertTarget] Error");
     return { error: "Failed to convert target" };
   }
 }

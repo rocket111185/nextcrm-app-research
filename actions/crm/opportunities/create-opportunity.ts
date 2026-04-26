@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -7,6 +8,8 @@ import { inngest } from "@/inngest/client";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getSnapshotRate, getDefaultCurrency } from "@/lib/currency";
 
+
+const logger = createLogger({ module: "actions.crm.opportunities.create-opportunity" });
 export const createOpportunity = async (data: {
   account?: string;
   assigned_to?: string;
@@ -102,7 +105,7 @@ export const createOpportunity = async (data: {
     revalidatePath("/[locale]/(routes)/crm/opportunities", "page");
     return { data: opportunity };
   } catch (error) {
-    console.log("[CREATE_OPPORTUNITY]", error);
+    logger.error({ err: error }, "CREATE_OPPORTUNITY");
     return { error: "Failed to create opportunity" };
   }
 };

@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import * as z from "zod";
 import axios from "axios";
 import { useState } from "react";
@@ -21,6 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Icons } from "@/components/ui/icons";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
 const formSchema = z.object({
   feedback: z.string().min(1, {
     message: "Feedback must be at least 1 character.",
@@ -43,7 +46,7 @@ const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
     try {
       await axios.post("/api/feedback", data);
     } catch (error) {
-      console.error(error);
+      logger.error({ err: error }, "Feedback submission failed");
       toast.error("Something went wrong. Please try again later.");
     } finally {
       toast.success("Thank you for your feedback.");

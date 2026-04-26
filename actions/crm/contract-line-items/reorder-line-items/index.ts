@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.contract-line-items.reorder-line-items" });
 export const reorderContractLineItems = async (
   items: { id: string; sort_order: number }[]
 ) => {
@@ -24,7 +27,7 @@ export const reorderContractLineItems = async (
     revalidatePath("/[locale]/(routes)/crm/contracts/[contractId]", "page");
     return { data: { success: true } };
   } catch (error) {
-    console.log("[REORDER_CONTRACT_LINE_ITEMS]", error);
+    logger.error({ err: error }, "REORDER_CONTRACT_LINE_ITEMS");
     return { error: "Failed to reorder line items" };
   }
 };

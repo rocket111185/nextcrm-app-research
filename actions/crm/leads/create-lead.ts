@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,8 @@ import sendEmail from "@/lib/sendmail";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.leads.create-lead" });
 export const createLead = async (data: {
   first_name?: string;
   last_name: string;
@@ -98,7 +101,7 @@ export const createLead = async (data: {
     revalidatePath("/[locale]/(routes)/crm/leads", "page");
     return { data: lead };
   } catch (error) {
-    console.log("[CREATE_LEAD]", error);
+    logger.error({ err: error }, "CREATE_LEAD");
     return { error: "Failed to create lead" };
   }
 };

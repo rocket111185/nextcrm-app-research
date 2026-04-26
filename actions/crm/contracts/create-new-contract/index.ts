@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 
 import { prismadb } from "@/lib/prisma";
@@ -9,6 +10,8 @@ import { createSafeAction } from "@/lib/create-safe-action";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getSnapshotRate, getDefaultCurrency } from "@/lib/currency";
 
+
+const logger = createLogger({ module: "actions.crm.contracts.create-new-contract" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
 
@@ -81,7 +84,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
       userId: user.id,
     });
   } catch (error) {
-    console.log(error);
+    logger.error({ err: error }, "Create contract failed");
     return {
       error:
         "Something went wrong while trying to run CreateNewContract action. Please try again.",

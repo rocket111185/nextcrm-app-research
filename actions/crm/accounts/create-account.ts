@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.accounts.create-account" });
 export const createAccount = async (data: {
   name: string;
   office_phone?: string;
@@ -57,7 +60,7 @@ export const createAccount = async (data: {
     revalidatePath("/[locale]/(routes)/crm/accounts", "page");
     return { data: account };
   } catch (error) {
-    console.log("[CREATE_ACCOUNT]", error);
+    logger.error({ err: error }, "CREATE_ACCOUNT");
     return { error: "Failed to create account" };
   }
 };

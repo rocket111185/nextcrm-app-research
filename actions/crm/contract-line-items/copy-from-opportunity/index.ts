@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 import { sumLineTotals } from "@/lib/line-items";
 
+
+const logger = createLogger({ module: "actions.crm.contract-line-items.copy-from-opportunity" });
 export const copyLineItemsFromOpportunity = async (
   contractId: string,
   opportunityId: string
@@ -88,7 +91,7 @@ export const copyLineItemsFromOpportunity = async (
     revalidatePath("/[locale]/(routes)/crm/contracts/[contractId]", "page");
     return { data: { copied: sourceItems.length } };
   } catch (error) {
-    console.log("[COPY_LINE_ITEMS_FROM_OPPORTUNITY]", error);
+    logger.error({ err: error }, "COPY_LINE_ITEMS_FROM_OPPORTUNITY");
     return { error: "Failed to copy line items" };
   }
 };

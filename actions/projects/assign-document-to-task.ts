@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.projects.assign-document-to-task" });
 export const assignDocumentToTask = async (data: {
   documentId: string;
   taskId: string;
@@ -36,7 +39,7 @@ export const assignDocumentToTask = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[ASSIGN_DOCUMENT_TO_TASK]", error);
+    logger.error({ err: error }, "ASSIGN_DOCUMENT_TO_TASK");
     return { error: "Failed to assign document to task" };
   }
 };
@@ -76,7 +79,7 @@ export const disconnectDocumentFromTask = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { data: updatedTask };
   } catch (error) {
-    console.log("[DISCONNECT_DOCUMENT_FROM_TASK]", error);
+    logger.error({ err: error }, "DISCONNECT_DOCUMENT_FROM_TASK");
     return { error: "Failed to disconnect document from task" };
   }
 };

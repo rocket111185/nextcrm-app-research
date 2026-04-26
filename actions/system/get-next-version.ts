@@ -1,4 +1,7 @@
+import { createLogger } from "@/lib/logger";
 import fs from "fs";
+
+const logger = createLogger({ module: "actions.system.get-next-version" });
 export default async function getNextVersion() {
   try {
     // Read the package.json file synchronously
@@ -11,10 +14,10 @@ export default async function getNextVersion() {
       //console.log("Actual Next.js version:", version);
       return version;
     } catch (error) {
-      console.error("Error parsing package.json:", error);
+      logger.error({ err: error }, "Error parsing package.json");
       return "0";
     }
   } catch (error) {
-    console.error("Error reading package.json:", error);
+    logger.error({ err: error }, "Error reading package.json");
   }
 }

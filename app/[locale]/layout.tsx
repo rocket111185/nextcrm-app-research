@@ -9,6 +9,7 @@ import { getTranslations, getMessages } from "next-intl/server";
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { ClientErrorListener } from "@/app/client-error-listener";
 import { ThemeProvider } from "@/app/providers/ThemeProvider";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -63,6 +64,7 @@ export default async function RootLayout(props: Props) {
       <body className={inter.className + " min-h-screen"}>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <ClientErrorListener />
             {children}
           </ThemeProvider>
         </NextIntlClientProvider>

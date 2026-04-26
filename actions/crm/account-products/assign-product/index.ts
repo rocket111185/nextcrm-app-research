@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { AssignProduct } from "./schema";
@@ -8,6 +9,8 @@ import { writeAuditLog } from "@/lib/audit-log";
 import { getSnapshotRate, getDefaultCurrency } from "@/lib/currency";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.account-products.assign-product" });
 const handler = async (data: InputType): Promise<ReturnType> => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -65,7 +68,7 @@ const handler = async (data: InputType): Promise<ReturnType> => {
     revalidatePath("/[locale]/(routes)/crm/products/[productId]", "page");
     return { data: { id: assignment.id } };
   } catch (error) {
-    console.log("[ASSIGN_PRODUCT]", error);
+    logger.error({ err: error }, "ASSIGN_PRODUCT");
     return { error: "Failed to assign product to account" };
   }
 };

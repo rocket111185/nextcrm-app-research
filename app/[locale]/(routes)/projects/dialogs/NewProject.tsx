@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { createProject } from "@/actions/projects/create-project";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.NewProject" });
 const NewProjectDialog = () => {
   const [open, setOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -70,7 +73,7 @@ const NewProjectDialog = () => {
   //Actions
 
   const onSubmit = async (data: NewAccountFormValues) => {
-    console.log(data);
+    logger.debug({ title: data.title }, "Submitting project creation");
     setIsLoading(true);
     try {
       const result = await createProject(data);

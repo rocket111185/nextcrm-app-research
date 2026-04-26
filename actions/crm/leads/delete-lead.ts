@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.leads.delete-lead" });
 export const deleteLead = async (leadId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -25,7 +28,7 @@ export const deleteLead = async (leadId: string) => {
     revalidatePath("/[locale]/(routes)/crm/leads", "page");
     return { success: true };
   } catch (error) {
-    console.log("[DELETE_LEAD]", error);
+    logger.error({ err: error }, "DELETE_LEAD");
     return { error: "Failed to delete lead" };
   }
 };

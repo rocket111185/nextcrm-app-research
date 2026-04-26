@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { DotsHorizontalIcon } from "@radix-ui/react-icons";
 import { Row } from "@tanstack/react-table";
 
@@ -28,6 +29,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { assignDocumentToTask } from "@/actions/projects/assign-document-to-task";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.viewtask.[taskId].components.data-table-row-actions" });
 interface DataTableRowActionsProps<TData> {
   row: Row<TData>;
 }
@@ -58,7 +61,7 @@ export function DataTableRowActions<TData>({
         toast.success("Document was assigned to task");
       }
     } catch (error) {
-      console.error(error);
+      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
       toast.success("Something went wrong, while assigning document to task");
     } finally {
       router.refresh();

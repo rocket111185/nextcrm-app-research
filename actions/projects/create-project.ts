@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.projects.create-project" });
 export const createProject = async (data: {
   title: string;
   description: string;
@@ -43,7 +46,7 @@ export const createProject = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { data: newBoard };
   } catch (error) {
-    console.log("[CREATE_PROJECT]", error);
+    logger.error({ err: error }, "CREATE_PROJECT");
     return { error: "Failed to create project" };
   }
 };

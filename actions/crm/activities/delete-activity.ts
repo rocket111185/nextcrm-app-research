@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.activities.delete-activity" });
 const ENTITY_SLUGS: Record<string, string> = {
   account: "accounts",
   contact: "contacts",
@@ -36,7 +39,7 @@ export const deleteActivity = async (activityId: string) => {
 
     return { success: true };
   } catch (error) {
-    console.error("deleteActivity error:", error);
+    logger.error({ err: error }, "deleteActivity error");
     return { error: "Failed to delete activity" };
   }
 };

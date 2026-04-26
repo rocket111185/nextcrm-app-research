@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.projects.update-kanban-position" });
 export const updateKanbanPosition = async (data: {
   resourceList: { id: string }[];
   destinationList: { id: string }[];
@@ -52,7 +55,7 @@ export const updateKanbanPosition = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[UPDATE_KANBAN_POSITION]", error);
+    logger.error({ err: error }, "UPDATE_KANBAN_POSITION");
     return { error: "Failed to update task positions" };
   }
 };

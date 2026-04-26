@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { inngest } from "@/inngest/client";
 import { writeAuditLog, diffObjects } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.accounts.update-account" });
 export const updateAccount = async (data: {
   id: string;
   name?: string;
@@ -62,7 +65,7 @@ export const updateAccount = async (data: {
     revalidatePath("/[locale]/(routes)/crm/accounts", "page");
     return { data: account };
   } catch (error) {
-    console.log("[UPDATE_ACCOUNT]", error);
+    logger.error({ err: error }, "UPDATE_ACCOUNT");
     return { error: "Failed to update account" };
   }
 };

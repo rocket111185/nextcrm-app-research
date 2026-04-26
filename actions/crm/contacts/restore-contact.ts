@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { writeAuditLog } from "@/lib/audit-log";
 
+
+const logger = createLogger({ module: "actions.crm.contacts.restore-contact" });
 export const restoreContact = async (contactId: string) => {
   const session = await getSession();
   if (!session) return { error: "Unauthorized" };
@@ -26,7 +29,7 @@ export const restoreContact = async (contactId: string) => {
     revalidatePath("/[locale]/(routes)/admin/audit-log", "page");
     return { success: true };
   } catch (error) {
-    console.log("[RESTORE_CONTACT]", error);
+    logger.error({ err: error }, "RESTORE_CONTACT");
     return { error: "Failed to restore contact" };
   }
 };

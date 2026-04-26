@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, nextSaturday } from "date-fns";
@@ -45,6 +46,7 @@ import type { Mail } from "@/app/[locale]/(routes)/emails/data";
 import { getEmail, deleteEmail } from "@/actions/emails/messages";
 import { ComposeModal } from "@/app/[locale]/(routes)/emails/components/ComposeModal";
 
+const logger = createClientLogger({ module: "app.[locale].(routes).emails.components.mail-display" });
 interface MailDisplayProps {
   mail: Mail | null;
   activeAccountId: string | null;
@@ -57,14 +59,25 @@ export function MailDisplay({ mail, activeAccountId }: MailDisplayProps) {
   const [fullEmail, setFullEmail] = useState<Awaited<ReturnType<typeof getEmail>> | null>(null);
 
   useEffect(() => {
-    if (!mail?.id) {
-      setFullEmail(null);
-      return;
-    }
     let cancelled = false;
-    getEmail(mail.id)
-      .then((data) => { if (!cancelled) setFullEmail(data); })
-      .catch(() => { if (!cancelled) setFullEmail(null); });
+
+    async function loadEmail() {
+      await Promise.resolve();
+
+      if (!mail?.id) {
+        if (!cancelled) setFullEmail(null);
+        return;
+      }
+
+      try {
+        const data = await getEmail(mail.id);
+        if (!cancelled) setFullEmail(data);
+      } catch {
+        if (!cancelled) setFullEmail(null);
+      }
+    }
+
+    void loadEmail();
     return () => { cancelled = true; };
   }, [mail?.id]);
 
@@ -81,7 +94,7 @@ export function MailDisplay({ mail, activeAccountId }: MailDisplayProps) {
       await deleteEmail(mail.id);
       router.refresh();
     } catch (e) {
-      console.error("Failed to delete email", e);
+      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
     }
   }
 

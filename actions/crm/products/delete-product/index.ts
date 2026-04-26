@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.products.delete-product" });
 export const deleteProduct = async (id: string) => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -30,7 +33,7 @@ export const deleteProduct = async (id: string) => {
     revalidatePath("/[locale]/(routes)/crm/products", "page");
     return { data: { id } };
   } catch (error) {
-    console.log("[DELETE_PRODUCT]", error);
+    logger.error({ err: error }, "DELETE_PRODUCT");
     return { error: "Failed to delete product" };
   }
 };

@@ -1,5 +1,8 @@
+import { createLogger } from "@/lib/logger";
 import axios, { AxiosResponse } from "axios";
 
+
+const logger = createLogger({ module: "actions.github.get-repo-stars" });
 export default async function getGithubRepoStars(): Promise<number> {
   try {
     const response: AxiosResponse<any> = await axios.get(
@@ -17,7 +20,7 @@ export default async function getGithubRepoStars(): Promise<number> {
     //console.log(stars.stargazers_count);
     return stars.stargazers_count;
   } catch (error) {
-    console.error("Error fetching commits:", error);
+    logger.error({ err: error }, "Error fetching commits");
     return 0;
   }
 }

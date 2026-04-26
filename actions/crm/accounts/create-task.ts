@@ -1,4 +1,5 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -6,6 +7,8 @@ import resendHelper from "@/lib/resend";
 import NewTaskFromCRMEmail from "@/emails/NewTaskFromCRM";
 import NewTaskFromCRMToWatchersEmail from "@/emails/NewTaskFromCRMToWatchers";
 
+
+const logger = createLogger({ module: "actions.crm.accounts.create-task" });
 export const createTask = async (data: {
   title: string;
   user: string;
@@ -73,7 +76,7 @@ export const createTask = async (data: {
           }),
         });
       } catch (error) {
-        console.log(error);
+        logger.error({ err: error, taskId: task.id, userId: user }, "Task assignee notification failed");
       }
     }
 
@@ -109,13 +112,13 @@ export const createTask = async (data: {
         });
       }
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, accountId: account, taskId: task.id }, "Task watcher notification failed");
     }
 
     revalidatePath("/[locale]/(routes)/crm/accounts", "page");
     return { data: task };
   } catch (error) {
-    console.log("[CREATE_TASK]", error);
+    logger.error({ err: error }, "CREATE_TASK");
     return { error: "Failed to create task" };
   }
 };

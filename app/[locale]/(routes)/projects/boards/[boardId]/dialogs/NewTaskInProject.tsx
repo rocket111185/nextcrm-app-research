@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -47,6 +48,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { createTaskInBoard } from "@/actions/projects/create-task-in-board";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].dialogs.NewTaskInProject" });
 type Props = {
   boardId: string;
   sections: any;
@@ -79,7 +82,7 @@ const NewTaskInProjectDialog = ({ boardId, sections }: Props) => {
   //Actions
 
   const onSubmit = async (data: NewAccountFormValues) => {
-    console.log(data);
+    logger.debug({ section: data.section, title: data.title }, "Submitting task in project");
     setIsLoading(true);
     try {
       const result = await createTaskInBoard({

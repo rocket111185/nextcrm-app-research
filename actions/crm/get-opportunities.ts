@@ -1,5 +1,8 @@
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 
+
+const logger = createLogger({ module: "actions.crm.get-opportunities" });
 export const getOpportunities = async () => {
   const data = await prismadb.crm_Opportunities.findMany({
     where: { deletedAt: null },
@@ -92,7 +95,7 @@ export const getOpportunitiesByStage = async () => {
     },
   });
 
-  console.log(opportunities, "opportunities");
+  logger.debug({ opportunityCount: opportunities.length }, "Loaded opportunities by stage");
   if (!opportunities) {
     return {};
   }

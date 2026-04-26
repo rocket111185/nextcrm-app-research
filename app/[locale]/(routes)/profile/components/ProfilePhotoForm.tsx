@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import Image from "next/image";
 import { Users } from "@prisma/client";
 import { useEffect, useState } from "react";
@@ -13,6 +14,8 @@ import { useAvatarContext } from "@/context/avatar-context";
 import { updateProfilePhoto } from "@/actions/user/update-profile-photo";
 import { useTranslations } from "next-intl";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).profile.components.ProfilePhotoForm" });
 interface ProfileFormProps {
   data: Users;
 }
@@ -47,7 +50,7 @@ export function ProfilePhotoForm({ data }: ProfileFormProps) {
       toast.success(t("photoUpdatedDescription"), { duration: 5000 });
       router.refresh();
     } catch (e) {
-      console.log(e);
+      logger.error({ err: e }, "Profile photo update failed");
       toast.error(t("photoErrorDescription"), { duration: 5000 });
     } finally {
       setSaving(false);

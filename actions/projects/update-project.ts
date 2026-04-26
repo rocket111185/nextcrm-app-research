@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.projects.update-project" });
 export const updateProject = async (data: {
   id: string;
   title: string;
@@ -31,7 +34,7 @@ export const updateProject = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[UPDATE_PROJECT]", error);
+    logger.error({ err: error }, "UPDATE_PROJECT");
     return { error: "Failed to update project" };
   }
 };

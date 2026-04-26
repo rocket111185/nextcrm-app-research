@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.activities.create-activity" });
 const ENTITY_SLUGS: Record<string, string> = {
   account: "accounts",
   contact: "contacts",
@@ -71,7 +74,7 @@ export const createActivity = async (data: {
 
     return { data: fullActivity };
   } catch (error) {
-    console.error("createActivity error:", error);
+    logger.error({ err: error }, "createActivity error");
     return { error: "Failed to create activity" };
   }
 };

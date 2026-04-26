@@ -1,10 +1,13 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import NewTaskFromProject from "@/emails/NewTaskFromProject";
 import resendHelper from "@/lib/resend";
 
+
+const logger = createLogger({ module: "actions.projects.create-task-in-board" });
 export const createTaskInBoard = async (data: {
   boardId: string;
   section: string;
@@ -51,7 +54,7 @@ export const createTaskInBoard = async (data: {
       revalidatePath("/[locale]/(routes)/projects", "page");
       return { success: true };
     } catch (error) {
-      console.log("[CREATE_TASK_IN_BOARD_QUICK]", error);
+      logger.error({ err: error }, "CREATE_TASK_IN_BOARD_QUICK");
       return { error: "Failed to create task" };
     }
   }
@@ -127,14 +130,14 @@ export const createTaskInBoard = async (data: {
           }
         }
       } catch (emailError) {
-        console.log("[CREATE_TASK_IN_BOARD_EMAIL]", emailError);
+        logger.error({ err: emailError }, "CREATE_TASK_IN_BOARD_EMAIL");
       }
     }
 
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { success: true };
   } catch (error) {
-    console.log("[CREATE_TASK_IN_BOARD]", error);
+    logger.error({ err: error }, "CREATE_TASK_IN_BOARD");
     return { error: "Failed to create task" };
   }
 };

@@ -1,17 +1,20 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 
+
+const logger = createLogger({ module: "actions.crm.opportunity.dashboard.set-inactive" });
 export async function setInactiveOpportunity(id: string) {
   const session = await getSession();
   if (!session) {
     return { error: "Unauthenticated" };
   }
 
-  console.log(id, "id");
+  logger.debug({ opportunityId: id }, "Setting opportunity inactive");
 
   if (!id) {
-    console.log("Opportunity id is required");
+    logger.warn("Opportunity id is required");
   }
   try {
     const opportunity = await prismadb.crm_Opportunities.findUnique({
@@ -41,10 +44,13 @@ export async function setInactiveOpportunity(id: string) {
       },
     });
 
-    console.log(result, "result");
+    logger.debug(
+      { opportunityId: result.id, status: result.status },
+      "Set inactive update completed"
+    );
 
-    console.log("Opportunity has been set to inactive");
+    logger.info("Opportunity has been set to inactive");
   } catch (error) {
-    console.error(error);
+    logger.error({ err: error, opportunityId: id }, "Set opportunity inactive failed");
   }
 }

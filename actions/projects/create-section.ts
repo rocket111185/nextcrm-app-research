@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.projects.create-section" });
 export const createSection = async (data: {
   boardId: string;
   title: string;
@@ -31,7 +34,7 @@ export const createSection = async (data: {
     revalidatePath("/[locale]/(routes)/projects", "page");
     return { data: newSection };
   } catch (error) {
-    console.log("[CREATE_SECTION]", error);
+    logger.error({ err: error }, "CREATE_SECTION");
     return { error: "Failed to create section" };
   }
 };

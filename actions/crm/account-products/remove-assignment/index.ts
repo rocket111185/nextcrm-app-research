@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit-log";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.crm.account-products.remove-assignment" });
 export const removeAssignment = async (id: string) => {
   const session = await getSession();
   if (!session?.user?.id) {
@@ -26,7 +29,7 @@ export const removeAssignment = async (id: string) => {
     revalidatePath("/[locale]/(routes)/crm/products/[productId]", "page");
     return { data: { id: assignment.id } };
   } catch (error) {
-    console.log("[REMOVE_ASSIGNMENT]", error);
+    logger.error({ err: error }, "REMOVE_ASSIGNMENT");
     return { error: "Failed to cancel assignment" };
   }
 };

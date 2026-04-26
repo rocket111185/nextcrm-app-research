@@ -1,8 +1,11 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+
+const logger = createLogger({ module: "actions.user.update-profile" });
 export const updateProfile = async (data: {
   userId: string;
   name: string;
@@ -29,7 +32,7 @@ export const updateProfile = async (data: {
     revalidatePath("/[locale]/(routes)/profile", "page");
     return { data: user };
   } catch (error) {
-    console.log("[UPDATE_PROFILE]", error);
+    logger.error({ err: error }, "UPDATE_PROFILE");
     return { error: "Failed to update profile" };
   }
 };

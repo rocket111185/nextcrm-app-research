@@ -1,9 +1,12 @@
 "use server";
+import { createLogger } from "@/lib/logger";
 import { getSession } from "@/lib/auth-server";
 import { prismadb } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { Language } from "@prisma/client";
 
+
+const logger = createLogger({ module: "actions.user.set-language" });
 export const setLanguage = async (data: {
   userId: string;
   language: string;
@@ -29,7 +32,7 @@ export const setLanguage = async (data: {
     revalidatePath("/[locale]/(routes)/profile", "page");
     return { language };
   } catch (error) {
-    console.log("[SET_LANGUAGE]", error);
+    logger.error({ err: error }, "SET_LANGUAGE");
     return { error: "Failed to set language" };
   }
 };

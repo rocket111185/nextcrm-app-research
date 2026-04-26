@@ -1,5 +1,6 @@
 "use client";
 
+import { createClientLogger } from "@/app/client-logger";
 import { useSearchParams, useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EntityResultSection } from "@/components/fulltext-search/entity-result-section";
@@ -8,6 +9,8 @@ import {
   type UnifiedSearchResults,
 } from "@/actions/fulltext/unified-search";
 
+
+const logger = createClientLogger({ module: "app.[locale].(routes).fulltext-search.components.SearchResult" });
 const ENTITY_LABELS: Record<keyof UnifiedSearchResults, string> = {
   accounts: "Accounts",
   contacts: "Contacts",
@@ -40,21 +43,34 @@ export default function SearchResult() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!query || query.trim().length < 2) {
-      setResults(null);
-      return;
-    }
-    setIsLoading(true);
-    unifiedSearch(query.trim(), locale)
-      .then((res) => {
+    let cancelled = false;
+
+    async function runSearch() {
+      await Promise.resolve();
+
+      if (!query || query.trim().length < 2) {
+        if (!cancelled) setResults(null);
+        return;
+      }
+
+      if (!cancelled) setIsLoading(true);
+
+      try {
+        const res = await unifiedSearch(query.trim(), locale);
         if ("error" in res) {
-          console.error("[UNIFIED_SEARCH]", res.error);
+          logger.error({ error: res.error, query, locale }, "Unified search returned error");
           return;
         }
-        setResults(res);
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setIsLoading(false));
+        if (!cancelled) setResults(res);
+      } catch (err) {
+        logger.error({ err, query, locale }, "Unified search failed");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    void runSearch();
+    return () => { cancelled = true; };
   }, [query, locale]);
 
   if (!query)
