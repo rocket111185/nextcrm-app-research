@@ -291,6 +291,10 @@ Available soon at: http://docs.nextcrm.io
 
 1. http://localhost:3000
 
+### Observability
+
+Local OpenTelemetry, Pino, Loki, and Grafana setup is documented in [docs/observability.md](docs/observability.md).
+
 </details>
 
 ## Docker installation

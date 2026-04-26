@@ -4,7 +4,7 @@ const withNextIntl = require("next-intl/plugin")(
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "pino", "pino-pretty"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "localhost" },

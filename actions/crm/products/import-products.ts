@@ -1,5 +1,6 @@
 "use server";
 import { getSession } from "@/lib/auth-server";
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 import Papa from "papaparse";
 import { writeAuditLog } from "@/lib/audit-log";
@@ -7,6 +8,7 @@ import { revalidatePath } from "next/cache";
 
 const REQUIRED_FIELDS = ["name", "type", "unit_price", "currency"];
 const MAX_ROWS = 500;
+const logger = createLogger({ module: "actions.crm.products.import" });
 
 export async function importProducts(
   formData: FormData
@@ -23,6 +25,8 @@ export async function importProducts(
     header: true,
     skipEmptyLines: true,
   });
+
+  logger.info({ rows: data.length, userId }, "Product import started");
 
   if (data.length > MAX_ROWS) {
     throw new Error(`Import limited to ${MAX_ROWS} rows. File contains ${data.length} rows.`);
@@ -158,5 +162,13 @@ export async function importProducts(
   }
 
   revalidatePath("/[locale]/(routes)/crm/products", "page");
+  logger.info(
+    {
+      imported: valid.length,
+      skipped: errors.length,
+      userId,
+    },
+    "Product import completed"
+  );
   return { imported: valid.length, skipped: errors.length, errors };
 }

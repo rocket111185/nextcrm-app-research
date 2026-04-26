@@ -1,6 +1,9 @@
 import { getSession } from "@/lib/auth-server";
+import { createLogger } from "@/lib/logger";
 import resendHelper from "@/lib/resend";
 import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "api.feedback" });
 
 export async function POST(req: Request) {
   /*
@@ -39,9 +42,10 @@ export async function POST(req: Request) {
       subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
       text: feedback, // Add this line to fix the types issue
     });
+    logger.info({ userId: session.user.id }, "Feedback email sent");
     return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
   } catch (error) {
-    console.log("[FEEDBACK_POST]", error);
+    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
     return NextResponse.json({ error: "Initial error" }, { status: 500 });
   }
 }

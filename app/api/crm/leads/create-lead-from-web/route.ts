@@ -1,5 +1,8 @@
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "api.crm.leads.create-from-web" });
 
 export async function POST(req: Request) {
   if (req.headers.get("content-type") !== "application/json") {
@@ -36,7 +39,7 @@ export async function POST(req: Request) {
   }
 
   if (token.trim() !== process.env.NEXTCRM_TOKEN.trim()) {
-    console.log("Unauthorized");
+    logger.warn("Rejected lead creation with invalid token");
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   } else {
     if (!lastName) {
@@ -58,10 +61,11 @@ export async function POST(req: Request) {
         },
       });
 
+      logger.info({ leadSource: lead_source }, "Lead created from remote form");
       return NextResponse.json({ message: "New lead created successfully" });
       //return res.status(200).json({ json: "newContact" });
     } catch (error) {
-      console.log(error);
+      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
       return NextResponse.json(
         { message: "Error creating new lead" },
         { status: 500 }

@@ -49,6 +49,10 @@ next-env.d.ts
 # migration logs (may contain secrets)
 migration-errors.log
 
+# application logs
+logs/*.log
+!logs/.gitkeep
+
 # backups
 backups/
 

@@ -1,4 +1,7 @@
 import nodemailer from "nodemailer";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger({ module: "sendmail" });
 
 interface EmailOptions {
   from: string | undefined;
@@ -23,9 +26,19 @@ export default async function sendEmail(
 
   try {
     await transporter.sendMail(emailOptions);
-    console.log(`Email sent to ${emailOptions.to}`);
-    return Promise.resolve(console.log(`Email sent to ${emailOptions.to}`));
+    logger.info(
+      {
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email sent"
+    );
   } catch (error: any | Error) {
-    console.error(`Error occurred while sending email: ${error.message}`);
+    logger.error(
+      {
+        err: error,
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email send failed"
+    );
   }
 }

@@ -15,10 +15,69 @@ services:
     networks:
       - nextcrm-net
 
+  loki:
+    container_name: nextcrm_loki
+    image: grafana/loki:3.5.12
+    restart: always
+    command: ["-config.file=/etc/loki/local-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yml:ro,z
+      - loki_data:/loki
+    networks:
+      - nextcrm-net
+
+  otel-collector:
+    container_name: nextcrm_otel_collector
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    restart: always
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yml"]
+    depends_on:
+      - loki
+    environment:
+      OTEL_SERVICE_NAME: nextcrm-app
+      DEPLOYMENT_ENVIRONMENT: local
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro,z
+      - ./logs:/var/log/nextcrm:ro,z
+      - otelcol_data:/var/lib/otelcol
+    networks:
+      - nextcrm-net
+
+  grafana:
+    container_name: nextcrm_grafana
+    image: grafana/grafana:12.2.1
+    restart: always
+    depends_on:
+      - loki
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,z
+    networks:
+      - nextcrm-net
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  loki_data:
+    driver: local
+  grafana_data:
+    driver: local
+  otelcol_data:
     driver: local
 
 networks:

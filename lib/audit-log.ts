@@ -1,5 +1,8 @@
 // lib/audit-log.ts
+import { createLogger } from "@/lib/logger";
 import { prismadb } from "@/lib/prisma";
+
+const logger = createLogger({ module: "audit-log" });
 
 export type AuditEntityType =
   | "account"
@@ -65,7 +68,6 @@ interface WriteAuditLogParams {
 
 export async function writeAuditLog(params: WriteAuditLogParams): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (prismadb as any).crm_AuditLog.create({
       data: {
         entityType: params.entityType,
@@ -76,7 +78,17 @@ export async function writeAuditLog(params: WriteAuditLogParams): Promise<void> 
       },
     });
   } catch (err) {
-    console.error("[AUDIT_LOG_WRITE_FAILED]", err);
+    logger.error(
+      {
+        err,
+        action: params.action,
+        entityId: params.entityId,
+        entityType: params.entityType,
+        changesCount: params.changes?.length ?? 0,
+        userId: params.userId,
+      },
+      "Audit log write failed"
+    );
     // Never rethrow — audit failures must not block CRM mutations
   }
 }
