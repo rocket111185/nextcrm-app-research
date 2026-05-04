@@ -1,0 +1,24 @@
+{
+  "caseId": "feature-task-4",
+  "variantId": "B",
+  "generatedAt": "2026-05-04T20:22:05.453Z",
+  "source": "loki-query-range",
+  "loki": {
+    "url": "http://localhost:3100",
+    "query": "{service_name=\"nextcrm-app\"} | level=~\"error|fatal\"",
+    "start": "2026-05-04T20:10:00Z",
+    "end": "2026-05-04T20:21:00Z",
+    "since": null,
+    "limit": 5000,
+    "direction": "forward",
+    "returnedEventCount": 5,
+    "reachedLimit": false
+  },
+  "transformation": {
+    "name": "filtered_diagnostic_logs",
+    "description": "Selected diagnostic fields from Loki events: time, level, service, module, route, message, error and correlation identifiers.",
+    "grouped": false,
+    "includedRepositoryContext": false,
+    "includedPatch": false
+  }
+}

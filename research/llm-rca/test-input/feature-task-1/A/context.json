@@ -1,0 +1,36 @@
+{
+  "events": [
+    {
+      "time": "2026-05-02T18:34:29.669Z",
+      "timestampNs": "1777746869669777679",
+      "labels": {
+        "client_pathname": "/en",
+        "client_sessionId": "4f335a33-9f27-425f-8755-32b3bc9b3859",
+        "client_timestamp": "2026-05-02T18:34:29.426Z",
+        "client_url": "http://localhost:3000/en",
+        "client_userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0",
+        "context_err_message": "Request failed with status code 500",
+        "context_err_name": "AxiosError",
+        "context_err_stack": "AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n",
+        "context_module": "app.[locale].(routes).components.FeedbackForm",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "module": "app.api.client-logs",
+        "pid": "23369",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "f184cde15745e45a",
+        "time": "2026-05-02T18:34:29.560Z",
+        "trace_flags": "01",
+        "trace_id": "e2980506f723a88135d38840469ec308"
+      },
+      "line": "Feedback submission failed",
+      "metadata": {}
+    }
+  ]
+}

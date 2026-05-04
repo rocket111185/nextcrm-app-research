@@ -4,10 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+RUN_PROJECT_ROOT="${PROJECT_ROOT}/../nextcrm-app-update"
 TEST_INPUT_DIR="${PROJECT_ROOT}/research/llm-rca/test-input"
 TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
 OUTPUT_DIR="$(cd "${PROJECT_ROOT}/.." && pwd)/nextcrm-app-research-codex-output/codex-${TIMESTAMP}"
 MODEL=""
+VARIANTS=(A B C D)
 
 usage() {
   cat <<'EOF'
@@ -17,22 +19,23 @@ Usage:
 Options:
   --model MODEL      Optional Codex model name. If omitted, Codex CLI uses its default model.
   --output-dir DIR   Optional output directory. If omitted, a timestamped folder is created under
-                     research/llm-rca/test-output/.
+                     ../nextcrm-app-research-codex-output/.
   -h, --help         Show this help.
 
 What the script does:
-  1. Iterates over research/llm-rca/test-input/*/{A,B,C}
-  2. Reads the prepared context on `main`
-  3. Switches to the corresponding `research-N` branch
-  4. Runs `codex exec --ephemeral` from the repository root in read-only mode
-  5. Switches back to `main`
-  3. Writes one output file per run:
+  1. Iterates over variants first: all cases for A, then all cases for B, and so on
+  2. Reads the prepared context from this repository
+  3. Switches ../nextcrm-app-update to `develop`
+  4. Switches ../nextcrm-app-update to the corresponding `feature/task-N` branch
+  5. Runs `codex exec --ephemeral` from ../nextcrm-app-update in read-only mode
+  6. Switches ../nextcrm-app-update back to `develop`
+  7. Writes one output file per run:
      {test-case}-{variant}.txt
 
 Important:
   - Each run starts as a fresh Codex session because of `--ephemeral`.
   - The script does not use `resume` or any persisted Codex session.
-  - Codex still has access to the repository contents because runs execute from the project root.
+  - Codex has access to ../nextcrm-app-update because runs execute from that project root.
   - Results are written outside the repository by default so branch switching does not affect them.
 EOF
 }
@@ -69,16 +72,23 @@ if [[ ! -d "${TEST_INPUT_DIR}" ]]; then
   exit 1
 fi
 
+if [[ ! -d "${RUN_PROJECT_ROOT}" ]]; then
+  echo "Missing run repository: ${RUN_PROJECT_ROOT}" >&2
+  exit 1
+fi
+
+RUN_PROJECT_ROOT="$(cd "${RUN_PROJECT_ROOT}" && pwd)"
+
 mkdir -p "${OUTPUT_DIR}"
 
 git_switch() {
   local branch="$1"
-  git -C "${PROJECT_ROOT}" switch "${branch}" >/dev/null
+  git -C "${RUN_PROJECT_ROOT}" switch "${branch}" >/dev/null
 }
 
 ensure_clean_repo() {
-  if ! git -C "${PROJECT_ROOT}" diff --quiet || ! git -C "${PROJECT_ROOT}" diff --cached --quiet; then
-    echo "Repository has tracked changes. Commit or stash them before running the test script." >&2
+  if ! git -C "${RUN_PROJECT_ROOT}" diff --quiet || ! git -C "${RUN_PROJECT_ROOT}" diff --cached --quiet; then
+    echo "Run repository has tracked changes. Commit or stash them before running the test script: ${RUN_PROJECT_ROOT}" >&2
     exit 1
   fi
 }
@@ -97,15 +107,20 @@ EOF
 
 branch_for_case() {
   local case_name="$1"
-  local case_number
-  case_number="${case_name%%-*}"
+  local case_number=""
 
-  if [[ ! "${case_number}" =~ ^[0-9]+$ ]]; then
-    echo "Could not infer research branch from case name: ${case_name}" >&2
+  if [[ "${case_name}" =~ ^([0-9]+)(-|$) ]]; then
+    case_number="${BASH_REMATCH[1]}"
+  elif [[ "${case_name}" =~ ([0-9]+)$ ]]; then
+    case_number="${BASH_REMATCH[1]}"
+  fi
+
+  if [[ ! "${case_number}" =~ ^[1-5]$ ]]; then
+    echo "Could not infer feature task branch from case name: ${case_name}" >&2
     return 1
   fi
 
-  echo "research-${case_number}"
+  echo "feature/task-${case_number}"
 }
 
 run_one() {
@@ -140,7 +155,7 @@ run_one() {
   }
   trap cleanup RETURN
 
-  git_switch "main"
+  git_switch "develop"
   build_prompt "${variant}" "${context_file}" > "${prompt_file}"
   git_switch "${target_branch}"
 
@@ -153,7 +168,7 @@ run_one() {
     codex exec
     --ephemeral
     -s read-only
-    -C "${PROJECT_ROOT}"
+    -C "${RUN_PROJECT_ROOT}"
     --output-last-message "${response_file}"
   )
 
@@ -173,13 +188,14 @@ run_one() {
   local elapsed_seconds
   elapsed_seconds="$((end_epoch - start_epoch))"
 
-  git_switch "main"
+  git_switch "develop"
 
   {
     echo "run_name: ${run_name}"
     echo "case_name: ${case_name}"
     echo "variant: ${variant}"
     echo "target_branch: ${target_branch}"
+    echo "run_project_root: ${RUN_PROJECT_ROOT}"
     echo "model: ${MODEL:-default}"
     echo "started_utc: ${started_utc}"
     echo "elapsed_seconds: ${elapsed_seconds}"
@@ -203,13 +219,13 @@ run_one() {
 echo "Writing results to ${OUTPUT_DIR}"
 
 ensure_clean_repo
-trap 'git -C "${PROJECT_ROOT}" switch main >/dev/null 2>&1 || true' EXIT
-git_switch "main"
+trap 'git -C "${RUN_PROJECT_ROOT}" switch develop >/dev/null 2>&1 || true' EXIT
+git_switch "develop"
 
 shopt -s nullglob
-for case_dir in "${TEST_INPUT_DIR}"/*; do
-  [[ -d "${case_dir}" ]] || continue
-  for variant in A B C; do
+for variant in "${VARIANTS[@]}"; do
+  for case_dir in "${TEST_INPUT_DIR}"/*; do
+    [[ -d "${case_dir}" ]] || continue
     run_one "${case_dir}" "${variant}"
   done
 done

@@ -1,0 +1,30 @@
+{
+  "caseId": "feature-task-3",
+  "variantId": "D",
+  "generatedAt": "2026-05-04T18:45:40.893Z",
+  "source": "loki-query-range",
+  "loki": {
+    "url": "http://localhost:3100",
+    "query": "{service_name=\"nextcrm-app\"} | level=~\"error|fatal\"",
+    "start": "2026-05-04T18:41:00Z",
+    "end": "2026-05-04T18:45:00Z",
+    "since": null,
+    "limit": 5000,
+    "direction": "forward",
+    "returnedEventCount": 1,
+    "reachedLimit": false
+  },
+  "transformation": {
+    "name": "correlated_incident_bundle_with_repository_context",
+    "description": "Correlated diagnostic events enriched with Git branch, commit, changed files and diff statistics.",
+    "grouped": true,
+    "groupingKeys": [
+      "trace_id",
+      "client_sessionId",
+      "route",
+      "uncorrelated"
+    ],
+    "includedRepositoryContext": true,
+    "includedPatch": false
+  }
+}

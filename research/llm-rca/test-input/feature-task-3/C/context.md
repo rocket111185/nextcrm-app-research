@@ -1,0 +1,39 @@
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:dd675312fb402fed6a9ff838a3d9a064",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:44:22.320Z",
+      "lastSeen": "2026-05-04T18:44:22.320Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:44:22.320Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "api.upload.presigned-url",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Presigned upload URL generation failed",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+            "spanId": "8f0a9636dd20584e",
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ]
+}
+```

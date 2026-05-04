@@ -1,0 +1,115 @@
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T20:12:29.375Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:11:49.374Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
