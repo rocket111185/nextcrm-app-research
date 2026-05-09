@@ -1,0 +1,1596 @@
+run_name: feature-task-2-C
+case_name: feature-task-2
+variant: C
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:30:36Z
+elapsed_seconds: 49
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/C/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the browser during the initial hydration pass.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component computes:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a client component that is still server-rendered first, the server HTML contains `Login`, but the first client render contains `Sign in`. That exactly matches the observed hydration diff:
+
+```diff
++ Sign in
+- Login
+```
+
+The same pattern also exists for `dividerLabel` on lines 37-40, where the server renders `Or continue with email` and the client renders `Or continue with Email`. That may cause an additional hydration mismatch after the title mismatch.
+
+The likely introducing change is commit `9be250f` (`Polish sign-in copy and labels`), which replaced static text with these `typeof window` branches.
+
+No evidence points to locale formatting, time/random data, browser extension mutation, or invalid HTML nesting. The stack trace and React diff point directly at the `CardTitle` text rendered by `LoginComponent` on `/en/sign-in`.
+
+Recommended fix direction: remove the server/client text branch and render the same string on both sides, probably `Sign in`, for the initial render.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e097f-e3b3-7700-adf7-d5b58a5f3f17
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e205c05bab2c1e0f7842fa624396f721",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:30:26.512Z",
+      "lastSeen": "2026-05-04T18:30:26.512Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:30:26.512Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.client-error-listener",
+          "route": "/en/sign-in",
+          "clientUrl": "http://localhost:3000/en/sign-in",
+          "message": "Unhandled client error",
+          "error": {
+            "name": "Error",
+            "message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+            "stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n"
+          },
+          "correlation": {
+            "traceId": "e205c05bab2c1e0f7842fa624396f721",
+            "spanId": "f6f18ebb5ee63701",
+            "clientSessionId": "f4e338ce-1d65-492f-9a53-16026bf86155"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "rg --files -g '*sign-in*' -g '*login*' -g '*Login*' -g '*i18n*' -g '*messages*' -g '*locale*'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+actions/emails/messages.ts
+
+exec
+/usr/bin/bash -lc 'rg -n "Sign in|Login|LoginComponent|CardTitle" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./tests/auth.setup.ts:39:    // 4. Sign in with OTP — cookies shared with browser context via context.request
+./scripts/validation/table-schema.ts:93:      { name: 'lastLoginAt', type: 'DateTime' },
+./scripts/migration/transformers/users-transformer.ts:27:    lastLoginAt: convertDateToISO(mongoRecord.lastLoginAt),
+./scripts/VALIDATION_README.md:357:   - Login as admin
+./prisma/schema.prisma:930:  lastLoginAt      DateTime?
+./prisma/schema.prisma:980:  @@index([lastLoginAt])
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:82:### Login page rewrite (`components/LoginComponent.tsx`)
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:126:- `lastLoginAt` updated, DB session created
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:135:- `components/LoginComponent.tsx` — full rewrite
+./CHANGELOG.md:295:- Login page rewritten — credentials/register flow removed, Google OAuth + Email OTP only
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:57:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:169:| `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` | Replace conditional spinner with 3 `<Skeleton>` rows |
+./prisma/migrations/0_init/migration.sql:525:    "lastLoginAt" TIMESTAMP(3),
+./prisma/migrations/0_init/migration.sql:970:CREATE INDEX "Users_lastLoginAt_idx" ON "Users"("lastLoginAt");
+./actions/admin/users/set-role.ts:36:        lastLoginAt: true,
+./actions/admin/users/invite-user.ts:59:        lastLoginAt: true,
+./actions/admin/users/delete-user.ts:31:        lastLoginAt: true,
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1504:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1559:          <CardTitle className="text-base">
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1561:          </CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2027:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2048:          <CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2052:          </CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2144:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2180:          <CardTitle>Product Information</CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2214:          <CardTitle>Pricing</CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2939:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2991:          <CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2995:          </CardTitle>
+./docs/superpowers/plans/2026-04-05-line-items.md:1674:  CardTitle,
+./docs/superpowers/plans/2026-04-05-line-items.md:1710:          <CardTitle>Line Items</CardTitle>
+./docs/superpowers/plans/2026-04-05-line-items.md:1819:  CardTitle,
+./docs/superpowers/plans/2026-04-05-line-items.md:1898:          <CardTitle>Line Items</CardTitle>
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:59:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:724:- [ ] **Step 10: Update `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`**
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:746:  "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx"
+./docs/superpowers/plans/2026-04-04-currency-support.md:1102:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-04-04-currency-support.md:1119:          <CardTitle>Currencies</CardTitle>
+./docs/superpowers/plans/2026-04-04-currency-support.md:1128:          <CardTitle>Exchange Rates</CardTitle>
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2357:  CardTitle,
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2375:            <CardTitle
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2380:            </CardTitle>
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1281:import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1359:        <CardTitle>API Tokens</CardTitle>
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:685:### Task 12: Rewrite LoginComponent for Google OAuth + Email OTP
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:688:- Modify: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` (full rewrite)
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:692:Replace the entire contents of `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`:
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:707:  CardTitle,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:721:export function LoginComponent() {
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:780:      toast.success("Login successful.");
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:792:        <CardTitle className="text-2xl">Login</CardTitle>
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:892:git add app/[locale]/(auth)/sign-in/components/LoginComponent.tsx components/ui/input-otp.tsx
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1249:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1321:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1393:Update `emails/InviteUser.tsx` — remove the `invitedUserPassword` prop and the password display section. The email should now say "Sign in using your email address" instead of showing a password:
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:105:  CardTitle,
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:152:          <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:166:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:287:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:307:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./docs/superpowers/plans/2026-03-28-crm-activities.md:936:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-28-crm-activities.md:982:        <CardTitle className="text-base">Activities</CardTitle>
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:489:  <CardTitle>{data.name}</CardTitle>
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:499:      <CardTitle>{data.name}</CardTitle>
+./components/ui/card.tsx:34:const CardTitle = ({
+./components/ui/card.tsx:48:CardTitle.displayName = "CardTitle"
+./components/ui/card.tsx:85:export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+./components/reports/ReportTable.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./components/reports/ReportTable.tsx:25:      <CardHeader><CardTitle className="text-base">{t(titleKey)}</CardTitle></CardHeader>
+./components/crm/activities/ActivitiesView.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./components/crm/activities/ActivitiesView.tsx:52:          <CardTitle className="text-base">Activities</CardTitle>
+./components/reports/ReportChart.tsx:28:  CardTitle,
+./components/reports/ReportChart.tsx:75:          <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./components/reports/ReportChart.tsx:89:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./components/reports/KPICard.tsx:4:import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+./components/reports/KPICard.tsx:31:          <CardTitle className="text-sm font-medium">{t(kpi.label)}</CardTitle>
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx:3:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx:19:        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:8:        <CardTitle className="text-sm font-medium bg-gray-200 text-gray-200 animate-pulse ">
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:10:        </CardTitle>
+./app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+./app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+./app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:13:  CardTitle,
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+./app/[locale]/(auth)/inactive/page.tsx:12:  CardTitle,
+./app/[locale]/(auth)/inactive/page.tsx:31:      <CardTitle className="flex justify-center py-10">
+./app/[locale]/(auth)/inactive/page.tsx:33:      </CardTitle>
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:35:  CardTitle,
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:222:            <CardTitle
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:227:            </CardTitle>
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:35:  CardTitle,
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:263:            <CardTitle>All Campaigns</CardTitle>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:24:  CardTitle,
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:68:              <CardTitle>{task.title}</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:52:              <CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:54:              </CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:176:            <CardTitle>Contact information</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:218:            <CardTitle>Social networks</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:264:            <CardTitle>Notes</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:281:            <CardTitle>Target Lists</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:297:          <CardTitle>Contacts</CardTitle>
+./app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:109:          <CardTitle>Team conversation</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:69:          <CardTitle className="text-base">
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:71:          </CardTitle>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:10:  CardTitle,
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:103:          <CardTitle>Team conversation</CardTitle>
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:8:  CardTitle,
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:25:            <CardTitle
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:30:            </CardTitle>
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:10:  CardTitle,
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:38:            <CardTitle
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:43:            </CardTitle>
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:17:  CardTitle,
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:100:              <CardTitle className="text-xl">
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:102:              </CardTitle>
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:204:              <CardTitle className="text-xl">
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:206:              </CardTitle>
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:52:              <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:108:            <CardTitle>Targets ({data.targets?.length || 0})</CardTitle>
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx:6:import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx:84:        <CardTitle>API Tokens</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:14:  CardTitle,
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:53:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:55:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:63:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:65:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:73:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:75:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:83:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:85:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:99:            <CardTitle className="text-base">My Tasks</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:159:            <CardTitle className="text-base">My Opportunities</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:203:            <CardTitle className="text-base">My Leads</CardTitle>
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:7:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:74:            <CardTitle className="text-base">{meta.name}</CardTitle>
+./app/[locale]/(routes)/page.tsx:19:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/page.tsx:82:              <CardTitle className="text-sm font-medium">
+./app/[locale]/(routes)/page.tsx:84:              </CardTitle>
+./app/[locale]/(routes)/page.tsx:95:              <CardTitle className="text-sm font-medium">
+./app/[locale]/(routes)/page.tsx:97:              </CardTitle>
+./app/[locale]/(routes)/page.tsx:198:          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:45:import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:105:      <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:125:      </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:400:              <CardTitle className="flex gap-2 p-3 justify-between">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:409:              </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:434:            <CardTitle className="flex gap-2 p-3 justify-between">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:436:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:440:                  <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:442:                  </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:479:              <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:483:              </CardTitle>
+./app/[locale]/(routes)/admin/currencies/page.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/admin/currencies/page.tsx:18:          <CardTitle>Currencies</CardTitle>
+./app/[locale]/(routes)/admin/currencies/page.tsx:27:          <CardTitle>Exchange Rates</CardTitle>
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:7:  CardTitle,
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:64:        <CardTitle>Resend.com - API Key</CardTitle>
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:5:  CardTitle,
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:79:              <CardTitle>Product Information</CardTitle>
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:167:            <CardTitle>Pricing</CardTitle>
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:60:            <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:42:            <CardTitle>Line Items</CardTitle>
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:12:  CardTitle,
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:88:            <CardTitle>Line Items</CardTitle>
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:60:              <CardTitle>{data.title}</CardTitle>
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:61:          <CardTitle className="text-base">
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:63:          </CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:46:              <CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:48:              </CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:212:            <CardTitle>Contacts</CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:287:            <CardTitle>Social networks</CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:363:            <CardTitle>Notes</CardTitle>
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:52:              <CardTitle>
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:54:              </CardTitle>
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:46:            <CardTitle>
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:50:            </CardTitle>
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:12:  CardTitle,
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:30:            <CardTitle
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:35:            </CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:13:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:47:            <CardTitle
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:52:            </CardTitle>
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:10:  CardTitle,
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:36:          <CardTitle>
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:40:          </CardTitle>
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:49:            <CardTitle>
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:53:            </CardTitle>
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:31:          <CardTitle>
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:35:          </CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:48:              <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:233:            <CardTitle>Billing Address</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:288:            <CardTitle>Shipping Address</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:347:        <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:48:            <CardTitle>
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:52:            </CardTitle>
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:71:            <CardTitle>
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:75:            </CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:82:          <CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:86:          </CardTitle>
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+exec
+/usr/bin/bash -lc 'rg -n "sign|login|Login|Sign in|auth|locale|messages|next-intl|useTranslations|getTranslations" app components lib i18n.ts middleware.ts messages -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: i18n.ts: No such file or directory (os error 2)
+rg: middleware.ts: No such file or directory (os error 2)
+rg: messages: No such file or directory (os error 2)
+lib/sendmail.ts:21:    auth: {
+lib/logger.ts:74:        "authorization",
+lib/logger.ts:80:        "headers.authorization",
+lib/logger.ts:82:        "*.authorization",
+lib/auth.ts:1:import { betterAuth } from "better-auth";
+lib/auth.ts:2:import { prismaAdapter } from "better-auth/adapters/prisma";
+lib/auth.ts:3:import { emailOTP, testUtils } from "better-auth/plugins";
+lib/auth.ts:4:import { admin as adminPlugin } from "better-auth/plugins";
+lib/auth.ts:6:import { ac, admin, member, viewer } from "@/lib/auth-permissions";
+lib/auth.ts:12:export const auth = betterAuth({
+lib/auth.ts:128:export type Session = typeof auth.$Infer.Session;
+lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+components/ui/minio-uploader.tsx:35:        // Step 1: Get presigned URL from our server
+components/ui/minio-uploader.tsx:36:        const res = await fetch("/api/upload/presigned-url", {
+components/ui/minio-uploader.tsx:47:        const { presignedUrl, fileUrl, key } = await res.json();
+components/ui/minio-uploader.tsx:52:        const uploadRes = await fetch(presignedUrl, {
+components/ui/toast.tsx:5:import { cva, type VariantProps } from "class-variance-authority"
+lib/mcp/tools/reports.ts:82:          data = await mod.getTasksByAssignee(filters);
+components/ui/sidebar.tsx:5:import { cva, type VariantProps } from "class-variance-authority"
+lib/mcp/tools/projects.ts:219:        where.assigned_section = { board: args.board };
+lib/mcp/tools/projects.ts:223:        where.assigned_section = { board_relation: userBoardWhere(userId) };
+lib/mcp/tools/projects.ts:246:          assigned_section: { select: { id: true, title: true, board: true } },
+lib/mcp/tools/projects.ts:386:          include: { assigned_user: { select: { id: true, name: true } } },
+lib/mcp/tools/projects.ts:396:    name: "projects_assign_document",
+components/ui/sheet.tsx:5:import { cva, type VariantProps } from "class-variance-authority"
+lib/mcp/tools/crm-targets.ts:16:    description: "List CRM targets created by the authenticated user",
+app/api/upload/presigned-url/route.ts:3:import { getSession } from "@/lib/auth-server";
+app/api/upload/presigned-url/route.ts:5:import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+app/api/upload/presigned-url/route.ts:17:  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+app/api/upload/presigned-url/route.ts:52:  // Presigned URL valid for 10 minutes
+app/api/upload/presigned-url/route.ts:54:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+app/api/upload/presigned-url/route.ts:66:      "Presigned upload URL generated"
+app/api/upload/presigned-url/route.ts:69:    return NextResponse.json({ presignedUrl, fileUrl, key });
+app/api/upload/presigned-url/route.ts:78:      "Presigned upload URL generation failed"
+lib/mcp/tools/crm-opportunities.ts:16:    description: "List CRM opportunities assigned to the authenticated user",
+lib/mcp/tools/crm-opportunities.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+lib/mcp/tools/crm-opportunities.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-opportunities.ts:52:        assigned_to: userId,
+lib/mcp/tools/crm-opportunities.ts:100:          assigned_to: userId,
+lib/mcp/tools/crm-opportunities.ts:135:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-opportunities.ts:159:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+components/ui/label.tsx:5:import { cva, type VariantProps } from "class-variance-authority"
+lib/mcp/tools/crm-leads.ts:16:    description: "List CRM leads assigned to the authenticated user",
+lib/mcp/tools/crm-leads.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+lib/mcp/tools/crm-leads.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-leads.ts:52:        assigned_to: userId,
+lib/mcp/tools/crm-leads.ts:96:        data: { v: 0, lastName, ...rest, assigned_to: userId, createdBy: userId },
+lib/mcp/tools/crm-leads.ts:126:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-leads.ts:143:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-email-accounts.ts:8:    description: "List the authenticated user's connected email accounts",
+app/api/reports/export/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/reports/export/route.ts:21:      return { data: await activityActions.getTasksByAssignee(filters), headers: ["Assignee", "Tasks"] };
+app/api/reports/export/route.ts:43:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+lib/mcp/tools/crm-documents.ts:4:import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+lib/mcp/tools/crm-documents.ts:105:    description: "Create a document record and get a presigned upload URL",
+lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:148:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:153:    description: "Get a presigned upload URL for an existing document",
+lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:167:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:172:    description: "Get a presigned download URL for a document",
+lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+lib/mcp/tools/crm-documents.ts:185:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+lib/mcp/tools/crm-contracts.ts:48:          include: { lineItems: true, assigned_account: { select: { id: true, name: true } } },
+lib/mcp/tools/crm-contracts.ts:64:          assigned_account: { select: { id: true, name: true } },
+lib/mcp/tools/crm-contracts.ts:79:      assigned_to: z.string().uuid().optional(),
+lib/mcp/tools/crm-contracts.ts:120:      assigned_to: z.string().uuid().optional(),
+lib/mcp/tools/crm-contacts.ts:16:    description: "List CRM contacts assigned to the authenticated user",
+lib/mcp/tools/crm-contacts.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+lib/mcp/tools/crm-contacts.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-contacts.ts:52:        assigned_to: userId,
+lib/mcp/tools/crm-contacts.ts:101:          assigned_to: userId,
+lib/mcp/tools/crm-contacts.ts:134:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-contacts.ts:151:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+lib/mcp/tools/crm-activities.ts:21:      "List CRM activities created by the authenticated user, optionally filtered by linked entity",
+lib/mcp/tools/crm-accounts.ts:17:    description: "List CRM accounts assigned to the authenticated user",
+lib/mcp/tools/crm-accounts.ts:22:      const where = { assigned_to: userId, ...isNotDeleted() };
+lib/mcp/tools/crm-accounts.ts:40:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+lib/mcp/tools/crm-accounts.ts:58:        assigned_to: userId,
+lib/mcp/tools/crm-accounts.ts:99:          assigned_to: userId,
+lib/mcp/tools/crm-accounts.ts:131:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+lib/mcp/tools/crm-accounts.ts:148:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+app/api/mcp/[transport]/route.ts:2:import { getMcpUser } from "@/lib/mcp/auth";
+app/api/mcp/[transport]/route.ts:19:            : msg === "Unauthorized" ? "UNAUTHORIZED"
+lib/mcp/tools/campaigns.ts:322:  // ── Target List Assignment ────────────────────────────
+lib/mcp/tools/campaigns.ts:324:    name: "campaigns_assign_target_list",
+lib/mcp/tools/campaigns.ts:325:    description: "Assign a target list to a campaign",
+components/ui/button.tsx:3:import { cva, type VariantProps } from "class-variance-authority"
+components/ui/badge.tsx:2:import { cva, type VariantProps } from "class-variance-authority"
+lib/mcp/auth.ts:2:import { getSession } from "@/lib/auth-server";
+lib/mcp/auth.ts:11:  const authHeader = hdrs.get("authorization");
+lib/mcp/auth.ts:12:  const bearer = authHeader?.startsWith("Bearer ")
+lib/mcp/auth.ts:13:    ? authHeader.slice(7)
+lib/mcp/auth.ts:21:  // Development-only fallback: better-auth session cookie
+lib/mcp/auth.ts:30:  throw new Error("Unauthorized");
+components/ui/alert.tsx:2:import { cva, type VariantProps } from "class-variance-authority"
+app/api/feedback/route.ts:1:import { getSession } from "@/lib/auth-server";
+app/api/feedback/route.ts:24:    return new NextResponse("Unauthenticated", { status: 401 });
+lib/enrichment/utils/source-context.ts:141:  // For longer strings, check if significant parts are present
+app/api/crm/targets/enrich/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/enrich/route.ts:18:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+app/api/crm/targets/enrich/route.ts:74:  request.signal.addEventListener("abort", () => {
+app/api/crm/targets/enrich-bulk/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/enrich-bulk/route.ts:11:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+lib/enrichment/types/index.ts:36:    author?: string;
+app/api/crm/targets/[id]/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/[id]/route.ts:14:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+lib/enrichment/strategies/enrichment-strategy.ts:159:    Object.assign(results, enrichedData);
+lib/enrichment/strategies/enrichment-strategy.ts:222:          if (result.metadata.author) content += `- Author: ${result.metadata.author}\n`;
+lib/enrichment/strategies/enrichment-strategy.ts:226:            if (!['title', 'description', 'keywords', 'ogTitle', 'ogDescription', 'author', 'publishedDate'].includes(key) && value) {
+app/api/crm/targets/[id]/enrich/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/[id]/enrich/route.ts:10:  if (!session) return new NextResponse("Unauthorized", { status: 401 });
+components/reports/ScheduleDialog.tsx:12:import { useTranslations } from "next-intl";
+components/reports/ScheduleDialog.tsx:24:  const t = useTranslations("ReportsPage.scheduleDialog");
+app/api/crm/targets/[id]/contacts/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/[id]/contacts/route.ts:10:  if (!session) return new NextResponse("Unauthorized", { status: 401 });
+components/reports/SavedReportsDropdown.tsx:8:import { useTranslations } from "next-intl";
+components/reports/SavedReportsDropdown.tsx:13:  const t = useTranslations("ReportsPage.savedReports");
+components/reports/SaveConfigDialog.tsx:11:import { useTranslations } from "next-intl";
+components/reports/SaveConfigDialog.tsx:16:  const t = useTranslations("ReportsPage.saveDialog");
+components/reports/ReportToolbar.tsx:9:import { useTranslations } from "next-intl";
+components/reports/ReportToolbar.tsx:14:  const t = useTranslations("ReportsPage.toolbar");
+lib/enrichment/services/openai.ts:143:        messages: [
+lib/enrichment/services/openai.ts:379:        messages: [
+lib/enrichment/services/openai.ts:422:  - WRONG: "The company has grown significantly in recent years"
+lib/enrichment/services/openai.ts:770:        messages: [
+lib/enrichment/services/openai.ts:840:        messages: [
+lib/enrichment/services/openai.ts:877:      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+lib/enrichment/services/openai.ts:894:        messages.push({
+lib/enrichment/services/openai.ts:900:      messages.push({
+lib/enrichment/services/openai.ts:907:        messages,
+lib/enrichment/services/openai.ts:925:      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+lib/enrichment/services/openai.ts:954:          messages.push({
+lib/enrichment/services/openai.ts:961:      messages.push({
+lib/enrichment/services/openai.ts:979:        messages,
+lib/enrichment/services/openai.ts:1013:        messages: [
+lib/enrichment/services/openai.ts:1045:      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+lib/enrichment/services/openai.ts:1058:        messages.push({
+lib/enrichment/services/openai.ts:1065:      messages.push({
+lib/enrichment/services/openai.ts:1072:        messages,
+components/reports/ReportTable.tsx:8:import { useTranslations } from "next-intl";
+components/reports/ReportTable.tsx:18:  const t = useTranslations("ReportsPage.charts");
+components/reports/ReportPageLayout.tsx:2:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+components/reports/ReportChart.tsx:31:import { useTranslations } from "next-intl";
+components/reports/ReportChart.tsx:67:  const t = useTranslations("ReportsPage.charts");
+app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts:10:  if (!session) return new NextResponse("Unauthorized", { status: 401 });
+components/reports/KPICard.tsx:7:import { useTranslations } from "next-intl";
+components/reports/KPICard.tsx:15:    const locale = currencyLocaleMap[currency] || "en-US";
+components/reports/KPICard.tsx:16:    return new Intl.NumberFormat(locale, { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
+components/reports/KPICard.tsx:23:  const t = useTranslations("ReportsPage.kpi");
+components/reports/FilterBar.tsx:9:import { useTranslations } from "next-intl";
+components/reports/FilterBar.tsx:26:  const t = useTranslations("ReportsPage");
+components/reports/DateRangePicker.tsx:10:import { useTranslations } from "next-intl";
+components/reports/DateRangePicker.tsx:16:  const t = useTranslations("ReportsPage");
+lib/enrichment/e2b/agent-script.ts:142:  const messages = [{ role: 'user', content: 'Research this company and return the JSON result.' }];
+lib/enrichment/e2b/agent-script.ts:145:    const response = await client.messages.create({
+lib/enrichment/e2b/agent-script.ts:150:      messages,
+lib/enrichment/e2b/agent-script.ts:153:    messages.push({ role: 'assistant', content: response.content });
+lib/enrichment/e2b/agent-script.ts:180:      messages.push(toolResults);
+app/api/crm/leads/create-lead-from-web/route.ts:27:  //Validate auth with token from .env.local
+app/api/crm/leads/create-lead-from-web/route.ts:28:  const token = headers.get("authorization");
+app/api/crm/leads/create-lead-from-web/route.ts:31:    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+app/api/crm/leads/create-lead-from-web/route.ts:43:    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+app/api/crm/contacts/enrich/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/contacts/enrich/route.ts:19:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+app/api/crm/contacts/enrich/route.ts:63:  request.signal.addEventListener("abort", () => {
+app/api/crm/contacts/enrich/route.ts:125:// Called by the drawer's Cancel button. Also triggered server-side via request.signal abort on disconnect.
+app/api/crm/contacts/enrich-bulk/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/contacts/enrich-bulk/route.ts:9:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+app/api/crm/contacts/create-from-remote/route.ts:19:    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+lib/enrichment/agent-architecture/orchestrator.ts:143:        Object.assign(enrichments, discoveryResults);
+lib/enrichment/agent-architecture/orchestrator.ts:144:        Object.assign(context.discoveredData, discoveryResults);
+lib/enrichment/agent-architecture/orchestrator.ts:199:        Object.assign(enrichments, profileResults);
+lib/enrichment/agent-architecture/orchestrator.ts:224:        Object.assign(enrichments, metricsResults);
+lib/enrichment/agent-architecture/orchestrator.ts:249:        Object.assign(enrichments, fundingResults);
+lib/enrichment/agent-architecture/orchestrator.ts:274:        Object.assign(enrichments, techStackResults);
+lib/enrichment/agent-architecture/orchestrator.ts:299:        Object.assign(enrichments, generalResults);
+lib/enrichment/agent-architecture/orchestrator.ts:384:    console.log(`[Orchestrator] Categorizing ${fields.length} fields for agent assignment...`);
+lib/enrichment/agent-architecture/orchestrator.ts:665:          Object.assign(results, extractedData);
+lib/enrichment/agent-architecture/orchestrator.ts:682:        Object.assign(results, fallbackData);
+lib/enrichment/agent-architecture/orchestrator.ts:1795:      if (href.includes('material')) technologies.add('Material Design');
+lib/enrichment/agent-architecture/orchestrator.ts:1815:    if (html.match(/class=["'][^"']*\bant-[^"'\s]+/)) technologies.add('Ant Design');
+app/api/crm/contacts/[id]/route.ts:2:import { getSession } from "@/lib/auth-server";
+app/api/crm/contacts/[id]/route.ts:24:    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+components/crm/similar-records-drawer.tsx:5:import { useLocale } from "next-intl";
+components/crm/similar-records-drawer.tsx:59:  const locale = useLocale();
+components/crm/similar-records-drawer.tsx:74:    router.push(`/${locale}${href}`);
+lib/enrichment/agent-architecture/core/agent-base.ts:44:    const messages: OpenAI.ChatCompletionMessageParam[] = [
+lib/enrichment/agent-architecture/core/agent-base.ts:82:      messages,
+app/api/campaigns/webhooks/resend/route.ts:5:function verifyResendSignature(body: string, signature: string | null): boolean {
+app/api/campaigns/webhooks/resend/route.ts:6:  if (!signature || !process.env.RESEND_WEBHOOK_SECRET) return false;
+app/api/campaigns/webhooks/resend/route.ts:10:  return signature === `sha256=${expected}`;
+app/api/campaigns/webhooks/resend/route.ts:15:  const signature = req.headers.get("Resend-Signature");
+app/api/campaigns/webhooks/resend/route.ts:17:  if (!verifyResendSignature(body, signature)) {
+app/api/campaigns/webhooks/resend/route.ts:18:    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+lib/email-crypto.ts:19: * Returns base64(iv [12 bytes] + authTag [16 bytes] + ciphertext)
+lib/email-crypto.ts:26:  const authTag = cipher.getAuthTag();
+lib/email-crypto.ts:27:  return Buffer.concat([iv, authTag, encrypted]).toString("base64");
+lib/email-crypto.ts:37:  const authTag = buf.subarray(IV_BYTES, IV_BYTES + AUTH_TAG_BYTES);
+lib/email-crypto.ts:40:  decipher.setAuthTag(authTag);
+lib/currency-format.ts:39:  const locale = currencyLocaleMap[currencyCode] || "en-US";
+lib/currency-format.ts:41:  const formatted = new Intl.NumberFormat(locale, {
+lib/auth-guards.ts:1:import { getSession } from "@/lib/auth-server";
+lib/auth-guards.ts:7:    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+lib/auth-guards.ts:16:    return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+lib/auth-client.ts:1:import { createAuthClient } from "better-auth/react";
+lib/auth-client.ts:2:import { emailOTPClient, adminClient } from "better-auth/client/plugins";
+lib/auth-client.ts:3:import { ac, admin, member, viewer } from "@/lib/auth-permissions";
+lib/auth-client.ts:5:export const authClient = createAuthClient({
+lib/auth-client.ts:16:export const { signIn, signOut, useSession } = authClient;
+lib/auth-permissions.ts:1:import { createAccessControl } from "better-auth/plugins/access";
+components/SetLanguage.tsx:35:import { useLocale, useTranslations } from "next-intl";
+components/SetLanguage.tsx:53:  const locale = useLocale();
+components/SetLanguage.tsx:54:  const t = useTranslations("LanguageSelector");
+components/SetLanguage.tsx:65:    defaultValues: { language: locale },
+components/SetLanguage.tsx:80:      router.replace(pathname, { locale: data.language });
+components/CommandComponent.tsx:29:import { signOut } from "@/lib/auth-client";
+components/CommandComponent.tsx:30:import { useTranslations } from "next-intl";
+components/CommandComponent.tsx:37:  const t = useTranslations("CommandComponent");
+components/CommandComponent.tsx:67:        signOut().then(() => { window.location.href = "/sign-in"; });
+components/CommandComponent.tsx:139:            <CommandItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+lib/auth-server.ts:1:import { auth } from "@/lib/auth";
+lib/auth-server.ts:5:// when viewer role is first assigned to users
+lib/auth-server.ts:8:  return auth.api.getSession({
+app/[locale]/layout.tsx:7:import { NextIntlClientProvider } from "next-intl";
+app/[locale]/layout.tsx:8:import { getTranslations, getMessages } from "next-intl/server";
+app/[locale]/layout.tsx:19:  params: Promise<{ locale: string }>;
+app/[locale]/layout.tsx:25:  const { locale } = params;
+app/[locale]/layout.tsx:27:  const t = await getTranslations({ locale, namespace: "RootLayout" });
+app/[locale]/layout.tsx:56:  const { locale } = params;
+app/[locale]/layout.tsx:60:  const messages = await getMessages();
+app/[locale]/layout.tsx:63:    <html lang={locale} suppressHydrationWarning>
+app/[locale]/layout.tsx:65:        <NextIntlClientProvider locale={locale} messages={messages}>
+app/api/auth/[...all]/route.ts:1:import { auth } from "@/lib/auth";
+app/api/auth/[...all]/route.ts:2:import { toNextJsHandler } from "better-auth/next-js";
+app/api/auth/[...all]/route.ts:4:export const { GET, POST } = toNextJsHandler(auth);
+app/api/auth/test-otp/route.ts:2:import { auth } from "@/lib/auth";
+app/api/auth/test-otp/route.ts:17:    const ctx = await auth.$context;
+app/[locale]/(auth)/layout.tsx:3:import { getTranslations } from "next-intl/server";
+app/[locale]/(auth)/layout.tsx:5:import "@/app/[locale]/globals.css";
+app/[locale]/(auth)/layout.tsx:7:import Footer from "@/app/[locale]/(routes)/components/Footer";
+app/[locale]/(auth)/layout.tsx:12:  params: Promise<{ locale: string }>;
+app/[locale]/(auth)/layout.tsx:17:  const { locale } = params;
+app/[locale]/(auth)/layout.tsx:19:  const t = await getTranslations({ locale, namespace: "RootLayout" });
+app/[locale]/(routes)/reports/users/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/users/page.tsx:23:  const t = await getTranslations("ReportsPage");
+app/[locale]/(auth)/inactive/page.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(auth)/inactive/page.tsx:59:            <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+app/[locale]/(routes)/layout.tsx:1:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/layout.tsx:12:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/layout.tsx:56:    return redirect("/sign-in");
+app/[locale]/(routes)/layout.tsx:72:  const dict = await getTranslations("ModuleMenu");
+app/[locale]/(auth)/pending/page.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(auth)/pending/page.tsx:59:          <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(routes)/reports/sales/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/sales/page.tsx:29:  const t = await getTranslations("ReportsPage");
+app/[locale]/(routes)/reports/page.tsx:7:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/page.tsx:27:  const t = await getTranslations("ReportsPage");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:4:import { authClient } from "@/lib/auth-client";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:28:  return step === "email" ? "Send verification code" : "Verify and sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:42:  const loginWithGoogle = async () => {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:45:      await authClient.signIn.social({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:50:      toast.error("Something went wrong with Google sign-in.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:63:      const { error } = await authClient.emailOtp.sendVerificationOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:        type: "sign-in",
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:87:      const { error } = await authClient.signIn.emailOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:113:          onClick={loginWithGoogle}
+app/[locale]/(routes)/documents/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/documents/page.tsx:7:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/documents/page.tsx:11:  const t = await getTranslations("DocumentsPage");
+app/[locale]/(routes)/emails/use-mail.ts:3:import { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/reports/leads/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/leads/page.tsx:25:  const t = await getTranslations("ReportsPage");
+app/[locale]/(routes)/emails/page.tsx:8:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/emails/page.tsx:9:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/emails/page.tsx:11:import { getEmails } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/page.tsx:25:  const t = await getTranslations("ModuleMenu");
+app/[locale]/(routes)/documents/data/schema.tsx:17:  assigned_to_user: z.object({
+app/[locale]/(routes)/reports/campaigns/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/campaigns/page.tsx:23:  const t = await getTranslations("ReportsPage");
+app/[locale]/(routes)/fulltext-search/search/page.tsx:4:  params: Promise<{ locale: string }>;
+app/[locale]/(routes)/fulltext-search/search/page.tsx:10:  redirect(`/${params.locale}/fulltext-search${q ? `?q=${encodeURIComponent(q)}` : ""}`);
+app/[locale]/(routes)/emails/components/mail-display.tsx:45:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail-display.tsx:46:import { getEmail, deleteEmail } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/components/mail-display.tsx:47:import { ComposeModal } from "@/app/[locale]/(routes)/emails/components/ComposeModal";
+app/[locale]/(routes)/emails/components/mail-display.tsx:49:const logger = createClientLogger({ module: "app.[locale].(routes).emails.components.mail-display" });
+app/[locale]/(routes)/emails/components/mail.tsx:6:import { AccountSwitcher } from "@/app/[locale]/(routes)/emails/components/account-switcher";
+app/[locale]/(routes)/emails/components/mail.tsx:7:import { ComposeModal } from "@/app/[locale]/(routes)/emails/components/ComposeModal";
+app/[locale]/(routes)/emails/components/mail.tsx:8:import { MailDisplay } from "@/app/[locale]/(routes)/emails/components/mail-display";
+app/[locale]/(routes)/emails/components/mail.tsx:9:import { MailList } from "@/app/[locale]/(routes)/emails/components/mail-list";
+app/[locale]/(routes)/emails/components/mail.tsx:10:import { Nav } from "@/app/[locale]/(routes)/emails/components/nav";
+app/[locale]/(routes)/emails/components/mail.tsx:11:import type { ConnectedAccount, Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail.tsx:12:import { useMail } from "@/app/[locale]/(routes)/emails/use-mail";
+app/[locale]/(routes)/reports/activity/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/activity/page.tsx:9:  getTasksByAssignee,
+app/[locale]/(routes)/reports/activity/page.tsx:23:  const t = await getTranslations("ReportsPage");
+app/[locale]/(routes)/reports/activity/page.tsx:25:  const [tasksData, overdue, tasksByAssignee, activitiesByType] = await Promise.all([
+app/[locale]/(routes)/reports/activity/page.tsx:28:    getTasksByAssignee(filters),
+app/[locale]/(routes)/reports/activity/page.tsx:55:      <ReportChart data={tasksByAssignee} titleKey="tasksByAssignee" type="bar" />
+app/[locale]/(routes)/documents/components/modal-dropzone.tsx:38:        size: 0, // size not available from presigned URL flow
+app/[locale]/(routes)/emails/components/mail-list.tsx:9:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail-list.tsx:10:import { useMail } from "@/app/[locale]/(routes)/emails/use-mail";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:97:                <td className="py-2 px-4 border-b">Assigned to</td>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:99:                  {task.assigned_user?.name || "Not assigned"}
+app/[locale]/(routes)/emails/components/account-switcher.tsx:14:import type { ConnectedAccount } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:11:import { sendEmail } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:13:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/reports/accounts/page.tsx:1:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/reports/accounts/page.tsx:23:  const t = await getTranslations("ReportsPage");
+app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:13:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:23:  const t = useTranslations("DocumentsPage");
+app/[locale]/(routes)/employees/page.tsx:5:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/employees/page.tsx:10:  const t = await getTranslations("EmployeesPage");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:13:const logger = createClientLogger({ module: "app.[locale].(routes).fulltext-search.components.SearchResult" });
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:40:  const locale = (params?.locale as string) ?? "en";
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:59:        const res = await unifiedSearch(query.trim(), locale);
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:74:  }, [query, locale]);
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx:10:  /*   assigned_to_user: z.object({
+app/[locale]/(routes)/documents/components/columns.tsx:140:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/documents/components/columns.tsx:142:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/documents/components/columns.tsx:146:        {(row.getValue("assigned_to_user") as { name: string | null } | null)?.name ?? "Unassigned"}
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:94:      if (!res.ok) throw new Error("Failed to get presigned URL");
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:95:      const { presignedUrl, fileUrl, key } = await res.json();
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:99:      const uploadRes = await fetch(presignedUrl, {
+app/[locale]/(routes)/profile/page.tsx:1:// app/[locale]/(routes)/profile/page.tsx
+app/[locale]/(routes)/profile/page.tsx:4:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/page.tsx:18:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:4:import { useLocale, useTranslations } from "next-intl";
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:17:  const locale = useLocale();
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:21:  const t = useTranslations("LanguageSelector");
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:40:      router.replace(pathname, { locale: language });
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:49:      <Select defaultValue={locale} onValueChange={handleChange} disabled={isLoading}>
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:15:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:18:const logger = createClientLogger({ module: "app.[locale].(routes).profile.components.ProfilePhotoForm" });
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:27:  const t = useTranslations("ProfileForm");
+app/[locale]/(routes)/projects/boards/[boardId]/page.tsx:4:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/projects/boards/[boardId]/page.tsx:13:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).crm.tasks.viewtask.[taskId].components.data-table-row-actions" });
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:51:  const onAssign = async () => {
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:54:      await axios.post(`/api/projects/tasks/${document.id}/assign`, {
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:59:      toast.success("Something went wrong, while assigning document to task");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:61:      toast.success("Document was assigned to task");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:86:          <DropdownMenuItem onClick={onAssign}>
+app/[locale]/(routes)/profile/actions/api-keys.ts:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/profile/actions/api-keys.ts:25:  if (!session?.user?.id) throw new Error("Unauthorized");
+app/[locale]/(routes)/profile/actions/api-keys.ts:86:  if (!session?.user?.id) throw new Error("Unauthorized");
+app/[locale]/(routes)/profile/actions/api-keys.ts:110:  if (!session?.user?.id) throw new Error("Unauthorized");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).crm.tasks.viewtask.[taskId].components.data-table-row-actions-tasks" });
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:29:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:136:                      Assigned to
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:139:                      {task.assigned_user?.name || "Not assigned"}
+app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx:1:// app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx:7:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/page.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/page.tsx:36:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/page.tsx:56:  const dict = await getTranslations("DashboardPage");
+app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx:1:// app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx:3:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx:10:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:1:// app/[locale]/(routes)/profile/components/ProfileTabs.tsx
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:5:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:40:  const t = useTranslations("ProfilePage");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:38:    assigned_user: {
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:123:                    src={comment.assigned_user?.avatar || "/images/nouser.png"}
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:125:                  <AvatarFallback>{comment.assigned_user?.name}</AvatarFallback>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:130:                      {comment.assigned_user?.name}
+app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx:1:// app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx:8:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/profile/components/ProfileHero.tsx:1:// app/[locale]/(routes)/profile/components/ProfileHero.tsx
+app/[locale]/(routes)/profile/components/ProfileHero.tsx:3:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/components/ProfileHero.tsx:11:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:44:  const t = useTranslations("ProfileForm");
+app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx:1:// app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx:8:  const t = await getTranslations("ProfilePage");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx:10:  /*   assigned_to_user: z.object({
+app/[locale]/(routes)/profile/components/OpenAiForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/profile/components/OpenAiForm.tsx:44:  const t = useTranslations("OpenAiForm");
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:52:const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].dialogs.NewTaskInProject" });
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:223:                      <FormLabel>Assigned to</FormLabel>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:228:                          placeholder="Select assigned user"
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:30:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:44:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:15:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:17:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:25:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/projects/_components/ProjectsView.tsx:3:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/projects/_components/ProjectsView.tsx:15:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/projects/_components/ProjectsView.tsx:19:  const t = await getTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:79:const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].components.Kanban" });
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:533:                Edit task details including title, description, due date, priority, and assignments
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:17:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:19:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:27:          row.original.assigned_to_user.name ?? "Unassigned"
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:30:import { assignDocumentToTask } from "@/actions/projects/assign-document-to-task";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.viewtask.[taskId].components.data-table-row-actions" });
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:51:  const onAssign = async () => {
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:54:      const result = await assignDocumentToTask({
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:61:        toast.success("Document was assigned to task");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:65:      toast.success("Something went wrong, while assigning document to task");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:91:          <DropdownMenuItem onClick={onAssign}>
+app/[locale]/(routes)/projects/data/schema.tsx:10:  assigned_user: z.object({
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:30:import { disconnectDocumentFromTask } from "@/actions/projects/assign-document-to-task";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.viewtask.[taskId].components.data-table-row-actions-tasks" });
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:45:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.UpdateTask" });
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:223:                  <FormLabel>Assigned to</FormLabel>
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:228:                      placeholder="Select assigned user"
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:25:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.components.data-table-row-actions" });
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:2:import { Comment } from "@/app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:117:                    src={comment.assigned_user?.avatar || "/images/nouser.png"}
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:119:                  <AvatarFallback>{comment.assigned_user?.name}</AvatarFallback>
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:124:                      {comment.assigned_user?.name}
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:45:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:53:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.NewTask" });
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:65:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:66:  const c = useTranslations("Common");
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:227:                      <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:232:                          placeholder={t("newTask.assignedToPlaceholder")}
+app/[locale]/(routes)/projects/dashboard/page.tsx:6:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/projects/dashboard/page.tsx:9:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/projects/dashboard/page.tsx:14:  const t = await getTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:35:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:43:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.NewProject" });
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:51:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/page.tsx:4:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/projects/page.tsx:9:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/projects/page.tsx:15:  const t = await getTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/page.tsx:17:  if (!session) return redirect("/sign-in");
+app/[locale]/(routes)/projects/tasks/[userId]/page.tsx:3:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/projects/tasks/[userId]/page.tsx:7:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:15:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:17:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:25:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/projects/tasks/page.tsx:8:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/projects/tasks/page.tsx:12:  const t = await getTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:50:    accessorKey: "assigned_user",
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:52:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:60:          row.getValue("assigned_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:17:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:19:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:27:          row.original.assigned_to_user.name ?? "Unassigned"
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx:7:import { getTaskDone } from "@/app/[locale]/(routes)/projects/actions/get-task-done";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx:19:import UpdateTaskDialog from "@/app/[locale]/(routes)/projects/dialogs/UpdateTask";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx:86:              Update task details, due date, priority, status, and assigned users
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:35:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:42:const logger = createClientLogger({ module: "app.[locale].(routes).projects.table-components.data-table-row-actions" });
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:52:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:15:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:24:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:12:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:22:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:17:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:26:  const t = useTranslations("ProjectsPage");
+app/[locale]/(routes)/projects/table-components/columns.tsx:29:    accessorKey: "assigned_user",
+app/[locale]/(routes)/projects/table-components/columns.tsx:31:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/projects/table-components/columns.tsx:36:        {row.original.assigned_user.name ?? "Unassigned"}
+app/[locale]/(routes)/crm/components/ContactsView.tsx:5:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/components/ContactsView.tsx:40:  const t = useTranslations("CrmPage");
+app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:20:  assigned_account: z.object({}).optional().nullable(),
+app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:21:  assigned_sales_stage: z.object({}).optional().nullable(),
+app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:22:  assigned_to_user: z.object({}).optional().nullable(),
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:5:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:46:  const t = useTranslations("CrmPage");
+app/[locale]/(routes)/crm/components/AccountsView.tsx:5:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/components/AccountsView.tsx:39:  const t = useTranslations("CrmPage");
+app/[locale]/(routes)/crm/components/LeadsView.tsx:5:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/components/LeadsView.tsx:39:  const t = useTranslations("CrmPage");
+app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:17:  assigned_to: z.string().nullable(),
+app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:26:  assigned_account: z
+app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:31:  assigned_to_user: z
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:3:import { columns } from "@/app/[locale]/(routes)/documents/components/columns";
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:4:import { DocumentsDataTable } from "@/app/[locale]/(routes)/documents/components/data-table";
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:5:import { BulkUploadModal } from "@/app/[locale]/(routes)/documents/components/bulk-upload-modal";
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:46:          "No assigned documents found"
+app/[locale]/(routes)/crm/components/ContractsView.tsx:4:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/components/ContractsView.tsx:30:  const t = useTranslations("CrmPage");
+app/[locale]/(routes)/crm/accounts/table-data/schema.tsx:10:  assigned_to_user: z.object({}).nullable().optional(),
+app/[locale]/(routes)/crm/contracts/[contractId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+app/[locale]/(routes)/crm/products/[productId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/products/[productId]/page.tsx:31:  const serializedAssignments = serializeDecimalsList(
+app/[locale]/(routes)/crm/products/[productId]/page.tsx:76:            Accounts ({serializedAssignments.length})
+app/[locale]/(routes)/crm/products/[productId]/page.tsx:92:            assignments={serializedAssignments as any}
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:36:const logger = createClientLogger({ module: "app.[locale].(routes).crm.accounts.table-components.data-table-row-actions" });
+app/[locale]/(routes)/crm/contracts/[contractId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:65:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:67:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:75:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:83:    accessorKey: "assigned_account",
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:85:      <DataTableColumnHeader column={column} title="Assigned account" />
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:93:          row.getValue("assigned_account")?.name ?? "Unassigned"
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:165:                    Assigned Account
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:168:                    {data.assigned_account ? (
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:170:                        href={`/crm/accounts/${data.assigned_account.id}`}
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:173:                        {data.assigned_account.name}
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:185:                  <p className="text-sm font-medium leading-none">Assigned To</p>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:187:                    {data.assigned_to_user?.name ?? "N/A"}
+app/[locale]/(routes)/crm/products/[productId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/opportunities/page.tsx:9:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/opportunities/page.tsx:13:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:44:      <DataTableColumnHeader column={column} title="Customer signed" />
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:50:          : "Not signed yet"}
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:67:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:69:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:74:        {row.original.assigned_to_user
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:75:          ? row.original.assigned_to_user.name
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:76:          : "Unassigned"}
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:90:        {row.original.assigned_account
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:91:          ? row.original.assigned_account.name
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:92:          : "Unassigned"}
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:27:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:29:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:34:        {(row.getValue("assigned_to_user") as { name?: string } | null)?.name ??
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:35:          "Unassigned"}
+app/[locale]/(routes)/crm/products/[productId]/components/EditProductButton.tsx:6:import UpdateProductForm from "@/app/[locale]/(routes)/crm/products/_forms/update-product";
+app/[locale]/(routes)/crm/contracts/page.tsx:7:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/contracts/page.tsx:11:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/accounts/page.tsx:8:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/accounts/page.tsx:11:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:18:interface Assignment {
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:30:  assignments: Assignment[];
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:43:  assignments,
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:55:  if (!assignments || assignments.length === 0) {
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:58:        No accounts assigned to this product yet.
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:77:        {assignments.map((a) => (
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:8:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:60:  const t = useTranslations("CrmOpportunityForm");
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:61:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:76:    assigned_to: z.string().nullable().optional(),
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:94:      assigned_to: initialData.assigned_to ?? "",
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:336:                  name="assigned_to"
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:339:                      <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:357:                      <FormLabel>{t("assignedAccount")}</FormLabel>
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:375:                      <FormLabel>Assigned Contact</FormLabel>
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:46:  const t = useTranslations("CrmAccountForm");
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:47:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:78:    assigned_to: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:116:          assigned_to: "",
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:511:                name="assigned_to"
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:514:                    <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/page.tsx:5:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/page.tsx:8:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:9:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:72:  const t = useTranslations("CrmOpportunityForm");
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:73:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:113:    assigned_to: z.string(),
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:132:      assigned_to: "",
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:156:        assigned_to: "",
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:385:                  name="assigned_to"
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:388:                      <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:406:                      <FormLabel>{t("assignedAccount")}</FormLabel>
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:439:                      <FormLabel>Assigned Contact</FormLabel>
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:446:                            <SelectValue placeholder="Select a user to assign the account" />
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:35:  const [assignedTo, setAssignedTo] = useState<string>(data.assigned_to ?? "");
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:89:    const assigned_to = formData.get("assigned_to") as string;
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:105:      assigned_to,
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:113:      description="Update contract details, dates, status, and assignments"
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:207:              Assigned To
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:210:              value={assignedTo}
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:211:              onChange={setAssignedTo}
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:212:              placeholder="Select assigned user"
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:213:              name="assigned_to"
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:4:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:37:  const t = useTranslations("CrmAccountForm");
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:38:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:59:    assigned_to: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:444:                name="assigned_to"
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:447:                    <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:7:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:34:  const [assignedTo, setAssignedTo] = useState<string>("");
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:35:  const t = useTranslations("CrmContractForm");
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:36:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:67:    const assigned_to = formData.get("assigned_to") as string;
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:80:      assigned_to,
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:91:      description="Create a new contract with specified terms, dates, and assigned users"
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:148:          <label className="text-sm font-medium">{c("assignedTo")}</label>
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:150:            value={assignedTo}
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:151:            onChange={setAssignedTo}
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:154:            name="assigned_to"
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:51:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:53:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:57:        {(row.getValue("assigned_to_user") as { name?: string } | null)?.name ??
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:58:          "Unassigned"}
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:65:    accessorKey: "assigned_account",
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:67:      <DataTableColumnHeader column={column} title="Assigned account" />
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:71:        {(row.original as any).assigned_accounts?.name ?? "Unassigned"}
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/contacts/page.tsx:9:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/contacts/page.tsx:12:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:31:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/crm/leads/page.tsx:11:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/crm/leads/page.tsx:16:  const t = await getTranslations("CrmPage");
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:25:const logger = createClientLogger({ module: "app.[locale].(routes).crm.accounts.[accountId].tasks-data-table.components.data-table-row-actions" });
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:47:  const t = useTranslations("CrmContactForm");
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:48:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:66:    assigned_to: z.string(),
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:67:    assigned_account: z.string().nullable().optional(),
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:85:    assigned_to: initialData.assigned_to ?? "",
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:94:    assigned_account: initialData.accountsIDs ?? "",
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:360:                  name="assigned_to"
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:363:                      <FormLabel>{t("assignedUser")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:368:                          placeholder={t("assignedUserPlaceholder")}
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:378:                  name="assigned_account"
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:381:                      <FormLabel>{t("assignAccount")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:386:                          placeholder={t("assignAccountPlaceholder")}
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:32:    assigned_sales_stage: { name: string };
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:33:    assigned_to_user: { name: string };
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:34:    assigned_account: { name: string };
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:35:    assigned_type: { name: string };
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:93:                {data.assigned_sales_stage?.name
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:94:                  ? data.assigned_sales_stage?.name
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:95:                  : "Not assigned"}
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:118:              <p className="text-sm font-medium leading-none">Assigned to</p>
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:120:                {data.assigned_to_user.name}
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:131:                {data.assigned_account?.name
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:132:                  ? data.assigned_account?.name
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:133:                  : "Not assigned"}
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:183:                {data.assigned_type?.name ? data.assigned_type?.name : "N/A"}
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:45:  const t = useTranslations("CrmContactForm");
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:46:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:63:    assigned_to: z.string(),
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:64:    assigned_account: z.string().optional(),
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:90:      assigned_to: "",
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:91:      assigned_account: "",
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:348:                  name="assigned_to"
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:351:                      <FormLabel>{t("assignedUser")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:356:                          placeholder={t("assignedUserPlaceholder")}
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:366:                  name="assigned_account"
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:369:                      <FormLabel>{t("assignAccount")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:376:                            <SelectValue placeholder={t("assignAccountPlaceholder")} />
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:29:    accessorKey: "assigned_user",
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:31:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:39:          row.getValue("assigned_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/crm/accounts/[accountId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/contacts/[contactId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:64:                    Create a new task for this account with assigned user, due
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:82:          "No assigned tasks found"
+app/[locale]/(routes)/crm/contacts/[contactId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:184:                      <FormLabel>Assigned to</FormLabel>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:189:                          placeholder="Select assigned user"
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:53:  const [messages, setMessages] = useState<AgentMessage[]>([]);
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:198:              {messages.map((m, i) => (
+app/[locale]/(routes)/crm/accounts/[accountId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:49:    accessorKey: "assigned_to_user",
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:51:      <DataTableColumnHeader column={column} title="Assigned to" />
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:59:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:77:          row.getValue("company") ?? "Unassigned"
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:84:                    {data.vat ? data.vat : "Not assigned"}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:153:                    Assigned to
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:156:                    {data.assigned_to_user?.name ?? "Unassigned"}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:391:              <p className="text-sm font-medium leading-none">Assigned to</p>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:393:                {data.assigned_to_user.name}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:79:                    {data.assigned_accounts?.name}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:120:                    Assigned to
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:123:                    {users.find((user) => user.id === data.assigned_to)?.name}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:9:import { assignProduct } from "@/actions/crm/account-products/assign-product";
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:18:interface AssignProductFormProps {
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:24:const AssignProductForm = ({
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:28:}: AssignProductFormProps) => {
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:32:  const { execute, fieldErrors, isLoading } = useAction(assignProduct, {
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:34:      toast.success("Product assigned successfully");
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:76:      title="Assign Product"
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:77:      description="Assign a product or service to this account"
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:142:            "Assign"
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:150:export default AssignProductForm;
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:44:  const t = useTranslations("CrmLeadForm");
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:45:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:62:    assigned_to: z.string().optional().nullable(),
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:86:      assigned_to: data.assigned_to ?? undefined,
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:307:                name="assigned_to"
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:310:                    <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:349:                  <FormLabel>{t("assignAccount")}</FormLabel>
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:354:                      placeholder={t("assignAccountPlaceholder")}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:25:import AssignProductForm from "./AssignProductForm";
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:26:import { removeAssignment } from "@/actions/crm/account-products/remove-assignment";
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:56:    const result = await removeAssignment(id);
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:60:      toast.success("Assignment cancelled");
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:88:            <AssignProductForm
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:105:          "No products assigned to this account"
+app/[locale]/(routes)/crm/leads/[leadId]/page.tsx:2:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:42:  const t = useTranslations("CrmLeadForm");
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:43:  const c = useTranslations("Common");
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:58:    assigned_to: z.string().optional(),
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:80:      assigned_to: "",
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:323:                name="assigned_to"
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:326:                    <FormLabel>{c("assignedTo")}</FormLabel>
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:345:                  <FormLabel>{t("assignAccount")}</FormLabel>
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:352:                        <SelectValue placeholder={t("assignAccountPlaceholder")} />
+app/[locale]/(routes)/crm/leads/[leadId]/components/HistoryTab.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:151:                    Assigned to
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:154:                    {users.find((user) => user.id === data.assigned_to)?.name}
+app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:12:import { signOut } from "@/lib/auth-client";
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:64:        <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/campaigns/targets/components/EnrichFieldSelector.tsx:1:export { EnrichFieldSelector } from "@/app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector";
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:39:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:1:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:29:    redirect("/auth/signin");
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:104:                No tasks assigned.
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:164:                No opportunities assigned.
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:187:                        {opp.assigned_sales_stage?.name ?? "—"}
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:208:                No leads assigned.
+app/[locale]/(routes)/components/nav-user.tsx:4:import { signOut } from "@/lib/auth-client"
+app/[locale]/(routes)/components/nav-user.tsx:45: *   - Logout (signOut action)
+app/[locale]/(routes)/components/nav-user.tsx:138:            <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+app/[locale]/(routes)/components/app-sidebar.tsx:52: * Phase 5 Updates (Design Consistency):
+app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:57:const logger = createClientLogger({ module: "app.[locale].(routes).crm.dashboard._components.CRMKanban" });
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:167:                opportunity.assigned_to_user?.avatar
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:168:                  ? opportunity.assigned_to_user.avatar
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:173:          <span className="text-xs">{opportunity.assigned_to_user?.name}</span>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:11:import { EnrichFieldSelector } from "@/app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:72:  const [messages, setMessages] = useState<AgentMessage[]>([]);
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:236:              {messages.map((m, i) => (
+app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx:1:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx:12:    redirect("/auth/signin");
+app/[locale]/(routes)/admin/audit-log/page.tsx:1:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/admin/users/page.tsx:7:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/admin/users/page.tsx:13:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/admin/users/page.tsx:17:  const t = await getTranslations("AdminPage");
+app/[locale]/(routes)/admin/actions/api-keys.ts:2:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/admin/actions/api-keys.ts:24:  if (!session || session.user.role !== "admin") throw new Error("Unauthorized");
+app/[locale]/(routes)/admin/actions/api-keys.ts:63:  if (!session || session.user.role !== "admin") throw new Error("Unauthorized");
+app/[locale]/(routes)/admin/actions/api-keys.ts:85:  if (!session || session.user.role !== "admin") throw new Error("Unauthorized");
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:39:      <DataTableColumnHeader column={column} title="Last login" />
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:69:            {loading ? "Deleting…" : item.usageCount > 0 ? "Reassign & Delete" : "Delete"}
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:26:  opportunityType: { model: () => prisma.crm_Opportunities_Type,          countRelation: "assigned_opportunities",                updateMany: null },
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:27:  salesStage:      { model: () => prisma.crm_Opportunities_Sales_Stages,  countRelation: "assigned_opportunities_sales_stage",    updateMany: null },
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:83:    throw new Error(`Config type does not support reassignment`);
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:6:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:27:  const t = useTranslations("AdminPage");
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:28:import { useTranslations } from "next-intl";
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:43:  const t = useTranslations("AdminPage");
+app/[locale]/(routes)/admin/llm-keys/page.tsx:3:import { getSession } from "@/lib/auth-server";
+app/[locale]/(routes)/admin/llm-keys/page.tsx:5:import { getTranslations } from "next-intl/server";
+app/[locale]/(routes)/admin/llm-keys/page.tsx:10:  const t = await getTranslations("AdminPage");
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx:1:import Container from "@/app/[locale]/(routes)/components/ui/Container";
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '20,45p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "find 'app/[locale]/(auth)/sign-in' -maxdepth 3 -type f | sort" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+
+ succeeded in 0ms:
+    20	  InputOTP,
+    21	  InputOTPGroup,
+    22	  InputOTPSlot,
+    23	} from "@/components/ui/input-otp";
+    24	
+    25	type Step = "email" | "otp";
+    26	
+    27	function getSubmitLabel(step: Step) {
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+
+exec
+/usr/bin/bash -lc "git status --short -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "sed -n '1,160p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '78,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    78	  };
+    79	
+    80	  const verifyOtp = async () => {
+    81	    if (otp.length !== 6) {
+    82	      toast.error("Please enter the 6-digit code.");
+    83	      return;
+    84	    }
+    85	    setIsLoading(true);
+    86	    try {
+    87	      const { error } = await authClient.signIn.emailOtp({
+    88	        email,
+    89	        otp,
+    90	      });
+    91	      if (error) {
+    92	        toast.error(error.message || "Invalid or expired code.");
+    93	        return;
+    94	      }
+    95	      toast.success("Login successful.");
+    96	      window.location.href = "/";
+    97	    } catch (error) {
+    98	      toast.error("Verification failed.");
+    99	    } finally {
+   100	      setIsLoading(false);
+   101	    }
+   102	  };
+   103	
+   104	  return (
+   105	    <Card className="shadow-lg my-5">
+   106	      <CardHeader className="space-y-1">
+   107	        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+   108	        <CardDescription>Choose your sign-in method</CardDescription>
+   109	      </CardHeader>
+   110	      <CardContent className="grid gap-4">
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate --max-count=5 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+9560934 fix(auth): fix better-auth schema compatibility and E2E test infrastructure
+1eb6635 feat(auth): rewrite login page with Google OAuth + Email OTP
+8e5f07e feat: replace inline spinners with skeleton rows in forms and dialogs
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+
+exec
+/usr/bin/bash -lc "git show --stat --oneline --name-only 9be250f -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --unified=20 --format=short 9be250f -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f Polish sign-in copy and labels
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+
+ succeeded in 0ms:
+commit 9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+
+    Polish sign-in copy and labels
+
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -7,45 +7,54 @@ import { Icons } from "@/components/ui/icons";
+ import { Button } from "@/components/ui/button";
+ import {
+   Card,
+   CardContent,
+   CardDescription,
+   CardHeader,
+   CardTitle,
+ } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import { toast } from "sonner";
+ import { MailIcon } from "lucide-react";
+ import {
+   InputOTP,
+   InputOTPGroup,
+   InputOTPSlot,
+ } from "@/components/ui/input-otp";
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+     try {
+       await authClient.signIn.social({
+         provider: "google",
+         callbackURL: "/",
+       });
+     } catch (error) {
+       toast.error("Something went wrong with Google sign-in.");
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   const sendOtp = async () => {
+     if (!email) {
+       toast.error("Please enter your email address.");
+       return;
+     }
+@@ -78,108 +87,108 @@ export function LoginComponent() {
+       const { error } = await authClient.signIn.emailOtp({
+         email,
+         otp,
+       });
+       if (error) {
+         toast.error(error.message || "Invalid or expired code.");
+         return;
+       }
+       toast.success("Login successful.");
+       window.location.href = "/";
+     } catch (error) {
+       toast.error("Verification failed.");
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+         <Button
+           variant="outline"
+           onClick={loginWithGoogle}
+           disabled={isLoading}
+           className="w-full"
+         >
+           <Icons.google className="mr-2 h-4 w-4" />
+           Continue with Google
+         </Button>
+ 
+         <div className="relative">
+           <div className="absolute inset-0 flex items-center">
+             <span className="w-full border-t" />
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+ 
+         {step === "email" && (
+           <div className="grid gap-3">
+             <div className="grid gap-1.5">
+               <Label htmlFor="email">Email</Label>
+               <Input
+                 id="email"
+                 type="email"
+                 placeholder="name@domain.com"
+
+codex
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the browser during the initial hydration pass.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component computes:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a client component that is still server-rendered first, the server HTML contains `Login`, but the first client render contains `Sign in`. That exactly matches the observed hydration diff:
+
+```diff
++ Sign in
+- Login
+```
+
+The same pattern also exists for `dividerLabel` on lines 37-40, where the server renders `Or continue with email` and the client renders `Or continue with Email`. That may cause an additional hydration mismatch after the title mismatch.
+
+The likely introducing change is commit `9be250f` (`Polish sign-in copy and labels`), which replaced static text with these `typeof window` branches.
+
+No evidence points to locale formatting, time/random data, browser extension mutation, or invalid HTML nesting. The stack trace and React diff point directly at the `CardTitle` text rendered by `LoginComponent` on `/en/sign-in`.
+
+Recommended fix direction: remove the server/client text branch and render the same string on both sides, probably `Sign in`, for the initial render.
+tokens used
+22,411
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the browser during the initial hydration pass.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component computes:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a client component that is still server-rendered first, the server HTML contains `Login`, but the first client render contains `Sign in`. That exactly matches the observed hydration diff:
+
+```diff
++ Sign in
+- Login
+```
+
+The same pattern also exists for `dividerLabel` on lines 37-40, where the server renders `Or continue with email` and the client renders `Or continue with Email`. That may cause an additional hydration mismatch after the title mismatch.
+
+The likely introducing change is commit `9be250f` (`Polish sign-in copy and labels`), which replaced static text with these `typeof window` branches.
+
+No evidence points to locale formatting, time/random data, browser extension mutation, or invalid HTML nesting. The stack trace and React diff point directly at the `CardTitle` text rendered by `LoginComponent` on `/en/sign-in`.
+
+Recommended fix direction: remove the server/client text branch and render the same string on both sides, probably `Sign in`, for the initial render.

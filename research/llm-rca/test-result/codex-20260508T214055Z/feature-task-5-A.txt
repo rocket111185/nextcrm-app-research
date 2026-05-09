@@ -1,0 +1,1884 @@
+run_name: feature-task-5-A
+case_name: feature-task-5
+variant: A
+target_branch: feature/task-5
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:45:04Z
+elapsed_seconds: 77
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-5/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: the CSV target import path assumes the `employees` field is always a JSON object with numeric `min` and `max` properties, but the imported CSV likely supplied a normal employee/headcount value such as `150`, `"150"`, `{}`, or another JSON-parseable value without `min`/`max`.
+
+Evidence:
+
+- The stack points directly to `parseEmployeesValue()` inside `importTargets()`.
+- In [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11), the parser does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+- The observed error is:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That means `parsed.min` or `parsed.max` was `undefined`. This is consistent with an employee value that parsed successfully but was not shaped like `{ min: number, max: number }`.
+
+- `importTargets()` calls `parseEmployeesValue(row.employees)` unconditionally before validating the row, so any malformed/mismatched employee value aborts the whole server action.
+- The import UI includes `employees` as a mappable field, and `suggestMapping()` aliases headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`. That makes it likely a standard CSV headcount column was automatically mapped to `employees`.
+- The preview step only validates `last_name` or `company`; it does not parse or validate `employees`, so the user can reach import successfully and then hit the server-side crash.
+
+Likely regression source: commit `9790f4c` (`Handle legacy employee range imports`) introduced `parseEmployeesValue()` and changed imported `employees` from `row.employees || null` to the parsed range format. The implementation handles only one legacy structured format and does not tolerate ordinary CSV values.
+
+Impact: POST `/en/campaigns/targets` fails during CSV import when an `employees` column is mapped and contains anything other than a strict JSON object with both `min` and `max`. The error is unhandled, so the import aborts instead of skipping the bad row or importing the raw value.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e098d-2030-7163-9164-77b0b1c346b4
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T19:04:06.332Z",
+      "timestampNs": "1777921446332505650",
+      "labels": {
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "err_digest": "1383626540",
+        "err_message": "Cannot read properties of undefined (reading 'toString')",
+        "err_stack": "TypeError: Cannot read properties of undefined (reading 'toString')\n    at parseEmployeesValue (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:383:26)\n    at /home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:416:27\n    at Array.forEach (<anonymous>)\n    at importTargets (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:399:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async executeActionAndPrepareForRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:5248)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:1986\n    at async handleAction (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:62:25378)\n    at async renderToHTMLOrFlightImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:69:55630)\n    at async doRender (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4079:28)\n    at async AppPageRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:71:63567)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4372:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4772:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)",
+        "err_type": "TypeError",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "pid": "94945",
+        "request_method": "POST",
+        "request_path": "/en/campaigns/targets",
+        "route_path": "/[locale]/campaigns/targets",
+        "route_renderSource": "react-server-components-payload",
+        "route_routeType": "action",
+        "route_routerKind": "App Router",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "af6b25b5543af455",
+        "time": "2026-05-04T19:04:06.330Z",
+        "trace_flags": "01",
+        "trace_id": "b7fc50998917f6d53bb5de0ae8776eb5"
+      },
+      "line": "Unhandled request error",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc 'rg -n "campaigns/targets|targets" app src components lib -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: src: No such file or directory (os error 2)
+lib/mcp/tools/index.ts:5:export { crmTargetTools } from "./crm-targets";
+lib/mcp/tools/index.ts:21:import { crmTargetTools } from "./crm-targets";
+lib/mcp/tools/crm-targets.ts:15:    name: "crm_list_targets",
+lib/mcp/tools/crm-targets.ts:16:    description: "List CRM targets created by the authenticated user",
+lib/mcp/tools/crm-targets.ts:21:        prismadb.crm_Targets.findMany({
+lib/mcp/tools/crm-targets.ts:26:        prismadb.crm_Targets.count({ where }),
+lib/mcp/tools/crm-targets.ts:36:      const target = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:44:    name: "crm_search_targets",
+lib/mcp/tools/crm-targets.ts:45:    description: "Search targets by name, email, or company (substring match)",
+lib/mcp/tools/crm-targets.ts:62:        prismadb.crm_Targets.findMany({
+lib/mcp/tools/crm-targets.ts:67:        prismadb.crm_Targets.count({ where }),
+lib/mcp/tools/crm-targets.ts:97:      const target = await prismadb.crm_Targets.create({
+lib/mcp/tools/crm-targets.ts:129:      const existing = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:134:      const target = await prismadb.crm_Targets.update({
+lib/mcp/tools/crm-targets.ts:146:      const existing = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:150:      const target = await prismadb.crm_Targets.update({
+lib/mcp/tools/crm-target-lists.ts:24:          include: { _count: { select: { targets: true } } },
+lib/mcp/tools/crm-target-lists.ts:45:          targets: {
+lib/mcp/tools/crm-target-lists.ts:49:          _count: { select: { targets: true } },
+lib/mcp/tools/crm-target-lists.ts:112:    description: "Add one or more targets to a target list",
+lib/mcp/tools/crm-target-lists.ts:125:      await prismadb.targetsToTargetLists.createMany({
+lib/mcp/tools/crm-target-lists.ts:140:    description: "Remove one or more targets from a target list",
+lib/mcp/tools/crm-target-lists.ts:149:      await prismadb.targetsToTargetLists.deleteMany({
+lib/mcp/tools/crm-enrichment.ts:123:      const target = await prismadb.crm_Targets.findUnique({
+lib/mcp/tools/crm-enrichment.ts:156:    description: "Enrich multiple targets in bulk (max 100). Dispatches async jobs.",
+lib/mcp/tools/crm-enrichment.ts:179:        name: "enrich/targets.bulk",
+app/api/inngest/route.ts:15:import { enrichTargetsBulk } from "@/inngest/functions/enrich-targets-bulk";
+app/api/inngest/route.ts:41:    enrichTargetsBulk,
+app/api/crm/targets/enrich/route.ts:43:  const target = await prismadb.crm_Targets.findUnique({
+app/api/crm/targets/enrich-bulk/route.ts:20:    return NextResponse.json({ error: "Maximum 100 targets per batch" }, { status: 400 });
+app/api/crm/targets/enrich-bulk/route.ts:43:    name: "enrich/targets.bulk",
+app/api/crm/targets/[id]/route.ts:32:  const target = await prismadb.crm_Targets.update({
+lib/enrichment/presets/target-fields.ts:35:// email is included here because BulkEnrichTargetsModal previously listed it; keep for backwards compat.
+lib/enrichment/presets/target-fields.ts:59:// Used by PATCH /api/crm/targets/[id] and by field name validation in enrich routes.
+components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+components/modals/ImportTargetsModal.tsx:6:import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+components/modals/ImportTargetsModal.tsx:62:const ImportTargetsModal = () => {
+components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+components/modals/ImportTargetsModal.tsx:208:            Import Targets from CSV
+components/modals/ImportTargetsModal.tsx:214:            {step === "upload" && "Select a CSV file to import targets."}
+components/modals/ImportTargetsModal.tsx:389:export default ImportTargetsModal;
+components/modals/CreateTargetListModal.tsx:57:            Create a new list to group your targets for campaigns or outreach.
+components/modals/CreateTargetListModal.tsx:75:              placeholder="A list of targets for Q1 outreach campaign"
+components/modals/AddTargetToListModal.tsx:6:import { getTargets } from "@/actions/crm/get-targets";
+components/modals/AddTargetToListModal.tsx:7:import { addTargetsToList } from "@/actions/crm/target-lists/add-targets-to-list";
+components/modals/AddTargetToListModal.tsx:43:  const [targets, setTargets] = useState<Target[]>([]);
+components/modals/AddTargetToListModal.tsx:52:    getTargets()
+components/modals/AddTargetToListModal.tsx:54:        setTargets(all.filter((t) => !existingTargetIds.includes(t.id)));
+components/modals/AddTargetToListModal.tsx:57:        toast.error("Failed to load targets");
+components/modals/AddTargetToListModal.tsx:62:  const filtered = targets.filter((t) => {
+components/modals/AddTargetToListModal.tsx:94:    const result = await addTargetsToList(targetListId, selected);
+components/modals/AddTargetToListModal.tsx:111:          <DialogTitle>Add Targets to List</DialogTitle>
+components/modals/AddTargetToListModal.tsx:113:            Select targets to add to this list. Already-added targets are not shown.
+components/modals/AddTargetToListModal.tsx:137:              <p className="text-sm text-muted-foreground p-2">Loading targets...</p>
+components/modals/AddTargetToListModal.tsx:139:              <p className="text-sm text-muted-foreground p-2">No targets available.</p>
+lib/enrichment/agent-architecture/agents/metrics-agent.ts:23:    YOUR TARGETS:
+app/api/campaigns/targets/enrich/route.ts:2:export { POST, DELETE } from "@/app/api/crm/targets/enrich/route";
+app/api/campaigns/targets/enrich-bulk/route.ts:1:export { POST } from "@/app/api/crm/targets/enrich-bulk/route";
+app/api/campaigns/targets/[id]/route.ts:1:export { PATCH } from "@/app/api/crm/targets/[id]/route";
+app/api/campaigns/targets/[id]/enrich/route.ts:2:export { POST } from "@/app/api/crm/targets/[id]/enrich/route";
+app/[locale]/(routes)/layout.tsx:85:      targets: dict("crm.targets"),
+app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx:3:export const targetSchema = z.object({
+app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx:15:export type Target = z.infer<typeof targetSchema>;
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:32:import { BulkEnrichTargetsModal } from "../components/BulkEnrichTargetsModal";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:39:export function TargetsDataTable<TData, TValue>({
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:114:                  Enrich {table.getSelectedRowModel().rows.length} targets
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:117:              <BulkEnrichTargetsModal
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:16:import { targetSchema } from "../table-data/schema";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:21:import { deleteTarget } from "@/actions/crm/targets/delete-target";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:33:  const target = targetSchema.parse(row.original);
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:85:            onClick={() => router.push(`/crm/targets/${target?.id}`)}
+app/[locale]/(routes)/campaigns/targets/page.tsx:5:import TargetsView from "./components/TargetsView";
+app/[locale]/(routes)/campaigns/targets/page.tsx:6:import { getTargets } from "@/actions/crm/get-targets";
+app/[locale]/(routes)/campaigns/targets/page.tsx:8:const TargetsPage = async () => {
+app/[locale]/(routes)/campaigns/targets/page.tsx:9:  const targets = await getTargets();
+app/[locale]/(routes)/campaigns/targets/page.tsx:12:      title="Targets"
+app/[locale]/(routes)/campaigns/targets/page.tsx:13:      description="Manage your marketing and sales targets"
+app/[locale]/(routes)/campaigns/targets/page.tsx:16:        <TargetsView data={targets} />
+app/[locale]/(routes)/campaigns/targets/page.tsx:22:export default TargetsPage;
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:89:                    No enrichment jobs yet. Start one from the targets list.
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:97:                      href={`/crm/targets/${record.target.id}`}
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx:19:      const res = await fetch("/api/campaigns/targets/enrich-bulk", {
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:9:import { updateTarget } from "@/actions/crm/targets/update-target";
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:10:import { convertTarget } from "@/actions/crm/targets/convert-target";
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:16:import { TargetsDataTable } from "../table-components/data-table";
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:27:import ImportTargetsModal from "@/components/modals/ImportTargetsModal";
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:29:const TargetsView = ({ data }: any) => {
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:39:              onClick={() => router.push("/crm/targets")}
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:42:              Targets
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:47:            <ImportTargetsModal />
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:71:          "No targets found"
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:73:          <TargetsDataTable data={data} columns={columns} />
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:80:export default TargetsView;
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:7:import { createTarget } from "@/actions/crm/targets/create-target";
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:18:interface BulkEnrichTargetsModalProps {
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:24:export function BulkEnrichTargetsModal({ targetIds, open, onOpenChange }: BulkEnrichTargetsModalProps) {
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:31:      const res = await fetch("/api/campaigns/targets/enrich-bulk", {
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:37:        toast.success(`Enrichment started for ${targetIds.length} targets. Check the Enrichment Jobs page for progress.`);
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:57:          <DialogTitle>Enrich {targetIds.length} targets</DialogTitle>
+app/[locale]/(routes)/campaigns/new/page.tsx:11:      include: { _count: { select: { targets: true } } },
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:50:      const res = await fetch(`/api/crm/targets/${targetId}/contacts`, {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:70:      const res = await fetch(`/api/crm/targets/${targetId}/contacts/${contactId}/enrich`, {
+app/[locale]/(routes)/campaigns/new/components/WizardShell.tsx:22:  _count: { targets: number };
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:99:    const response = await fetch("/api/campaigns/targets/enrich", {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:150:      await fetch(`/api/campaigns/targets/enrich?sessionId=${sessionId}`, { method: "DELETE" });
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:166:    const res = await fetch(`/api/campaigns/targets/${targetId}`, {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx:18:      const res = await fetch(`/api/crm/targets/${targetId}/enrich`, {
+app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx:9:  _count: { targets: number };
+app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx:36:    .reduce((sum, l) => sum + l._count.targets, 0);
+app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx:76:              {l._count.targets} targets
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx:47:      <DataTableColumnHeader column={column} title="Targets" />
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx:51:        {(row.getValue("_count") as any)?.targets ?? 0}
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx:15:      description="View and manage targets in this list"
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:32:  const existingTargetIds: string[] = (data.targets ?? []).map((t: any) => t.target_id);
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:108:            <CardTitle>Targets ({data.targets?.length || 0})</CardTitle>
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:115:          {!data.targets || data.targets.length === 0 ? (
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:116:            <p className="text-sm text-muted-foreground">No targets in this list yet.</p>
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:119:              {data.targets.map((t: any) => (
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:127:                      href={`/crm/targets/${t.target?.id}`}
+app/[locale]/(routes)/components/menu-items/Campaigns.tsx:9:    targets: string;
+app/[locale]/(routes)/components/menu-items/Campaigns.tsx:21:      { title: localizations.targets, url: "/campaigns/targets" },
+app/[locale]/(routes)/components/app-sidebar.tsx:101:        targets: "Targets",
+
+exec
+/usr/bin/bash -lc 'rg -n "parseEmployeesValue|importTargets" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+./components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+./actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+./actions/crm/targets/import-targets.ts:20:export async function importTargets(
+./actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+
+exec
+/usr/bin/bash -lc "sed -n '1,140p' actions/crm/targets/import-targets.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' actions/crm/targets/suggest-mapping.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,260p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { createLogger } from "@/lib/logger";
+import { getSession } from "@/lib/auth-server";
+import { openAiHelper } from "@/lib/openai";
+
+
+const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+const TARGET_FIELDS = [
+  "last_name",
+  "first_name",
+  "email",
+  "mobile_phone",
+  "office_phone",
+  "company",
+  "position",
+  "company_website",
+  "personal_website",
+  "social_linkedin",
+  "social_x",
+  "social_instagram",
+  "social_facebook",
+  "personal_email",
+  "company_email",
+  "company_phone",
+  "city",
+  "country",
+  "industry",
+  "employees",
+  "description",
+];
+
+function fuzzyMatch(header: string): string | null {
+  const normalized = header.toLowerCase().replace(/[\s_\-]/g, "");
+  for (const field of TARGET_FIELDS) {
+    if (field.replace(/_/g, "") === normalized) return field;
+  }
+  const aliases: Record<string, string> = {
+    lastname: "last_name",
+    surname: "last_name",
+    familyname: "last_name",
+    firstname: "first_name",
+    givenname: "first_name",
+    name: "first_name",
+    mail: "email",
+    emailaddress: "email",
+    phone: "mobile_phone",
+    mobile: "mobile_phone",
+    cellphone: "mobile_phone",
+    mobilephone: "mobile_phone",
+    officephone: "office_phone",
+    workphone: "office_phone",
+    businessphone: "office_phone",
+    companyname: "company",
+    organization: "company",
+    organisation: "company",
+    jobtitle: "position",
+    title: "position",
+    role: "position",
+    website: "company_website",
+    companywebsite: "company_website",
+    personalwebsite: "personal_website",
+    linkedin: "social_linkedin",
+    linkedinurl: "social_linkedin",
+    twitter: "social_x",
+    x: "social_x",
+    instagram: "social_instagram",
+    facebook: "social_facebook",
+    personalemail: "personal_email",
+    directemail: "personal_email",
+    myemail: "personal_email",
+    companyemail: "company_email",
+    infoemail: "company_email",
+    contactemail: "company_email",
+    genericemail: "company_email",
+    companyphone: "company_phone",
+    mainphone: "company_phone",
+    switchboard: "company_phone",
+    hqphone: "company_phone",
+    hqcity: "city",
+    headquarterscity: "city",
+    hqcountry: "country",
+    nation: "country",
+    sector: "industry",
+    vertical: "industry",
+    businesstype: "industry",
+    headcount: "employees",
+    numemployees: "employees",
+    teamsize: "employees",
+    companysize: "employees",
+    about: "description",
+    bio: "description",
+    summary: "description",
+    companydescription: "description",
+  };
+  return aliases[normalized] ?? null;
+}
+
+export const suggestMapping = async (headers: string[]) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  if (!Array.isArray(headers)) return { error: "Invalid request" };
+
+  const userId = (session.user as any).id;
+  const openai = await openAiHelper(userId);
+
+  if (openai) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a data mapping assistant. Given a list of CSV column headers and a list of CRM field names, return a JSON object mapping each CSV header to the best matching CRM field, or null if no match. Only use the provided CRM field names as values. Return only valid JSON, no explanation.",
+          },
+          {
+            role: "user",
+            content: `CSV headers: ${JSON.stringify(headers)}\n\nCRM fields: ${JSON.stringify(TARGET_FIELDS)}\n\nReturn a JSON object like: { "CSV Header": "crm_field" or null }`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        const mapping: Record<string, string | null> = {};
+        for (const header of headers) {
+          const suggested = parsed[header];
+          mapping[header] = suggested && TARGET_FIELDS.includes(suggested) ? suggested : null;
+        }
+        return { mapping };
+      }
+    } catch (err) {
+      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+    }
+  }
+
+  // Fallback: fuzzy match
+  const mapping: Record<string, string | null> = {};
+  for (const header of headers) {
+    mapping[header] = fuzzyMatch(header);
+  }
+  return { mapping };
+};
+
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Import Targets from CSV
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Select a CSV file to import targets."}
+            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+            {step === "preview" && "Review the import summary before proceeding."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Upload */}
+        {step === "upload" && (
+          <div className="space-y-4 py-2">
+            <div className="border-2 border-dashed rounded-md p-8 text-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Select CSV file
+              </Button>
+              {selectedFile && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selected: {selectedFile.name}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Map Columns */}
+        {step === "mapping" && (
+          <div className="space-y-3 py-2">
+            {isSuggesting ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>AI is suggesting column mappings…</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                  <span>CRM Field</span>
+                  <span>CSV Column</span>
+                </div>
+                {TARGET_FIELDS.map((field) => (
+
+exec
+/usr/bin/bash -lc "sed -n '260,430p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+                {TARGET_FIELDS.map((field) => (
+                  <div key={field.key} className="grid grid-cols-2 gap-2 items-center">
+                    <span className="text-sm">
+                      {field.label}
+                      {field.required && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </span>
+                    <Select
+                      value={mapping[field.key] ?? SKIP_VALUE}
+                      onValueChange={(val) =>
+                        setMapping((prev) => ({ ...prev, [field.key]: val }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue placeholder="— skip —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SKIP_VALUE}>— skip —</SelectItem>
+                        {csvHeaders.map((h) => (
+                          <SelectItem key={h} value={h}>
+                            {h}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground pt-1">
+                  <span className="text-destructive">*</span> last_name or company is required per row.
+                </p>
+                {previewRows.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Employee ranges from legacy imports are expected in structured form.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Preview */}
+        {step === "preview" && preview && (
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border p-4 space-y-1">
+              <p className="text-sm font-medium">
+                Ready to import{" "}
+                <span className="text-green-600 dark:text-green-400">
+                  {preview.valid} row{preview.valid !== 1 ? "s" : ""}
+                </span>
+                {preview.skipped > 0 && (
+                  <>
+                    {" "}— {" "}
+                    <span className="text-yellow-600 dark:text-yellow-400">
+                      {preview.skipped} row{preview.skipped !== 1 ? "s" : ""} will be skipped
+                    </span>
+                  </>
+                )}
+                .
+              </p>
+              {preview.skipReasons.length > 0 && (
+                <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 pt-1">
+                  {preview.skipReasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                  {preview.skipped > preview.skipReasons.length && (
+                    <li>…and {preview.skipped - preview.skipReasons.length} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+            {preview.valid === 0 && (
+              <p className="text-sm text-destructive">
+                No valid rows to import. Go back and adjust your column mapping.
+              </p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="flex gap-2 sm:gap-0">
+          {step === "upload" && (
+            <Button variant="outline" onClick={() => handleOpenChange(false)}>
+              Cancel
+            </Button>
+          )}
+
+          {step === "mapping" && (
+            <>
+              <Button variant="outline" onClick={() => setStep("upload")}>
+                Back
+              </Button>
+              <Button
+                onClick={() => setStep("preview")}
+                disabled={isSuggesting}
+              >
+                Next
+              </Button>
+            </>
+          )}
+
+          {step === "preview" && (
+            <>
+              <Button variant="outline" onClick={() => setStep("mapping")} disabled={isLoading}>
+                Back
+              </Button>
+              <Button
+                onClick={handleImport}
+                disabled={isLoading || !preview || preview.valid === 0}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Importing…
+                  </>
+                ) : (
+                  "Import"
+                )}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default ImportTargetsModal;
+
+exec
+/usr/bin/bash -lc 'rg -n "model crm_Targets|crm_Targets" prisma -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+prisma/schema.prisma:49:  converted_targets  crm_Targets[]         @relation("target_converted_account")
+prisma/schema.prisma:145:  target            crm_Targets       @relation(fields: [targetId], references: [id])
+prisma/schema.prisma:169:  target   crm_Targets    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:383:  target   crm_Targets        @relation(fields: [target_id], references: [id])
+prisma/schema.prisma:491:  converted_targets     crm_Targets[]            @relation("target_converted_contact")
+prisma/schema.prisma:956:  created_targets      crm_Targets[]         @relation("created_targets")
+prisma/schema.prisma:1206:model crm_Targets {
+prisma/schema.prisma:1287:  target      crm_Targets     @relation(fields: [target_id], references: [id], onDelete: Cascade)
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:1:-- Add deletedAt/deletedBy to crm_Targets
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:2:ALTER TABLE "crm_Targets" ADD COLUMN "deletedAt" TIMESTAMP(3);
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:3:ALTER TABLE "crm_Targets" ADD COLUMN "deletedBy" UUID;
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:4:CREATE INDEX "crm_Targets_deletedAt_idx" ON "crm_Targets"("deletedAt");
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:1:-- AddColumn: new enrichment fields on crm_Targets (safe, additive, idempotent)
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:2:ALTER TABLE "crm_Targets"
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:15:CREATE INDEX IF NOT EXISTS "crm_Targets_converted_account_id_idx" ON "crm_Targets"("converted_account_id");
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:16:CREATE INDEX IF NOT EXISTS "crm_Targets_converted_contact_id_idx" ON "crm_Targets"("converted_contact_id");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:1:-- CreateTable (IF NOT EXISTS): crm_Targets — may already exist on upgraded DBs
+prisma/migrations/20260325000000_campaigns_module/migration.sql:2:CREATE TABLE IF NOT EXISTS "crm_Targets" (
+prisma/migrations/20260325000000_campaigns_module/migration.sql:25:    CONSTRAINT "crm_Targets_pkey" PRIMARY KEY ("id")
+prisma/migrations/20260325000000_campaigns_module/migration.sql:64:-- CreateIndex (IF NOT EXISTS) for crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:65:CREATE INDEX IF NOT EXISTS "crm_Targets_created_by_idx" ON "crm_Targets"("created_by");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:66:CREATE INDEX IF NOT EXISTS "crm_Targets_status_idx" ON "crm_Targets"("status");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:67:CREATE INDEX IF NOT EXISTS "crm_Targets_created_on_idx" ON "crm_Targets"("created_on");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:85:  ALTER TABLE "crm_Targets" ADD CONSTRAINT "crm_Targets_created_by_fkey"
+prisma/migrations/20260325000000_campaigns_module/migration.sql:95:-- AddForeignKey (idempotent) for TargetsToTargetLists → crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:98:    FOREIGN KEY ("target_id") REFERENCES "crm_Targets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000000_campaigns_module/migration.sql:107:-- AddForeignKey (idempotent) for crm_Target_Enrichment → crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:110:    FOREIGN KEY ("targetId") REFERENCES "crm_Targets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+prisma/migrations/20260325000000_campaigns_module/migration.sql:252:    FOREIGN KEY ("target_id") REFERENCES "crm_Targets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+exec
+/usr/bin/bash -lc 'rg -n "employees" prisma app components actions lib -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+prisma/schema.prisma:29:  employees            String?
+prisma/schema.prisma:688:model Employees {
+prisma/schema.prisma:1236:  employees        String?
+actions/reports/accounts.ts:45:    select: { employees: true },
+actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+actions/get-empoloyees.ts:3:export const getEmployees = async () => {
+actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+actions/crm/targets/suggest-mapping.ts:28:  "employees",
+actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+actions/crm/targets/suggest-mapping.ts:87:    numemployees: "employees",
+actions/crm/targets/suggest-mapping.ts:88:    teamsize: "employees",
+actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+actions/crm/targets/update-target.ts:27:  employees?: string;
+prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+prisma/migrations/0_init/migration.sql:242:CREATE TABLE "Employees" (
+prisma/migrations/0_init/migration.sql:251:    CONSTRAINT "Employees_pkey" PRIMARY KEY ("id")
+app/[locale]/(routes)/page.tsx:25:import { getEmployees } from "@/actions/get-empoloyees";
+app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+app/[locale]/(routes)/page.tsx:115:          href="/employees"
+app/[locale]/(routes)/page.tsx:116:          title="Employees"
+app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+app/[locale]/(routes)/employees/page.tsx:10:  const t = await getTranslations("EmployeesPage");
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:348:            <FormItem><FormLabel>Employees</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:312:            <FormItem><FormLabel>Employees</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+app/[locale]/(routes)/components/app-sidebar.tsx:39: * - Task 2.6: Added remaining module navigation items (Employees, Reports, Documents, Databox)
+
+exec
+/usr/bin/bash -lc "sed -n '1,110p' prisma/schema.prisma" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1206,1260p' prisma/schema.prisma" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+model crm_Targets {
+  id               String    @id @default(uuid()) @db.Uuid
+  first_name       String?
+  last_name        String
+  email            String?
+  mobile_phone     String?
+  office_phone     String?
+  company          String?
+  company_website  String?
+  personal_website String?
+  position         String?
+  social_x         String?
+  social_linkedin  String?
+  social_instagram String?
+  social_facebook  String?
+  status           Boolean   @default(true)
+  tags             String[]
+  notes            String[]
+  created_by       String?   @db.Uuid
+  created_on       DateTime? @default(now())
+  updatedAt        DateTime? @updatedAt
+  updatedBy        String?   @db.Uuid
+
+  // Extended contact fields
+  personal_email   String?
+  company_email    String?
+  company_phone    String?
+  city             String?
+  country          String?
+  industry         String?
+  employees        String?
+  description      String?
+
+  // Conversion tracking
+  converted_at         DateTime?
+  converted_account_id String?   @db.Uuid
+  converted_contact_id String?   @db.Uuid
+
+  deletedAt        DateTime?
+  deletedBy        String?   @db.Uuid
+
+  crate_by_user     Users?                 @relation("created_targets", fields: [created_by], references: [id])
+  target_lists      TargetsToTargetLists[]
+  enrichments       crm_Target_Enrichment[]
+  target_contacts   crm_Target_Contact[]
+  campaign_sends    crm_campaign_sends[]
+  converted_account crm_Accounts?          @relation("target_converted_account", fields: [converted_account_id], references: [id], onDelete: SetNull)
+  converted_contact crm_Contacts?          @relation("target_converted_contact", fields: [converted_contact_id], references: [id], onDelete: SetNull)
+
+  @@index([created_by])
+  @@index([status])
+  @@index([created_on])
+  @@index([converted_account_id])
+  @@index([converted_contact_id])
+  @@index([deletedAt])
+
+ succeeded in 0ms:
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model crm_Accounts {
+  id                   String    @id @default(uuid()) @db.Uuid
+  v                    Int       @map("__v")
+  createdAt            DateTime  @default(now())
+  createdBy            String?   @db.Uuid
+  updatedAt            DateTime? @updatedAt
+  updatedBy            String?   @db.Uuid
+  annual_revenue       String?
+  assigned_to          String?   @db.Uuid
+  billing_city         String?
+  billing_country      String?
+  billing_postal_code  String?
+  billing_state        String?
+  billing_street       String?
+  company_id           String?
+  description          String?
+  email                String?
+  employees            String?
+  fax                  String?
+  industry             String?   @db.Uuid
+  member_of            String?
+  name                 String
+  office_phone         String?
+  shipping_city        String?
+  shipping_country     String?
+  shipping_postal_code String?
+  shipping_state       String?
+  shipping_street      String?
+  status               String?   @default("Inactive")
+  type                 String?   @default("Customer")
+  vat                  String?
+  website              String?
+  deletedAt            DateTime?
+  deletedBy            String?   @db.Uuid
+
+  contacts           crm_Contacts[]
+  leads              crm_Leads[]
+  converted_targets  crm_Targets[]         @relation("target_converted_account")
+  industry_type      crm_Industry_Type?    @relation(fields: [industry], references: [id])
+  opportunities      crm_Opportunities[]
+  assigned_to_user   Users?                @relation("AccountAssignedTo", fields: [assigned_to], references: [id])
+  crm_accounts_tasks crm_Accounts_Tasks[]
+  contracts          crm_Contracts[]
+  documents          DocumentsToAccounts[]
+  watchers           AccountWatchers[]
+  embedding          crm_Embeddings_Accounts?
+  emails             EmailsToAccounts[]
+  accountProducts    crm_AccountProducts[]
+
+  @@index([assigned_to])
+  @@index([industry])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+model crm_Leads {
+  id String @id @default(uuid()) @db.Uuid
+  v  Int    @default(0) @map("__v")
+
+  createdAt         DateTime?          @default(now())
+  createdBy         String?            @db.Uuid
+  updatedAt         DateTime?          @updatedAt
+  updatedBy         String?            @db.Uuid
+  firstName         String?
+  lastName          String
+  company           String?
+  jobTitle          String?
+  email             String?
+  phone             String?
+  description       String?
+  lead_source_id  String?            @db.Uuid
+  lead_status_id  String?            @db.Uuid
+  lead_type_id    String?            @db.Uuid
+  lead_source     crm_Lead_Sources?  @relation("lead_source_relation", fields: [lead_source_id], references: [id])
+  lead_status     crm_Lead_Statuses? @relation("lead_status_relation", fields: [lead_status_id], references: [id])
+  lead_type       crm_Lead_Types?    @relation("lead_type_relation", fields: [lead_type_id], references: [id])
+  refered_by        String?
+  campaign          String?
+  assigned_to       String?            @db.Uuid
+  assigned_to_user  Users?             @relation("LeadAssignedTo", fields: [assigned_to], references: [id])
+  accountsIDs       String?            @db.Uuid
+  assigned_accounts crm_Accounts?      @relation(fields: [accountsIDs], references: [id])
+  documents         DocumentsToLeads[]
+  embedding         crm_Embeddings_Leads?
+  deletedAt         DateTime?
+  deletedBy         String?   @db.Uuid
+
+  @@index([assigned_to])
+  @@index([accountsIDs])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@index([lead_source_id])
+  @@index([lead_status_id])
+  @@index([lead_type_id])
+  @@index([createdAt])
+
+exec
+/usr/bin/bash -lc "sed -n '1,90p' prisma/migrations/20260325000000_campaigns_module/migration.sql" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+-- CreateTable (IF NOT EXISTS): crm_Targets — may already exist on upgraded DBs
+CREATE TABLE IF NOT EXISTS "crm_Targets" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "first_name" TEXT,
+    "last_name" TEXT NOT NULL,
+    "email" TEXT,
+    "mobile_phone" TEXT,
+    "office_phone" TEXT,
+    "company" TEXT,
+    "company_website" TEXT,
+    "personal_website" TEXT,
+    "position" TEXT,
+    "social_x" TEXT,
+    "social_linkedin" TEXT,
+    "social_instagram" TEXT,
+    "social_facebook" TEXT,
+    "status" BOOLEAN NOT NULL DEFAULT true,
+    "tags" TEXT[],
+    "notes" TEXT[],
+    "created_by" UUID,
+    "created_on" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3),
+    "updatedBy" UUID,
+
+    CONSTRAINT "crm_Targets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable (IF NOT EXISTS): crm_TargetLists — may already exist on upgraded DBs
+CREATE TABLE IF NOT EXISTS "crm_TargetLists" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "status" BOOLEAN NOT NULL DEFAULT true,
+    "created_by" UUID,
+    "created_on" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3),
+
+    CONSTRAINT "crm_TargetLists_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable (IF NOT EXISTS): TargetsToTargetLists — may already exist on upgraded DBs
+CREATE TABLE IF NOT EXISTS "TargetsToTargetLists" (
+    "target_id" UUID NOT NULL,
+    "target_list_id" UUID NOT NULL,
+
+    CONSTRAINT "TargetsToTargetLists_pkey" PRIMARY KEY ("target_id","target_list_id")
+);
+
+-- CreateTable (IF NOT EXISTS): crm_Target_Enrichment — may already exist on upgraded DBs
+CREATE TABLE IF NOT EXISTS "crm_Target_Enrichment" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "targetId" UUID NOT NULL,
+    "status" "crm_Enrichment_Status" NOT NULL DEFAULT 'PENDING',
+    "fields" TEXT[],
+    "result" JSONB,
+    "error" TEXT,
+    "triggeredBy" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "crm_Target_Enrichment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex (IF NOT EXISTS) for crm_Targets
+CREATE INDEX IF NOT EXISTS "crm_Targets_created_by_idx" ON "crm_Targets"("created_by");
+CREATE INDEX IF NOT EXISTS "crm_Targets_status_idx" ON "crm_Targets"("status");
+CREATE INDEX IF NOT EXISTS "crm_Targets_created_on_idx" ON "crm_Targets"("created_on");
+
+-- CreateIndex (IF NOT EXISTS) for crm_TargetLists
+CREATE INDEX IF NOT EXISTS "crm_TargetLists_created_by_idx" ON "crm_TargetLists"("created_by");
+CREATE INDEX IF NOT EXISTS "crm_TargetLists_status_idx" ON "crm_TargetLists"("status");
+
+-- CreateIndex (IF NOT EXISTS) for TargetsToTargetLists
+CREATE INDEX IF NOT EXISTS "TargetsToTargetLists_target_id_idx" ON "TargetsToTargetLists"("target_id");
+CREATE INDEX IF NOT EXISTS "TargetsToTargetLists_target_list_id_idx" ON "TargetsToTargetLists"("target_list_id");
+
+-- CreateIndex (IF NOT EXISTS) for crm_Target_Enrichment
+CREATE INDEX IF NOT EXISTS "crm_Target_Enrichment_targetId_idx" ON "crm_Target_Enrichment"("targetId");
+CREATE INDEX IF NOT EXISTS "crm_Target_Enrichment_status_idx" ON "crm_Target_Enrichment"("status");
+CREATE INDEX IF NOT EXISTS "crm_Target_Enrichment_createdAt_idx" ON "crm_Target_Enrichment"("createdAt");
+CREATE INDEX IF NOT EXISTS "crm_Target_Enrichment_triggeredBy_idx" ON "crm_Target_Enrichment"("triggeredBy");
+
+-- AddForeignKey (idempotent) for Targets → Users
+DO $$ BEGIN
+  ALTER TABLE "crm_Targets" ADD CONSTRAINT "crm_Targets_created_by_fkey"
+    FOREIGN KEY ("created_by") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- AddForeignKey (idempotent) for TargetLists → Users
+DO $$ BEGIN
+
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '1,105p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+    66	    valid.push({
+    67	      last_name: last_name ?? "",
+    68	      first_name: row.first_name || null,
+    69	      email: email || null,
+    70	      mobile_phone: mobile_phone || null,
+    71	      office_phone: row.office_phone || null,
+    72	      company: row.company || null,
+    73	      position: row.position || null,
+    74	      company_website: companyDomain || null,
+    75	      personal_website: row.personal_website || null,
+    76	      social_linkedin: row.social_linkedin || null,
+    77	      social_x: row.social_x || null,
+    78	      social_instagram: row.social_instagram || null,
+    79	      social_facebook: row.social_facebook || null,
+    80	      personal_email: row.personal_email || null,
+    81	      company_email: row.company_email || null,
+    82	      company_phone: row.company_phone || null,
+    83	      city: row.city || null,
+    84	      country: row.country || null,
+    85	      industry: row.industry || null,
+    86	      employees: employees || null,
+    87	      description: row.description || null,
+    88	      created_by: (session.user as any).id,
+    89	    });
+    90	  });
+    91	
+    92	  if (valid.length > 0) {
+    93	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    94	  }
+    95	
+    96	  return { imported: valid.length, skipped: errors.length, errors };
+    97	}
+
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/suggest-mapping.ts | sed -n '20,95p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '45,190p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    20	  "social_instagram",
+    21	  "social_facebook",
+    22	  "personal_email",
+    23	  "company_email",
+    24	  "company_phone",
+    25	  "city",
+    26	  "country",
+    27	  "industry",
+    28	  "employees",
+    29	  "description",
+    30	];
+    31	
+    32	function fuzzyMatch(header: string): string | null {
+    33	  const normalized = header.toLowerCase().replace(/[\s_\-]/g, "");
+    34	  for (const field of TARGET_FIELDS) {
+    35	    if (field.replace(/_/g, "") === normalized) return field;
+    36	  }
+    37	  const aliases: Record<string, string> = {
+    38	    lastname: "last_name",
+    39	    surname: "last_name",
+    40	    familyname: "last_name",
+    41	    firstname: "first_name",
+    42	    givenname: "first_name",
+    43	    name: "first_name",
+    44	    mail: "email",
+    45	    emailaddress: "email",
+    46	    phone: "mobile_phone",
+    47	    mobile: "mobile_phone",
+    48	    cellphone: "mobile_phone",
+    49	    mobilephone: "mobile_phone",
+    50	    officephone: "office_phone",
+    51	    workphone: "office_phone",
+    52	    businessphone: "office_phone",
+    53	    companyname: "company",
+    54	    organization: "company",
+    55	    organisation: "company",
+    56	    jobtitle: "position",
+    57	    title: "position",
+    58	    role: "position",
+    59	    website: "company_website",
+    60	    companywebsite: "company_website",
+    61	    personalwebsite: "personal_website",
+    62	    linkedin: "social_linkedin",
+    63	    linkedinurl: "social_linkedin",
+    64	    twitter: "social_x",
+    65	    x: "social_x",
+    66	    instagram: "social_instagram",
+    67	    facebook: "social_facebook",
+    68	    personalemail: "personal_email",
+    69	    directemail: "personal_email",
+    70	    myemail: "personal_email",
+    71	    companyemail: "company_email",
+    72	    infoemail: "company_email",
+    73	    contactemail: "company_email",
+    74	    genericemail: "company_email",
+    75	    companyphone: "company_phone",
+    76	    mainphone: "company_phone",
+    77	    switchboard: "company_phone",
+    78	    hqphone: "company_phone",
+    79	    hqcity: "city",
+    80	    headquarterscity: "city",
+    81	    hqcountry: "country",
+    82	    nation: "country",
+    83	    sector: "industry",
+    84	    vertical: "industry",
+    85	    businesstype: "industry",
+    86	    headcount: "employees",
+    87	    numemployees: "employees",
+    88	    teamsize: "employees",
+    89	    companysize: "employees",
+    90	    about: "description",
+    91	    bio: "description",
+    92	    summary: "description",
+    93	    companydescription: "description",
+    94	  };
+    95	  return aliases[normalized] ?? null;
+
+ succeeded in 0ms:
+    45	  { key: "personal_website", label: "Personal Website", required: false },
+    46	  { key: "social_linkedin", label: "LinkedIn", required: false },
+    47	  { key: "social_x", label: "X / Twitter", required: false },
+    48	  { key: "social_instagram", label: "Instagram", required: false },
+    49	  { key: "social_facebook", label: "Facebook", required: false },
+    50	  { key: "personal_email", label: "Personal Email", required: false },
+    51	  { key: "company_email",  label: "Company Email",  required: false },
+    52	  { key: "company_phone",  label: "Company Phone",  required: false },
+    53	  { key: "city",           label: "City",           required: false },
+    54	  { key: "country",        label: "Country",        required: false },
+    55	  { key: "industry",       label: "Industry",       required: false },
+    56	  { key: "employees",      label: "Employees",      required: false },
+    57	  { key: "description",    label: "Description",    required: false },
+    58	];
+    59	
+    60	const SKIP_VALUE = "__skip__";
+    61	
+    62	const ImportTargetsModal = () => {
+    63	  const router = useRouter();
+    64	  const fileInputRef = useRef<HTMLInputElement>(null);
+    65	
+    66	  const [open, setOpen] = useState(false);
+    67	  const [step, setStep] = useState<Step>("upload");
+    68	  const [isLoading, setIsLoading] = useState(false);
+    69	  const [isSuggesting, setIsSuggesting] = useState(false);
+    70	
+    71	  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    72	  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+    73	  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+    74	  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+    75	  const [mapping, setMapping] = useState<Record<string, string>>({});
+    76	  const previewRows = csvRows.slice(0, 3);
+    77	
+    78	  const resetState = () => {
+    79	    setStep("upload");
+    80	    setSelectedFile(null);
+    81	    setCsvHeaders([]);
+    82	    setCsvRows([]);
+    83	    setMapping({});
+    84	    setIsLoading(false);
+    85	    setIsSuggesting(false);
+    86	    if (fileInputRef.current) fileInputRef.current.value = "";
+    87	  };
+    88	
+    89	  const handleOpenChange = (val: boolean) => {
+    90	    setOpen(val);
+    91	    if (!val) resetState();
+    92	  };
+    93	
+    94	  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    95	    const file = e.target.files?.[0];
+    96	    if (!file) return;
+    97	    setSelectedFile(file);
+    98	
+    99	    Papa.parse<Record<string, string>>(file, {
+   100	      header: true,
+   101	      skipEmptyLines: true,
+   102	      complete: (results) => {
+   103	        const headers = results.meta.fields ?? [];
+   104	        setCsvHeaders(headers);
+   105	        setCsvRows(results.data);
+   106	        fetchSuggestedMapping(headers);
+   107	      },
+   108	    });
+   109	  };
+   110	
+   111	  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+   112	    setIsSuggesting(true);
+   113	    setStep("mapping");
+   114	    try {
+   115	      const res = await suggestMapping(headers);
+   116	      const suggested: Record<string, string | null> = res.mapping ?? {};
+   117	      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+   118	      const newMapping: Record<string, string> = {};
+   119	      for (const field of TARGET_FIELDS) {
+   120	        newMapping[field.key] = SKIP_VALUE;
+   121	      }
+   122	      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+   123	        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+   124	          newMapping[targetField] = csvHeader;
+   125	        }
+   126	      }
+   127	      setMapping(newMapping);
+   128	    } catch {
+   129	      // Set all to skip on error
+   130	      const newMapping: Record<string, string> = {};
+   131	      for (const field of TARGET_FIELDS) {
+   132	        newMapping[field.key] = SKIP_VALUE;
+   133	      }
+   134	      setMapping(newMapping);
+   135	    } finally {
+   136	      setIsSuggesting(false);
+   137	    }
+   138	  }, []);
+   139	
+   140	  const computePreview = () => {
+   141	    let valid = 0;
+   142	    let skipped = 0;
+   143	    const skipReasons: string[] = [];
+   144	
+   145	    for (let i = 0; i < csvRows.length; i++) {
+   146	      const raw = csvRows[i];
+   147	      const row: Record<string, string> = {};
+   148	      for (const field of TARGET_FIELDS) {
+   149	        const csvCol = mapping[field.key];
+   150	        if (csvCol && csvCol !== SKIP_VALUE) {
+   151	          row[field.key] = raw[csvCol] ?? "";
+   152	        }
+   153	      }
+   154	
+   155	      if (!row.last_name && !row.company) {
+   156	        skipped++;
+   157	        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+   158	        continue;
+   159	      }
+   160	      valid++;
+   161	    }
+   162	
+   163	    return { valid, skipped, skipReasons };
+   164	  };
+   165	
+   166	  const handleImport = async () => {
+   167	    if (!selectedFile) return;
+   168	    setIsLoading(true);
+   169	
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+   171	    const apiMapping: Record<string, string> = {};
+   172	    for (const [targetField, csvCol] of Object.entries(mapping)) {
+   173	      if (csvCol && csvCol !== SKIP_VALUE) {
+   174	        apiMapping[csvCol] = targetField;
+   175	      }
+   176	    }
+   177	
+   178	    const formData = new FormData();
+   179	    formData.append("file", selectedFile);
+   180	    formData.append("mapping", JSON.stringify(apiMapping));
+   181	
+   182	    try {
+   183	      const { imported, skipped, errors } = await importTargets(formData);
+   184	      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+   185	      setOpen(false);
+   186	      resetState();
+   187	      router.refresh();
+   188	    } catch (error: any) {
+   189	      toast.error(error?.message || "Something went wrong");
+   190	    } finally {
+
+exec
+/usr/bin/bash -lc "sed -n '1,100p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "find . -maxdepth 3 -path './.claude*' -o -name 'SKILL.md' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'git blame -L 7,18 -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+e35981eb (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  7) function normalizeCellValue(value?: string) {
+e35981eb (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  8)   return typeof value === "string" ? value.trim() : "";
+e35981eb (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  9) }
+e35981eb (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300 10) 
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 11) function parseEmployeesValue(value?: string) {
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 12)   const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 13)     min: number;
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 14)     max: number;
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 15)   };
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 16) 
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 17)   return `${parsed.min.toString()}-${parsed.max.toString()}`;
+9790f4c1 (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 18) }
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate -- actions/crm/targets/import-targets.ts | sed -n '1,10p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c (HEAD -> feature/task-5, origin/feature/task-5) Handle legacy employee range imports
+e35981e Normalize imported target values
+3a781f0 refactor(auth): update all server actions to better-auth with RBAC
+a298f68 Merge pull request #116 from pdovhomilja/feat/target-enrichment-conversion
+3f6c118 feat: add 8 new fields to target actions, import, and column mapping
+bc56b78 fix: relax campaigns targets import validation to allow last_name or company
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+
+exec
+/usr/bin/bash -lc "git show --stat --patch --find-renames --unified=40 9790f4c -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx actions/crm/targets/suggest-mapping.ts | sed -n '1,220p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:16:19 2026 +0300
+
+    Handle legacy employee range imports
+---
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -1,87 +1,97 @@
+ "use server";
+ import { getSession } from "@/lib/auth-server";
+ 
+ import { prismadb } from "@/lib/prisma";
+ import Papa from "papaparse";
+ 
+ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+   const session = await getSession();
+   if (!session) throw new Error("Unauthorized");
+ 
+   const file = formData.get("file") as File | null;
+   if (!file) throw new Error("No file provided");
+ 
+   const mappingRaw = formData.get("mapping") as string | null;
+   const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+ 
+   const text = await file.text();
+   const { data } = Papa.parse<Record<string, string>>(text, {
+     header: true,
+     skipEmptyLines: true,
+   });
+ 
+   const valid: any[] = [];
+   const errors: string[] = [];
+ 
+   data.forEach((rawRow, index) => {
+     const row: Record<string, string> = {};
+     if (Object.keys(mapping).length > 0) {
+       Object.entries(mapping).forEach(([csvCol, targetField]) => {
+         if (targetField && rawRow[csvCol] !== undefined) {
+           row[targetField] = rawRow[csvCol];
+         }
+       });
+     } else {
+       Object.assign(row, rawRow);
+     }
+ 
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+       return;
+     }
+ 
+     valid.push({
+       last_name: last_name ?? "",
+       first_name: row.first_name || null,
+       email: email || null,
+       mobile_phone: mobile_phone || null,
+       office_phone: row.office_phone || null,
+       company: row.company || null,
+       position: row.position || null,
+       company_website: companyDomain || null,
+       personal_website: row.personal_website || null,
+       social_linkedin: row.social_linkedin || null,
+       social_x: row.social_x || null,
+       social_instagram: row.social_instagram || null,
+       social_facebook: row.social_facebook || null,
+       personal_email: row.personal_email || null,
+       company_email: row.company_email || null,
+       company_phone: row.company_phone || null,
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+   });
+ 
+   if (valid.length > 0) {
+     await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+   }
+ 
+   return { imported: valid.length, skipped: errors.length, errors };
+ }
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -256,80 +256,83 @@ const ImportTargetsModal = () => {
+                 <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                   <span>CRM Field</span>
+                   <span>CSV Column</span>
+                 </div>
+                 {TARGET_FIELDS.map((field) => (
+                   <div key={field.key} className="grid grid-cols-2 gap-2 items-center">
+                     <span className="text-sm">
+                       {field.label}
+                       {field.required && (
+                         <span className="text-destructive ml-1">*</span>
+                       )}
+                     </span>
+                     <Select
+                       value={mapping[field.key] ?? SKIP_VALUE}
+                       onValueChange={(val) =>
+                         setMapping((prev) => ({ ...prev, [field.key]: val }))
+                       }
+                     >
+                       <SelectTrigger className="h-8 text-sm">
+                         <SelectValue placeholder="— skip —" />
+                       </SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value={SKIP_VALUE}>— skip —</SelectItem>
+                         {csvHeaders.map((h) => (
+                           <SelectItem key={h} value={h}>
+                             {h}
+                           </SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 ))}
+                 <p className="text-xs text-muted-foreground pt-1">
+                   <span className="text-destructive">*</span> last_name or company is required per row.
+                 </p>
+                 {previewRows.length > 0 && (
+                   <p className="text-xs text-muted-foreground">
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+         )}
+ 
+         {/* Step 3: Preview */}
+         {step === "preview" && preview && (
+           <div className="space-y-4 py-2">
+             <div className="rounded-md border p-4 space-y-1">
+               <p className="text-sm font-medium">
+                 Ready to import{" "}
+                 <span className="text-green-600 dark:text-green-400">
+                   {preview.valid} row{preview.valid !== 1 ? "s" : ""}
+                 </span>
+                 {preview.skipped > 0 && (
+                   <>
+                     {" "}— {" "}
+                     <span className="text-yellow-600 dark:text-yellow-400">
+                       {preview.skipped} row{preview.skipped !== 1 ? "s" : ""} will be skipped
+                     </span>
+                   </>
+                 )}
+                 .
+               </p>
+               {preview.skipReasons.length > 0 && (
+                 <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 pt-1">
+                   {preview.skipReasons.map((r, i) => (
+                     <li key={i}>{r}</li>
+                   ))}
+                   {preview.skipped > preview.skipReasons.length && (
+                     <li>…and {preview.skipped - preview.skipReasons.length} more</li>
+                   )}
+                 </ul>
+               )}
+             </div>
+             {preview.valid === 0 && (
+               <p className="text-sm text-destructive">
+                 No valid rows to import. Go back and adjust your column mapping.
+               </p>
+             )}
+
+codex
+**Incident Report**
+
+Most likely root cause: the CSV target import path assumes the `employees` field is always a JSON object with numeric `min` and `max` properties, but the imported CSV likely supplied a normal employee/headcount value such as `150`, `"150"`, `{}`, or another JSON-parseable value without `min`/`max`.
+
+Evidence:
+
+- The stack points directly to `parseEmployeesValue()` inside `importTargets()`.
+- In [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11), the parser does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+- The observed error is:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That means `parsed.min` or `parsed.max` was `undefined`. This is consistent with an employee value that parsed successfully but was not shaped like `{ min: number, max: number }`.
+
+- `importTargets()` calls `parseEmployeesValue(row.employees)` unconditionally before validating the row, so any malformed/mismatched employee value aborts the whole server action.
+- The import UI includes `employees` as a mappable field, and `suggestMapping()` aliases headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`. That makes it likely a standard CSV headcount column was automatically mapped to `employees`.
+- The preview step only validates `last_name` or `company`; it does not parse or validate `employees`, so the user can reach import successfully and then hit the server-side crash.
+
+Likely regression source: commit `9790f4c` (`Handle legacy employee range imports`) introduced `parseEmployeesValue()` and changed imported `employees` from `row.employees || null` to the parsed range format. The implementation handles only one legacy structured format and does not tolerate ordinary CSV values.
+
+Impact: POST `/en/campaigns/targets` fails during CSV import when an `employees` column is mapped and contains anything other than a strict JSON object with both `min` and `max`. The error is unhandled, so the import aborts instead of skipping the bad row or importing the raw value.
+tokens used
+61,864
+**Incident Report**
+
+Most likely root cause: the CSV target import path assumes the `employees` field is always a JSON object with numeric `min` and `max` properties, but the imported CSV likely supplied a normal employee/headcount value such as `150`, `"150"`, `{}`, or another JSON-parseable value without `min`/`max`.
+
+Evidence:
+
+- The stack points directly to `parseEmployeesValue()` inside `importTargets()`.
+- In [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11), the parser does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+- The observed error is:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That means `parsed.min` or `parsed.max` was `undefined`. This is consistent with an employee value that parsed successfully but was not shaped like `{ min: number, max: number }`.
+
+- `importTargets()` calls `parseEmployeesValue(row.employees)` unconditionally before validating the row, so any malformed/mismatched employee value aborts the whole server action.
+- The import UI includes `employees` as a mappable field, and `suggestMapping()` aliases headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`. That makes it likely a standard CSV headcount column was automatically mapped to `employees`.
+- The preview step only validates `last_name` or `company`; it does not parse or validate `employees`, so the user can reach import successfully and then hit the server-side crash.
+
+Likely regression source: commit `9790f4c` (`Handle legacy employee range imports`) introduced `parseEmployeesValue()` and changed imported `employees` from `row.employees || null` to the parsed range format. The implementation handles only one legacy structured format and does not tolerate ordinary CSV values.
+
+Impact: POST `/en/campaigns/targets` fails during CSV import when an `employees` column is mapped and contains anything other than a strict JSON object with both `min` and `max`. The error is unhandled, so the import aborts instead of skipping the bad row or importing the raw value.

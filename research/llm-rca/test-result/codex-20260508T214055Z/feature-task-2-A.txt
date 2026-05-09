@@ -1,0 +1,789 @@
+run_name: feature-task-2-A
+case_name: feature-task-2
+variant: A
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:42:18Z
+elapsed_seconds: 50
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: a server/client rendering branch in [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36).
+
+The sign-in page renders:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Although `LoginComponent` is marked `"use client"`, Next.js still pre-renders it on the server for the initial HTML. On the server, `window` is undefined, so the rendered text is `Login`. During browser hydration, `window` exists, so React renders `Sign in`. That exactly matches the observability diff:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second similar mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This would also produce a hydration mismatch once React reaches it.
+
+The likely introducing change is commit `9be250f` / `Polish sign-in copy and labels`, which added both `typeof window` copy branches.
+
+Recommended fix: make the initial rendered text deterministic between server and client. For this case, use a single literal value for each label, for example always `Sign in` and always `Or continue with email`. No browser-only branching is needed for static copy.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e098a-97d4-7213-a9e8-b445ff1769ba
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:30:26.512Z",
+      "timestampNs": "1777919426512249554",
+      "labels": {
+        "client_pathname": "/en/sign-in",
+        "client_sessionId": "f4e338ce-1d65-492f-9a53-16026bf86155",
+        "client_timestamp": "2026-05-04T18:30:26.368Z",
+        "client_url": "http://localhost:3000/en/sign-in",
+        "client_userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0",
+        "context_err_message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+        "context_err_name": "Error",
+        "context_err_stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n",
+        "context_module": "app.client-error-listener",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "module": "app.api.client-logs",
+        "pid": "86917",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "f6f18ebb5ee63701",
+        "time": "2026-05-04T18:30:26.432Z",
+        "trace_flags": "01",
+        "trace_id": "e205c05bab2c1e0f7842fa624396f721"
+      },
+      "line": "Unhandled client error",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,180p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'SKILL.md' -g 'AGENTS.md' -g '*.tsx' -g '*.ts' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+next-env.d.ts
+instrumentation.ts
+types/types.d.ts
+tests/e2e/sales-flow.spec.ts
+tests/e2e/reports.spec.ts
+tests/e2e/product-update.spec.ts
+tests/e2e/product-read.spec.ts
+tests/e2e/product-import.spec.ts
+tests/e2e/product-delete.spec.ts
+tests/e2e/product-create.spec.ts
+tests/e2e/opportunity-update.spec.ts
+tests/e2e/opportunity-detail-update.spec.ts
+tests/e2e/lead-update.spec.ts
+tests/e2e/lead-detail-update.spec.ts
+tests/e2e/home.spec.ts
+tests/e2e/crm.spec.ts
+tests/e2e/contact-update.spec.ts
+tests/e2e/contact-detail-update.spec.ts
+tests/e2e/campaign-targets.spec.ts
+tests/e2e/campaign-list.spec.ts
+tests/e2e/campaign-detail.spec.ts
+tests/e2e/campaign-create.spec.ts
+tests/e2e/auth.spec.ts
+tests/e2e/account-update.spec.ts
+tests/e2e/account-detail-update.spec.ts
+tests/auth.setup.ts
+scripts/validation/validators.ts
+scripts/validation/types.ts
+scripts/validation/table-schema.ts
+scripts/validation/report-generator.ts
+scripts/validate-migration.ts
+scripts/migration/uuid-mapper.ts
+scripts/migration/utils.ts
+scripts/migration/types.ts
+scripts/migration/transformers/users-transformer.ts
+scripts/migration/transformers/todo-list-transformer.ts
+scripts/migration/transformers/tasks-transformer.ts
+scripts/migration/transformers/tasks-comments-transformer.ts
+scripts/migration/transformers/system-services-transformer.ts
+scripts/migration/transformers/system-modules-enabled-transformer.ts
+scripts/migration/transformers/sections-transformer.ts
+scripts/migration/transformers/openai-keys-transformer.ts
+scripts/migration/transformers/my-account-transformer.ts
+scripts/migration/transformers/modul-status-transformer.ts
+scripts/migration/transformers/invoices-transformer.ts
+scripts/migration/transformers/invoice-states-transformer.ts
+scripts/migration/transformers/index.ts
+scripts/migration/transformers/image-upload-transformer.ts
+scripts/migration/transformers/gpt-models-transformer.ts
+scripts/migration/transformers/employees-transformer.ts
+scripts/migration/transformers/documents-types-transformer.ts
+scripts/migration/transformers/documents-transformer.ts
+scripts/migration/transformers/crm-opportunities-type-transformer.ts
+scripts/migration/transformers/crm-opportunities-transformer.ts
+scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+scripts/migration/transformers/crm-leads-transformer.ts
+scripts/migration/transformers/crm-industry-type-transformer.ts
+scripts/migration/transformers/crm-contracts-transformer.ts
+scripts/migration/transformers/crm-contacts-transformer.ts
+scripts/migration/transformers/crm-campaigns-transformer.ts
+scripts/migration/transformers/crm-accounts-transformer.ts
+scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+scripts/migration/transformers/boards-transformer.ts
+scripts/migration/table-config.ts
+scripts/migration/progress-tracker.ts
+scripts/migration/orchestrator.ts
+scripts/migration/junction-populator.ts
+scripts/migration/error-logger.ts
+scripts/migration/checkpoint-manager.ts
+scripts/migration/batch-processor.ts
+scripts/migration/backfill-roles.ts
+scripts/migrate-openai-keys.ts
+scripts/migrate-mongo-to-postgres.ts
+proxy.ts
+prisma/seeds/seed.ts
+prisma/seeds/currencies.ts
+jest.config.ts
+prisma.config.ts
+playwright.config.ts
+context/currency-context.tsx
+
+exec
+/usr/bin/bash -lc "rg -n '\"Login\"|\"Sign in\"|signIn|sign_in|Sign In' messages locales dictionaries public app components src --glob '*.{json,ts,tsx}'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "rg -n \"LoginComponent|Sign in|Login|sign-in|CardTitle\" -S app components src --glob '*.{ts,tsx,json}'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: messages: No such file or directory (os error 2)
+rg: dictionaries: No such file or directory (os error 2)
+rg: src: No such file or directory (os error 2)
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:45:      await authClient.signIn.social({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:87:      const { error } = await authClient.signIn.emailOtp({
+
+ exited 2 in 0ms:
+rg: src: No such file or directory (os error 2)
+components/ui/card.tsx:34:const CardTitle = ({
+components/ui/card.tsx:48:CardTitle.displayName = "CardTitle"
+components/ui/card.tsx:85:export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+components/reports/ReportTable.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+components/reports/ReportTable.tsx:25:      <CardHeader><CardTitle className="text-base">{t(titleKey)}</CardTitle></CardHeader>
+components/reports/ReportChart.tsx:28:  CardTitle,
+components/reports/ReportChart.tsx:75:          <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+components/reports/ReportChart.tsx:89:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+components/reports/KPICard.tsx:4:import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+components/reports/KPICard.tsx:31:          <CardTitle className="text-sm font-medium">{t(kpi.label)}</CardTitle>
+components/crm/activities/ActivitiesView.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+components/crm/activities/ActivitiesView.tsx:52:          <CardTitle className="text-base">Activities</CardTitle>
+components/CommandComponent.tsx:67:        signOut().then(() => { window.location.href = "/sign-in"; });
+components/CommandComponent.tsx:139:            <CommandItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:13:  CardTitle,
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:50:      toast.error("Something went wrong with Google sign-in.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:        type: "sign-in",
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+app/[locale]/(auth)/pending/page.tsx:59:          <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(auth)/inactive/page.tsx:12:  CardTitle,
+app/[locale]/(auth)/inactive/page.tsx:31:      <CardTitle className="flex justify-center py-10">
+app/[locale]/(auth)/inactive/page.tsx:33:      </CardTitle>
+app/[locale]/(auth)/inactive/page.tsx:59:            <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:24:  CardTitle,
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:68:              <CardTitle>{task.title}</CardTitle>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:9:  CardTitle,
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:109:          <CardTitle>Team conversation</CardTitle>
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:10:  CardTitle,
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:103:          <CardTitle>Team conversation</CardTitle>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:12:  CardTitle,
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:88:            <CardTitle>Line Items</CardTitle>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:60:              <CardTitle>{data.title}</CardTitle>
+app/[locale]/(routes)/projects/page.tsx:17:  if (!session) return redirect("/sign-in");
+app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:5:  CardTitle,
+app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:79:              <CardTitle>Product Information</CardTitle>
+app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:167:            <CardTitle>Pricing</CardTitle>
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:31:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:61:          <CardTitle className="text-base">
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:63:          </CardTitle>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:17:  CardTitle,
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:100:              <CardTitle className="text-xl">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:102:              </CardTitle>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:204:              <CardTitle className="text-xl">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:206:              </CardTitle>
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:9:  CardTitle,
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:42:            <CardTitle>Line Items</CardTitle>
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:60:            <CardTitle>{data.name}</CardTitle>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:46:              <CardTitle>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:48:              </CardTitle>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:212:            <CardTitle>Contacts</CardTitle>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:287:            <CardTitle>Social networks</CardTitle>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:363:            <CardTitle>Notes</CardTitle>
+app/[locale]/(routes)/crm/components/ProductsView.tsx:9:  CardTitle,
+app/[locale]/(routes)/crm/components/ProductsView.tsx:31:          <CardTitle>
+app/[locale]/(routes)/crm/components/ProductsView.tsx:35:          </CardTitle>
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:11:  CardTitle,
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:71:            <CardTitle>
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:75:            </CardTitle>
+app/[locale]/(routes)/crm/components/LeadsView.tsx:11:  CardTitle,
+app/[locale]/(routes)/crm/components/LeadsView.tsx:46:            <CardTitle>
+app/[locale]/(routes)/crm/components/LeadsView.tsx:50:            </CardTitle>
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:12:  CardTitle,
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:30:            <CardTitle
+app/[locale]/(routes)/crm/components/DocumentsView.tsx:35:            </CardTitle>
+app/[locale]/(routes)/crm/components/ContractsView.tsx:10:  CardTitle,
+app/[locale]/(routes)/crm/components/ContractsView.tsx:36:          <CardTitle>
+app/[locale]/(routes)/crm/components/ContractsView.tsx:40:          </CardTitle>
+app/[locale]/(routes)/crm/components/ContactsView.tsx:11:  CardTitle,
+app/[locale]/(routes)/crm/components/ContactsView.tsx:49:            <CardTitle>
+app/[locale]/(routes)/crm/components/ContactsView.tsx:53:            </CardTitle>
+app/[locale]/(routes)/crm/components/AccountsView.tsx:11:  CardTitle,
+app/[locale]/(routes)/crm/components/AccountsView.tsx:48:            <CardTitle>
+app/[locale]/(routes)/crm/components/AccountsView.tsx:52:            </CardTitle>
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:52:              <CardTitle>
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:54:              </CardTitle>
+app/[locale]/(routes)/profile/components/ApiTokens.tsx:6:import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+app/[locale]/(routes)/profile/components/ApiTokens.tsx:84:        <CardTitle>API Tokens</CardTitle>
+app/[locale]/(routes)/page.tsx:19:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/page.tsx:82:              <CardTitle className="text-sm font-medium">
+app/[locale]/(routes)/page.tsx:84:              </CardTitle>
+app/[locale]/(routes)/page.tsx:95:              <CardTitle className="text-sm font-medium">
+app/[locale]/(routes)/page.tsx:97:              </CardTitle>
+app/[locale]/(routes)/page.tsx:198:          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:14:  CardTitle,
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:53:            <CardTitle className="text-sm font-medium text-muted-foreground">
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:55:            </CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:63:            <CardTitle className="text-sm font-medium text-muted-foreground">
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:65:            </CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:73:            <CardTitle className="text-sm font-medium text-muted-foreground">
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:75:            </CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:83:            <CardTitle className="text-sm font-medium text-muted-foreground">
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:85:            </CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:99:            <CardTitle className="text-base">My Tasks</CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:159:            <CardTitle className="text-base">My Opportunities</CardTitle>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:203:            <CardTitle className="text-base">My Leads</CardTitle>
+app/[locale]/(routes)/layout.tsx:56:    return redirect("/sign-in");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:45:import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:105:      <CardTitle className="p-2 text-sm">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:125:      </CardTitle>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:400:              <CardTitle className="flex gap-2 p-3 justify-between">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:409:              </CardTitle>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:434:            <CardTitle className="flex gap-2 p-3 justify-between">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:436:            </CardTitle>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:440:                  <CardTitle className="p-2 text-sm">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:442:                  </CardTitle>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:479:              <CardTitle className="p-2 text-sm">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:483:              </CardTitle>
+app/[locale]/(routes)/admin/currencies/page.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/admin/currencies/page.tsx:18:          <CardTitle>Currencies</CardTitle>
+app/[locale]/(routes)/admin/currencies/page.tsx:27:          <CardTitle>Exchange Rates</CardTitle>
+app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:7:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:74:            <CardTitle className="text-base">{meta.name}</CardTitle>
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:35:  CardTitle,
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:222:            <CardTitle
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:227:            </CardTitle>
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:35:  CardTitle,
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:263:            <CardTitle>All Campaigns</CardTitle>
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:7:  CardTitle,
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:64:        <CardTitle>Resend.com - API Key</CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:13:  CardTitle,
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:47:            <CardTitle
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:52:            </CardTitle>
+app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:8:  CardTitle,
+app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:25:            <CardTitle
+app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:30:            </CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:48:              <CardTitle>{data.name}</CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:233:            <CardTitle>Billing Address</CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:288:            <CardTitle>Shipping Address</CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:347:        <CardTitle>{data.name}</CardTitle>
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:11:  CardTitle,
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:52:              <CardTitle>{data.name}</CardTitle>
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:108:            <CardTitle>Targets ({data.targets?.length || 0})</CardTitle>
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:39:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:69:          <CardTitle className="text-base">
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:71:          </CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:11:  CardTitle,
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:82:          <CardTitle>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:86:          </CardTitle>
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:10:  CardTitle,
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:38:            <CardTitle
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:43:            </CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:6:  CardTitle,
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:52:              <CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:54:              </CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:176:            <CardTitle>Contact information</CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:218:            <CardTitle>Social networks</CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:264:            <CardTitle>Notes</CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:281:            <CardTitle>Target Lists</CardTitle>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:297:          <CardTitle>Contacts</CardTitle>
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:64:        <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/components/nav-user.tsx:138:            <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+app/[locale]/(routes)/components/dasboard/storage-quota.tsx:3:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/components/dasboard/storage-quota.tsx:19:        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+app/[locale]/(routes)/components/dasboard/loading-box.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/components/dasboard/loading-box.tsx:8:        <CardTitle className="text-sm font-medium bg-gray-200 text-gray-200 animate-pulse ">
+app/[locale]/(routes)/components/dasboard/loading-box.tsx:10:        </CardTitle>
+
+exec
+/usr/bin/bash -lc "find . -maxdepth 3 -path '*/.claude/*' -o -name AGENTS.md | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./AGENTS.md
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,135p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/page.tsx' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { LoginComponent } from "./components/LoginComponent";
+     2	
+     3	const SignInPage = async () => {
+     4	  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+     5	
+     6	  return (
+     7	    <div className="h-full">
+     8	      <div className="py-10">
+     9	        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+    10	          {title}
+    11	        </h1>
+    12	      </div>
+    13	      <div>
+    14	        <LoginComponent />
+    15	      </div>
+    16	    </div>
+    17	  );
+    18	};
+    19	
+    20	export default SignInPage;
+
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import React, { useState } from "react";
+     4	import { authClient } from "@/lib/auth-client";
+     5	
+     6	import { Icons } from "@/components/ui/icons";
+     7	import { Button } from "@/components/ui/button";
+     8	import {
+     9	  Card,
+    10	  CardContent,
+    11	  CardDescription,
+    12	  CardHeader,
+    13	  CardTitle,
+    14	} from "@/components/ui/card";
+    15	import { Input } from "@/components/ui/input";
+    16	import { Label } from "@/components/ui/label";
+    17	import { toast } from "sonner";
+    18	import { MailIcon } from "lucide-react";
+    19	import {
+    20	  InputOTP,
+    21	  InputOTPGroup,
+    22	  InputOTPSlot,
+    23	} from "@/components/ui/input-otp";
+    24	
+    25	type Step = "email" | "otp";
+    26	
+    27	function getSubmitLabel(step: Step) {
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+    46	        provider: "google",
+    47	        callbackURL: "/",
+    48	      });
+    49	    } catch (error) {
+    50	      toast.error("Something went wrong with Google sign-in.");
+    51	    } finally {
+    52	      setIsLoading(false);
+    53	    }
+    54	  };
+    55	
+    56	  const sendOtp = async () => {
+    57	    if (!email) {
+    58	      toast.error("Please enter your email address.");
+    59	      return;
+    60	    }
+    61	    setIsLoading(true);
+    62	    try {
+    63	      const { error } = await authClient.emailOtp.sendVerificationOtp({
+    64	        email,
+    65	        type: "sign-in",
+    66	      });
+    67	      if (error) {
+    68	        toast.error(error.message || "Failed to send verification code.");
+    69	        return;
+    70	      }
+    71	      setStep("otp");
+    72	      toast.success("Verification code sent to your email.");
+    73	    } catch (error) {
+    74	      toast.error("Failed to send verification code.");
+    75	    } finally {
+    76	      setIsLoading(false);
+    77	    }
+    78	  };
+    79	
+    80	  const verifyOtp = async () => {
+    81	    if (otp.length !== 6) {
+    82	      toast.error("Please enter the 6-digit code.");
+    83	      return;
+    84	    }
+    85	    setIsLoading(true);
+    86	    try {
+    87	      const { error } = await authClient.signIn.emailOtp({
+    88	        email,
+    89	        otp,
+    90	      });
+    91	      if (error) {
+    92	        toast.error(error.message || "Invalid or expired code.");
+    93	        return;
+    94	      }
+    95	      toast.success("Login successful.");
+    96	      window.location.href = "/";
+    97	    } catch (error) {
+    98	      toast.error("Verification failed.");
+    99	    } finally {
+   100	      setIsLoading(false);
+   101	    }
+   102	  };
+   103	
+   104	  return (
+   105	    <Card className="shadow-lg my-5">
+   106	      <CardHeader className="space-y-1">
+   107	        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+   108	        <CardDescription>Choose your sign-in method</CardDescription>
+   109	      </CardHeader>
+   110	      <CardContent className="grid gap-4">
+   111	        <Button
+   112	          variant="outline"
+   113	          onClick={loginWithGoogle}
+   114	          disabled={isLoading}
+   115	          className="w-full"
+   116	        >
+   117	          <Icons.google className="mr-2 h-4 w-4" />
+   118	          Continue with Google
+   119	        </Button>
+   120	
+   121	        <div className="relative">
+   122	          <div className="absolute inset-0 flex items-center">
+   123	            <span className="w-full border-t" />
+   124	          </div>
+   125	          <div className="relative flex justify-center text-xs uppercase">
+   126	            <span className="bg-background px-2 text-muted-foreground">
+   127	              {dividerLabel}
+   128	            </span>
+   129	          </div>
+   130	        </div>
+   131	
+   132	        {step === "email" && (
+   133	          <div className="grid gap-3">
+   134	            <div className="grid gap-1.5">
+   135	              <Label htmlFor="email">Email</Label>
+
+exec
+/usr/bin/bash -lc "git blame -L 31,38 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+7acea671 app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-07 09:44:58 +0200 31) export function LoginComponent() {
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 32)   const [isLoading, setIsLoading] = useState(false);
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 33)   const [step, setStep] = useState<Step>("email");
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 34)   const [email, setEmail] = useState("");
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 35)   const [otp, setOtp] = useState("");
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 36)   const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 37)   const dividerLabel =
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 38)     typeof window === "undefined"
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,12p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+9560934 fix(auth): fix better-auth schema compatibility and E2E test infrastructure
+1eb6635 feat(auth): rewrite login page with Google OAuth + Email OTP
+8e5f07e feat: replace inline spinners with skeleton rows in forms and dialogs
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+6cd94a3 feat: remove invoice module completely
+c18e3a2 Fix bugs #44, #30, #22
+7af3302 feat:GitHub nextAuth provider - added github provider for nextAuth
+08b0eca Fix redirect in authOption - set redirect to false
+74d005c Update - Profile - updated profile photo in form and in header component after update - added zustand store for avatar
+ce7d4f9 Update - changed auth route from pages to app directory
+61b3ab0 Set redirect to true in LoginComponent
+
+exec
+/usr/bin/bash -lc "git show --no-ext-diff --unified=8 --no-renames 9be250f -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,160p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --stat --oneline --decorate --no-renames 9be250f -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+ .../(auth)/sign-in/components/LoginComponent.tsx        | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+ succeeded in 0ms:
+commit 9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:02:42 2026 +0300
+
+    Polish sign-in copy and labels
+
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -19,21 +19,30 @@ import { MailIcon } from "lucide-react";
+ import {
+   InputOTP,
+   InputOTPGroup,
+   InputOTPSlot,
+ } from "@/components/ui/input-otp";
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+     try {
+       await authClient.signIn.social({
+         provider: "google",
+         callbackURL: "/",
+       });
+@@ -90,17 +99,17 @@ export function LoginComponent() {
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+         <Button
+           variant="outline"
+           onClick={loginWithGoogle}
+           disabled={isLoading}
+           className="w-full"
+@@ -110,17 +119,17 @@ export function LoginComponent() {
+         </Button>
+ 
+         <div className="relative">
+           <div className="absolute inset-0 flex items-center">
+             <span className="w-full border-t" />
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+ 
+         {step === "email" && (
+           <div className="grid gap-3">
+             <div className="grid gap-1.5">
+               <Label htmlFor="email">Email</Label>
+@@ -131,17 +140,17 @@ export function LoginComponent() {
+                 value={email}
+                 onChange={(e) => setEmail(e.target.value)}
+                 disabled={isLoading}
+                 onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+               />
+             </div>
+             <Button onClick={sendOtp} disabled={isLoading || !email}>
+               <MailIcon className="mr-2 h-4 w-4" />
+-              Send verification code
++              {getSubmitLabel(step)}
+             </Button>
+           </div>
+         )}
+ 
+         {step === "otp" && (
+           <div className="grid gap-3">
+             <p className="text-sm text-muted-foreground">
+               Enter the 6-digit code sent to <strong>{email}</strong>
+@@ -159,17 +168,17 @@ export function LoginComponent() {
+                   <InputOTPSlot index={2} />
+                   <InputOTPSlot index={3} />
+                   <InputOTPSlot index={4} />
+                   <InputOTPSlot index={5} />
+                 </InputOTPGroup>
+               </InputOTP>
+             </div>
+             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+-              Verify and sign in
++              {getSubmitLabel(step)}
+             </Button>
+             <Button
+               variant="ghost"
+               size="sm"
+               onClick={() => {
+                 setStep("email");
+                 setOtp("");
+               }}
+
+exec
+/usr/bin/bash -lc "rg -n 'typeof window === \"undefined\" \\? \"|typeof window "'!== "undefined"|typeof window'"' app components --glob '*.{ts,tsx}'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/client-logger.ts:56:  if (typeof window === "undefined") {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:38:    typeof window === "undefined"
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:112:  const dueDateLabel = typeof window === "undefined" ? "Due date" : "Deadline";
+
+codex
+**Incident Report**
+
+Most likely root cause: a server/client rendering branch in [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36).
+
+The sign-in page renders:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Although `LoginComponent` is marked `"use client"`, Next.js still pre-renders it on the server for the initial HTML. On the server, `window` is undefined, so the rendered text is `Login`. During browser hydration, `window` exists, so React renders `Sign in`. That exactly matches the observability diff:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second similar mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This would also produce a hydration mismatch once React reaches it.
+
+The likely introducing change is commit `9be250f` / `Polish sign-in copy and labels`, which added both `typeof window` copy branches.
+
+Recommended fix: make the initial rendered text deterministic between server and client. For this case, use a single literal value for each label, for example always `Sign in` and always `Or continue with email`. No browser-only branching is needed for static copy.
+
+No code changes were made.
+tokens used
+22,394
+**Incident Report**
+
+Most likely root cause: a server/client rendering branch in [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36).
+
+The sign-in page renders:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Although `LoginComponent` is marked `"use client"`, Next.js still pre-renders it on the server for the initial HTML. On the server, `window` is undefined, so the rendered text is `Login`. During browser hydration, `window` exists, so React renders `Sign in`. That exactly matches the observability diff:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second similar mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This would also produce a hydration mismatch once React reaches it.
+
+The likely introducing change is commit `9be250f` / `Polish sign-in copy and labels`, which added both `typeof window` copy branches.
+
+Recommended fix: make the initial rendered text deterministic between server and client. For this case, use a single literal value for each label, for example always `Sign in` and always `Or continue with email`. No browser-only branching is needed for static copy.
+
+No code changes were made.

@@ -1,0 +1,429 @@
+run_name: feature-task-4-B
+case_name: feature-task-4
+variant: B
+target_branch: feature/task-4
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:26:24Z
+elapsed_seconds: 45
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-4/B/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: commit `4ef0d236` (`Refactor footer link metadata`, May 1, 2026) introduced a broken footer metadata refactor.
+
+The build fails in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) because it imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+
+A second compile error is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects mixed `??` and `||` operators unless parentheses clarify precedence.
+
+The incident events on May 4, 2026 are therefore consistent with a TypeScript build failure, not a runtime production failure. The `Build logging finished` entries appear to be noisy/error-level build logger messages; the actionable failures are `TS2305` and `TS5076`.
+
+Confidence: high. Both reported compiler errors are present in the current source tree and were introduced by the same footer metadata refactor commit.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e097c-0906-7532-bb5d-1a64bf42eb99
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T20:12:29.375Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:11:49.374Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the affected footer component and its nearby module exports, then check the relevant history only if the current files do not explain the build failure.
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'app/[locale]/(routes)/components/Footer.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import getNextVersion from "@/actions/system/get-next-version";
+import Link from "next/link";
+import { version } from "@/package.json";
+import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+
+const Footer = async () => {
+  const nextVersion = await getNextVersion();
+
+  return (
+    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+      <div className="hidden md:flex pr-5">
+        <Link href="/">
+          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+          </h1>
+        </Link>
+      </div>
+      <div className="hidden md:flex space-x-2 pr-2">
+        {footerMeta.poweredBy}
+        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+        </span>
+        +
+        <Link href={footerLinks[0].href}>
+          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+            {footerLinks[0].label}
+          </span>
+        </Link>
+        {footerMeta.hostedBy}
+        <span className="text-bold underline hover:text-foreground transition-colors">
+          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+        </span>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+exec
+/usr/bin/bash -lc "sed -n '1,160p' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+export const footerLinks = [
+  {
+    href: "https://ui.shadcn.com/",
+    label: "shadcnUI",
+  },
+  {
+    href: "https://www.vercel.com",
+    label: "Vercel",
+  },
+];
+
+export const footerMeta = {
+  poweredBy: "powered by Next.js",
+  hostedBy: "hosted by:",
+};
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+codex
+The current tree still matches both TypeScript errors: `Footer.tsx` imports a non-existent export and has an unparenthesized `??`/`||` chain. I’m checking the file history to identify the likely introducing change rather than just restating the compiler output.
+exec
+/usr/bin/bash -lc "git blame -L 1,40 -- 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  1) export const footerLinks = [
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  2)   {
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  3)     href: "https://ui.shadcn.com/",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  4)     label: "shadcnUI",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  5)   },
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  6)   {
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  7)     href: "https://www.vercel.com",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  8)     label: "Vercel",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  9)   },
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 10) ];
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 11) 
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 12) export const footerMeta = {
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 13)   poweredBy: "powered by Next.js",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 14)   hostedBy: "hosted by:",
+4ef0d236 (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 15) };
+
+exec
+/usr/bin/bash -lc "git blame -L 1,35 -- 'app/[locale]/(routes)/components/Footer.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+5922dded app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 21:56:00 +0100  1) import getNextVersion from "@/actions/system/get-next-version";
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200  2) import Link from "next/link";
+003a728b app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2026-04-03 09:01:16 +0200  3) import { version } from "@/package.json";
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  4) import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+^b5d52b2 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 00:24:11 +0200  5) 
+5922dded app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 21:56:00 +0100  6) const Footer = async () => {
+5922dded app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 21:56:00 +0100  7)   const nextVersion = await getNextVersion();
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300  8) 
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200  9)   return (
+3ffff2a7 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2025-12-10 18:31:01 +0100 10)     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+4d6364f7 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-09 00:36:33 +0200 11)       <div className="hidden md:flex pr-5">
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 12)         <Link href="/">
+3ffff2a7 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2025-12-10 18:31:01 +0100 13)           <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+003a728b app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2026-04-03 09:01:16 +0200 14)             {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 15)           </h1>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 16)         </Link>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 17)       </div>
+4d6364f7 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-09 00:36:33 +0200 18)       <div className="hidden md:flex space-x-2 pr-2">
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 19)         {footerMeta.poweredBy}
+3ffff2a7 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2025-12-10 18:31:01 +0100 20)         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 21)           {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+022fc4c1 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 20:42:58 +0100 22)         </span>
+022fc4c1 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2023-12-24 20:42:58 +0100 23)         +
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 24)         <Link href={footerLinks[0].href}>
+2cd7ebb5 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2026-03-20 18:04:42 +0100 25)           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 26)             {footerLinks[0].label}
+2cd7ebb5 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2026-03-20 18:04:42 +0100 27)           </span>
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 28)         </Link>
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 29)         {footerMeta.hostedBy}
+3ffff2a7 app/[locale]/(routes)/components/Footer.tsx (Pavel Dovhomilja    2025-12-10 18:31:01 +0100 30)         <span className="text-bold underline hover:text-foreground transition-colors">
+4ef0d236 app/[locale]/(routes)/components/Footer.tsx (Dmytro Rekechynskyi 2026-05-01 18:12:25 +0300 31)           <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 32)         </span>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 33)       </div>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 34)     </footer>
+36e076f1 app/(routes)/components/Footer.tsx          (pdovhomilja         2023-07-07 08:18:00 +0200 35)   );
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate -n 10 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+003a728 feat(footer): read app version from package.json instead of env var
+2cd7ebb chore: cleanup sidebar, footer, and add inngest proxy passthrough
+3ffff2a feat: PostgreSQL migration and Next.js 16 upgrade
+5922dde Update - getNextVersion - get next version from package.json - disabled fetching build count from github - api limit issue
+022fc4c Update - Build count info - added 2 actions for fetching data from Github - added build info counter to Sidebar component - updated .env.local.example - new strings for Github
+a7364dd Cypress and i18n integration
+
+exec
+/usr/bin/bash -lc 'git show --format=fuller --no-patch 4ef0d236' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:12:25 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --summary 4ef0d236' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 Refactor footer link metadata
+ app/[locale]/(routes)/components/Footer.tsx      | 18 +++++++++---------
+ app/[locale]/(routes)/components/footer-links.ts | 15 +++++++++++++++
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+ create mode 100644 app/[locale]/(routes)/components/footer-links.ts
+
+exec
+/usr/bin/bash -lc "git show --unified=3 -- '4ef0d236:app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,45p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "git show --unified=2 --format=short 4ef0d236 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -2,9 +2,9 @@ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+@@ -17,17 +17,17 @@ const Footer = async () => {
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+codex
+**Incident Report**
+
+Most likely root cause: commit `4ef0d236` (`Refactor footer link metadata`, May 1, 2026) introduced a broken footer metadata refactor.
+
+The build fails in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) because it imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+
+A second compile error is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects mixed `??` and `||` operators unless parentheses clarify precedence.
+
+The incident events on May 4, 2026 are therefore consistent with a TypeScript build failure, not a runtime production failure. The `Build logging finished` entries appear to be noisy/error-level build logger messages; the actionable failures are `TS2305` and `TS5076`.
+
+Confidence: high. Both reported compiler errors are present in the current source tree and were introduced by the same footer metadata refactor commit.
+tokens used
+12,289
+**Incident Report**
+
+Most likely root cause: commit `4ef0d236` (`Refactor footer link metadata`, May 1, 2026) introduced a broken footer metadata refactor.
+
+The build fails in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) because it imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+
+A second compile error is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects mixed `??` and `||` operators unless parentheses clarify precedence.
+
+The incident events on May 4, 2026 are therefore consistent with a TypeScript build failure, not a runtime production failure. The `Build logging finished` entries appear to be noisy/error-level build logger messages; the actionable failures are `TS2305` and `TS5076`.
+
+Confidence: high. Both reported compiler errors are present in the current source tree and were introduced by the same footer metadata refactor commit.

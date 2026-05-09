@@ -1,0 +1,2141 @@
+run_name: feature-task-2-A
+case_name: feature-task-2
+variant: A
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T20:53:54Z
+elapsed_seconds: 55
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: a deliberate server/client render branch in `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`.
+
+At line 36, the component renders:
+
+```tsx
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a Next.js client component, it is still server-rendered first, then hydrated in the browser. The server therefore emits `Login`, while the browser’s first render emits `Sign in`. That exactly matches the incident payload:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second mismatch in the same component:
+
+```tsx
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+So even if the title mismatch were absent, the divider text could also trigger hydration drift.
+
+The regression was introduced by commit `9be250f3` titled `Polish sign-in copy and labels` on 2026-05-01. The incident occurred on 2026-05-04, after that change.
+
+**Conclusion**
+
+This is not caused by i18n, auth state, locale loading, or browser extensions. The root cause is render-time use of `typeof window` to choose visible text, producing different initial HTML on the server and client.
+
+**Recommended fix**
+
+Make the initial render deterministic: use the same literal text on both server and client, for example always `Sign in` or always `Login`. If browser-only behavior is genuinely needed, defer it until after hydration with state updated from `useEffect`, but visible static copy should not depend on `typeof window`.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e095e-4aca-7161-bd1d-48040d5e4f7b
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:30:26.512Z",
+      "timestampNs": "1777919426512249554",
+      "labels": {
+        "client_pathname": "/en/sign-in",
+        "client_sessionId": "f4e338ce-1d65-492f-9a53-16026bf86155",
+        "client_timestamp": "2026-05-04T18:30:26.368Z",
+        "client_url": "http://localhost:3000/en/sign-in",
+        "client_userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0",
+        "context_err_message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+        "context_err_name": "Error",
+        "context_err_stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n",
+        "context_module": "app.client-error-listener",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "module": "app.api.client-logs",
+        "pid": "86917",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "f6f18ebb5ee63701",
+        "time": "2026-05-04T18:30:26.432Z",
+        "trace_flags": "01",
+        "trace_id": "e205c05bab2c1e0f7842fa624396f721"
+      },
+      "line": "Unhandled client error",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the sign-in page, the login component, and locale message loading paths to trace why the server rendered `Login` while the client rendered `Sign in`. No files will be changed.
+exec
+/usr/bin/bash -lc 'rg --files .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'rg -n "LoginComponent|Sign in|Login" .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./tests/auth.setup.ts:39:    // 4. Sign in with OTP — cookies shared with browser context via context.request
+./scripts/validation/table-schema.ts:93:      { name: 'lastLoginAt', type: 'DateTime' },
+./scripts/migration/transformers/users-transformer.ts:27:    lastLoginAt: convertDateToISO(mongoRecord.lastLoginAt),
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:82:### Login page rewrite (`components/LoginComponent.tsx`)
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:126:- `lastLoginAt` updated, DB session created
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:135:- `components/LoginComponent.tsx` — full rewrite
+./scripts/VALIDATION_README.md:357:   - Login as admin
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:57:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:169:| `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` | Replace conditional spinner with 3 `<Skeleton>` rows |
+./prisma/schema.prisma:930:  lastLoginAt      DateTime?
+./prisma/schema.prisma:980:  @@index([lastLoginAt])
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:685:### Task 12: Rewrite LoginComponent for Google OAuth + Email OTP
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:688:- Modify: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` (full rewrite)
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:692:Replace the entire contents of `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`:
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:721:export function LoginComponent() {
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:780:      toast.success("Login successful.");
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:792:        <CardTitle className="text-2xl">Login</CardTitle>
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:892:git add app/[locale]/(auth)/sign-in/components/LoginComponent.tsx components/ui/input-otp.tsx
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1249:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1321:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1393:Update `emails/InviteUser.tsx` — remove the `invitedUserPassword` prop and the password display section. The email should now say "Sign in using your email address" instead of showing a password:
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:59:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:724:- [ ] **Step 10: Update `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`**
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:746:  "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx"
+./prisma/migrations/0_init/migration.sql:525:    "lastLoginAt" TIMESTAMP(3),
+./prisma/migrations/0_init/migration.sql:970:CREATE INDEX "Users_lastLoginAt_idx" ON "Users"("lastLoginAt");
+./CHANGELOG.md:295:- Login page rewritten — credentials/register flow removed, Google OAuth + Email OTP only
+./app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+./app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+./app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+./app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+./actions/admin/users/set-role.ts:36:        lastLoginAt: true,
+./actions/admin/users/invite-user.ts:59:        lastLoginAt: true,
+./actions/admin/users/delete-user.ts:31:        lastLoginAt: true,
+
+ succeeded in 0ms:
+./package.json
+./docker-compose.yml
+./tsconfig.json
+./pnpm-lock.yaml
+./observability/otel-collector-config.yml
+./observability/loki-config.yml
+./observability/grafana/provisioning/datasources/loki.yml
+./next.config.js
+./logs/.gitkeep
+./instrumentation.ts
+./README.md
+./types/types.d.ts
+./tests/fixtures/products-import.csv
+./tests/e2e/sales-flow.spec.ts
+./tests/e2e/reports.spec.ts
+./tests/e2e/product-update.spec.ts
+./tests/e2e/product-read.spec.ts
+./tests/e2e/product-import.spec.ts
+./tests/e2e/product-delete.spec.ts
+./tests/e2e/product-create.spec.ts
+./tests/e2e/opportunity-update.spec.ts
+./tests/e2e/opportunity-detail-update.spec.ts
+./tests/e2e/lead-update.spec.ts
+./tests/e2e/lead-detail-update.spec.ts
+./tests/e2e/home.spec.ts
+./tests/e2e/crm.spec.ts
+./tests/e2e/contact-update.spec.ts
+./tests/e2e/contact-detail-update.spec.ts
+./tests/e2e/campaign-targets.spec.ts
+./tests/e2e/campaign-list.spec.ts
+./tests/e2e/campaign-detail.spec.ts
+./tests/e2e/campaign-create.spec.ts
+./tests/e2e/auth.spec.ts
+./tests/e2e/account-update.spec.ts
+./tests/e2e/account-detail-update.spec.ts
+./tests/auth.setup.ts
+./tailwind.config.js
+./skills-lock.json
+./scripts/validation/validators.ts
+./scripts/validation/types.ts
+./scripts/validation/table-schema.ts
+./scripts/validation/report-generator.ts
+./scripts/validate-migration.ts
+./scripts/test-data/README.md
+./scripts/migration/uuid-mapper.ts
+./scripts/migration/utils.ts
+./scripts/migration/types.ts
+./scripts/migration/transformers/users-transformer.ts
+./scripts/migration/transformers/todo-list-transformer.ts
+./scripts/migration/transformers/tasks-transformer.ts
+./scripts/migration/transformers/tasks-comments-transformer.ts
+./scripts/migration/transformers/system-services-transformer.ts
+./scripts/migration/transformers/system-modules-enabled-transformer.ts
+./scripts/migration/transformers/sections-transformer.ts
+./scripts/migration/transformers/openai-keys-transformer.ts
+./scripts/migration/transformers/my-account-transformer.ts
+./scripts/migration/transformers/modul-status-transformer.ts
+./scripts/migration/transformers/invoices-transformer.ts
+./scripts/migration/transformers/invoice-states-transformer.ts
+./scripts/migration/transformers/index.ts
+./scripts/migration/transformers/image-upload-transformer.ts
+./scripts/migration/transformers/gpt-models-transformer.ts
+./scripts/migration/transformers/employees-transformer.ts
+./scripts/migration/transformers/documents-types-transformer.ts
+./scripts/migration/transformers/documents-transformer.ts
+./scripts/migration/transformers/crm-opportunities-type-transformer.ts
+./scripts/migration/transformers/crm-opportunities-transformer.ts
+./scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+./scripts/migration/transformers/crm-leads-transformer.ts
+./scripts/migration/transformers/crm-industry-type-transformer.ts
+./scripts/migration/transformers/crm-contracts-transformer.ts
+./scripts/migration/transformers/crm-contacts-transformer.ts
+./scripts/migration/transformers/crm-campaigns-transformer.ts
+./scripts/migration/transformers/crm-accounts-transformer.ts
+./scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+./scripts/migration/transformers/boards-transformer.ts
+./scripts/migration/table-config.ts
+./scripts/migration/progress-tracker.ts
+./scripts/migration/orchestrator.ts
+./scripts/migration/junction-populator.ts
+./scripts/migration/error-logger.ts
+./scripts/migration/checkpoint-manager.ts
+./scripts/migration/batch-processor.ts
+./scripts/migration/backfill-roles.ts
+./scripts/migration/MIGRATION_MONGO_NATIVE.md
+./scripts/migrate-openai-keys.ts
+./scripts/migrate-mongo-to-postgres.ts
+./scripts/db-backup.sh
+./scripts/VALIDATION_README.md
+./scripts/VALIDATION_QUICK_START.md
+./scripts/PHASE3_IMPLEMENTATION_SUMMARY.md
+./scripts/PHASE2_IMPLEMENTATION_STATUS.md
+./scripts/MIGRATION_README.md
+./release-please-config.json
+./public/vercel.svg
+./public/tmp/favicon_io.zip
+./public/tmp/data.json
+./public/tmp/64d68b562d25286957d594a9.xml
+./public/tmp/64d62de8242c5821b3d0270f.xml
+./public/tmp/64d620d4242c5821b3d0270d.xml
+./public/reports.png
+./public/og.png
+./public/images/opengraph-image.png
+./public/images/nouser.png
+./public/Inter-Bold.ttf
+./proxy.ts
+./prisma/seeds/seed.ts
+./prisma/seeds/currencies.ts
+./prisma/schema.prisma.orig
+./prisma/schema.prisma
+./prisma/migrations/migration_lock.toml
+./prisma/migrations/20260406190000_soft_delete_documents_target_lists/migration.sql
+./prisma/migrations/20260406180000_soft_delete_universal/migration.sql
+./prisma/migrations/20260406120000_cleanup_dead_models_and_bigint/migration.sql
+./prisma/migrations/20260405150000_add_line_items/migration.sql
+./prisma/migrations/20260405070547_add_products_module/migration.sql
+./prisma/migrations/20260404150000_add_currency_support/migration.sql
+./prisma/migrations/20260404120000_add_currency_support/migration.sql
+./prisma/migrations/20260404000000_fix_better_auth_id_defaults/migration.sql
+./prisma/migrations/20260403000000_documents_enrichment/migration.sql
+./prisma/migrations/20260401000001_add_better_auth_user_fields/migration.sql
+./prisma/migrations/20260401000000_add_better_auth_tables_and_role/migration.sql
+./prisma/migrations/20260331000001_add_report_config_and_schedule/migration.sql
+./prisma/migrations/20260331000000_resolve_drift/migration.sql
+./prisma/migrations/20260328000002_add_crm_audit_log/migration.sql
+./components.json
+./prisma/migrations/20260328000001_add_soft_delete_columns/migration.sql
+./buildCount.json
+./e2b.toml
+./e2b.Dockerfile
+./prisma/migrations/20260328000000_add_crm_activities/migration.sql
+./prisma/migrations/20260327000001_crm_settings_db_backed/migration.sql
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql
+./prisma/migrations/0_init/migration.sql
+./i18n/routing.ts
+./i18n/request.ts
+./i18n/navigation.ts
+./app/client-logger.ts
+./app/client-error-listener.tsx
+./prisma/migrations/20260325000002_add_email_module/migration.sql
+./docs/observability.md
+./prisma/initial-data/crm_Opportunities_Type.json
+./prisma/initial-data/crm_Opportunities_Sales_Stages.json
+./prisma/initial-data/crm_Lead_Types.json
+./prisma/initial-data/crm_Lead_Statuses.json
+./prisma/initial-data/crm_Lead_Sources.json
+./prisma/initial-data/crm_Industry_Type.json
+./prisma/initial-data/crm_Contact_Types.json
+./prisma.config.ts
+./postcss.config.js
+./playwright.config.ts
+./hooks/useDebounce.tsx
+./hooks/use-toast.ts
+./hooks/use-mobile.tsx
+./hooks/use-action.ts
+./eslint.config.mjs
+./prisma/migrations/20260325000001_drop_system_modules_enabled/migration.sql
+./app/providers/ToastProvider.tsx
+./app/providers/ThemeProvider.tsx
+./app/opengraph-image.png
+./app/favicon.ico
+./prisma/migrations/20260325000000_campaigns_module/migration.sql
+./locales/uk.json
+./locales/en.json
+./locales/de.json
+./locales/cz.json
+./app/components/NoApiKeyDialog.tsx
+./prisma/migrations/20260323000001_add_api_keys/migration.sql
+./emails/admin/MessageToAllUser.tsx
+./prisma/migrations/20260323000000_add_contact_enrichment/migration.sql
+./emails/UpdatedTaskFromProject.tsx
+./emails/ScheduledReport.tsx
+./emails/NewTaskFromProject.tsx
+./emails/NewTaskFromCRMToWatchers.tsx
+./emails/NewTaskFromCRM.tsx
+./emails/NewTaskComment.tsx
+./emails/InviteUser.tsx
+./emails/DemoTemplate.tsx
+./emails/AiTasksReport.tsx
+./emails/AiProjectReport.tsx
+./prisma/migrations/20260320000001_add_api_tokens/migration.sql
+./e2b/template.ts
+./e2b/build.ts
+./lib/currency-format.ts
+./lib/create-safe-action.ts
+./lib/sendmail.ts
+./lib/openai.ts
+./lib/logger.ts
+./lib/audit-log.ts
+./lib/auth.ts
+./lib/utils.ts
+./lib/serialize-decimals.ts
+./lib/resend.ts
+./lib/prisma.ts
+./lib/new-user-notify.ts
+./lib/minio.ts
+./app/api/client-logs/route.ts
+./prisma/migrations/20260320000000_add_pgvector_embeddings/migration.sql
+./docs/superpowers/specs/2026-04-06-soft-delete-migration-design.md
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md
+./docs/superpowers/specs/2026-04-06-frontend-alignment-remaining-gaps-design.md
+./docs/superpowers/specs/2026-04-05-products-playwright-tests-design.md
+./docs/superpowers/specs/2026-04-05-products-module-design.md
+./docs/superpowers/specs/2026-04-05-line-items-design.md
+./docs/superpowers/specs/2026-04-04-currency-support-design.md
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md
+./docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md
+./lib/campaigns/merge-tags.ts
+./docs/superpowers/specs/2026-03-31-reports-remaster-design.md
+./docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md
+./docs/superpowers/specs/2026-03-30-campaign-tests-refactor-design.md
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md
+./docs/superpowers/specs/2026-03-28-crm-activities-design.md
+./lib/auth-server.ts
+./docs/superpowers/specs/2026-03-27-crm-settings-design.md
+./lib/auth-permissions.ts
+./docs/superpowers/specs/2026-03-27-crm-audit-log-design.md
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md
+./lib/auth-guards.ts
+./docs/superpowers/specs/2026-03-26-e2b-agent-enrichment-design.md
+./docs/superpowers/specs/2026-03-25-campaigns-module-design.md
+./lib/auth-client.ts
+./docs/superpowers/specs/2026-03-23-target-enrichment-design.md
+./docs/superpowers/specs/2026-03-23-llm-api-keys-design.md
+./docs/superpowers/specs/2026-03-23-contact-enrichment-design.md
+./docs/superpowers/specs/2026-03-22-emails-design.md
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md
+./docs/superpowers/specs/2026-03-21-profile-settings-redesign.md
+./lib/api-tokens.ts
+./docs/superpowers/specs/2026-03-20-unified-search-design.md
+./lib/api-keys.ts
+./docs/superpowers/specs/2026-03-20-pgvector-embeddings-design.md
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md
+./lib/__tests__/audit-log.test.ts
+./jest.env.setup.ts
+./jest.config.ts
+./app/[locale]/layout.tsx
+./app/[locale]/loading.tsx
+./app/[locale]/globals.css.bck
+./app/[locale]/globals.css
+./app/api/upload/presigned-url/route.ts
+./lib/mcp/tools/reports.ts
+./lib/mcp/tools/projects.ts
+./lib/mcp/tools/index.ts
+./lib/mcp/tools/crm-targets.ts
+./inngest/lib/imap-utils.ts
+./lib/mcp/tools/crm-target-lists.ts
+./inngest/lib/embedding-utils.ts
+./lib/mcp/tools/crm-products.ts
+./lib/mcp/tools/crm-opportunities.ts
+./lib/mcp/tools/crm-leads.ts
+./lib/mcp/tools/crm-enrichment.ts
+./lib/mcp/tools/crm-email-accounts.ts
+./lib/mcp/tools/crm-documents.ts
+./lib/mcp/tools/crm-contracts.ts
+./lib/mcp/tools/crm-contacts.ts
+./lib/mcp/tools/crm-activities.ts
+./lib/mcp/tools/crm-accounts.ts
+./lib/mcp/tools/campaigns.ts
+./lib/mcp/helpers.ts
+./lib/mcp/auth.ts
+./lib/line-items.ts
+./lib/junction-helpers.ts
+./lib/fetcher.ts
+./app/api/reports/export/route.ts
+./app/api/og/route.tsx
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md
+./docs/superpowers/plans/2026-04-05-products-playwright-tests.md
+./docs/superpowers/plans/2026-04-05-products-module.md
+./docs/superpowers/plans/2026-04-05-line-items.md
+./docs/superpowers/plans/2026-04-04-currency-support.md
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md
+./docs/superpowers/plans/2026-03-31-reports-remaster.md
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md
+./docs/superpowers/plans/2026-03-30-campaign-tests-refactor.md
+./docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md
+./docs/superpowers/plans/2026-03-30-campaign-playwright-tests.md
+./docs/superpowers/plans/2026-03-29-gmail-quick-connect.md
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md
+./docs/superpowers/plans/2026-03-28-crm-activities.md
+./docs/superpowers/plans/2026-03-27-crm-settings.md
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md
+./docs/superpowers/plans/2026-03-25-campaigns-module.md
+./docs/superpowers/plans/2026-03-23-target-enrichment.md
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md
+./docs/superpowers/plans/2026-03-22-emails.md
+./docs/superpowers/plans/2026-03-22-email-sync-overhaul.md
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md
+./docs/superpowers/plans/2026-03-20-unified-search.md
+./docs/superpowers/plans/2026-03-20-pgvector-embeddings.md
+./docs/superpowers/plans/2026-03-20-mcp-server.md
+./app/[locale]/(routes)/reports/users/page.tsx
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md
+./docs/soft-delete-gaps.md
+./lib/enrichment/utils/source-context.ts
+./lib/enrichment/utils/skip-list.ts
+./lib/enrichment/utils/field-utils.ts
+./lib/enrichment/utils/email-detection.ts
+./lib/enrichment/utils.ts
+./inngest/functions/reports/send-scheduled.ts
+./inngest/functions/enrich-targets-bulk.ts
+./inngest/functions/enrich-target.ts
+./inngest/functions/enrich-target-contact.ts
+./inngest/functions/enrich-contacts-bulk.ts
+./inngest/functions/enrich-contact.ts
+./inngest/functions/embed-opportunity.ts
+./inngest/functions/embed-lead.ts
+./inngest/functions/embed-contact.ts
+./inngest/functions/embed-backfill.ts
+./inngest/functions/embed-account.ts
+./app/api/mcp/[transport]/route.ts
+./app/[locale]/(routes)/reports/sales/page.tsx
+./app/[locale]/(routes)/reports/page.tsx
+./app/[locale]/(routes)/reports/loading.tsx
+./docs/deployment/better-auth-migration-runbook.md
+./docs/POSTGRESQL_MIGRATION_GUIDE.md
+./lib/enrichment/types/stored-result.ts
+./lib/enrichment/types/index.ts
+./lib/enrichment/types/field-generation.ts
+./app/api/inngest/route.ts
+./app/[locale]/(routes)/reports/leads/page.tsx
+./inngest/functions/emails/sync-all.ts
+./inngest/functions/emails/sync-account.ts
+./inngest/functions/emails/link-crm.ts
+./inngest/functions/emails/embed-email.ts
+./context/currency-context.tsx
+./context/avatar-context.tsx
+./app/api/feedback/route.ts
+./lib/enrichment/strategies/enrichment-strategy.ts
+./lib/enrichment/strategies/email-parser.ts
+./lib/enrichment/strategies/agent-enrichment-strategy.ts
+./inngest/functions/ecb/sync-exchange-rates.ts
+./app/[locale]/(routes)/reports/campaigns/page.tsx
+./app/[locale]/(routes)/reports/activity/page.tsx
+./lib/enrichment/services/specialized-agents.ts
+./inngest/functions/documents/generate-thumbnail.ts
+./lib/enrichment/services/openai.ts
+./inngest/functions/documents/enrich-document.ts
+./lib/enrichment/services/firecrawl.ts
+./lib/enrichment/rate-limit.ts
+./app/[locale]/(routes)/reports/accounts/page.tsx
+./lib/enrichment/presets/target-fields.ts
+./inngest/functions/campaigns/send-step.ts
+./inngest/functions/campaigns/send-now.ts
+./inngest/functions/campaigns/schedule-send.ts
+./inngest/functions/campaigns/process-follow-up.ts
+./inngest/client.ts
+./lib/email-crypto.ts
+./lib/currency.ts
+./lib/enrichment/e2b/apply-result.ts
+./lib/enrichment/e2b/agent-script.ts
+./app/api/crm/targets/enrich/validate.ts
+./app/api/crm/targets/enrich/route.ts
+./lib/enrichment/config/enrichment.ts
+./app/api/crm/targets/enrich-bulk/route.ts
+./app/[locale]/(routes)/employees/page.tsx
+./lib/enrichment/agent-architecture/tools/website-scraper-tool.ts
+./lib/enrichment/agent-architecture/tools/smart-search-tool.ts
+./lib/enrichment/agent-architecture/tools/email-parser-tool.ts
+./lib/enrichment/agent-architecture/orchestrator.ts
+./lib/enrichment/agent-architecture/index.ts
+./app/api/crm/targets/[id]/route.ts
+./components/ui/minio-uploader.tsx
+./components/ui/user-search-combobox.tsx
+./components/ui/use-toast.ts
+./components/ui/tooltip.tsx
+./components/ui/toaster.tsx
+./components/ui/toast.tsx
+./components/ui/textarea.tsx
+./components/ui/tabs.tsx
+./components/ui/table.tsx
+./components/ui/switch.tsx
+./components/ui/sonner.tsx
+./components/ui/skeleton.tsx
+./components/ui/sidebar.tsx
+./components/ui/sheet.tsx
+./components/ui/separator.tsx
+./components/ui/select.tsx
+./components/ui/scroll-area.tsx
+./components/ui/resizable.tsx
+./components/ui/popover.tsx
+./components/ui/modal.tsx
+./components/ui/modal-document-view.tsx
+./components/ui/label.tsx
+./components/ui/input.tsx
+./components/ui/input-otp.tsx
+./components/ui/icons.tsx
+./components/ui/hover-card.tsx
+./components/ui/heading.tsx
+./components/ui/form.tsx
+./components/ui/file-uploader.tsx
+./components/ui/file-uploader-dropzone.tsx
+./lib/enrichment/agent-architecture/core/types.ts
+./components/ui/dropdown-menu.tsx
+./lib/enrichment/agent-architecture/core/agent-base.ts
+./components/ui/drawer.tsx
+./app/[locale]/(routes)/emails/use-mail.ts
+./components/ui/dialog.tsx
+./app/[locale]/(routes)/emails/page.tsx
+./components/ui/dialog-document-view.tsx
+./app/[locale]/(routes)/emails/data.tsx
+./components/ui/data-table.tsx
+./components/ui/command.tsx
+./components/ui/collapsible.tsx
+./components/ui/checkbox.tsx
+./components/ui/chart.tsx
+./components/ui/card.tsx
+./components/ui/calendar.tsx
+./components/ui/button.tsx
+./components/ui/badge.tsx
+./app/api/crm/targets/[id]/enrich/route.ts
+./components/ui/avatar.tsx
+./components/ui/alert.tsx
+./components/ui/alert-dialog.tsx
+./components/ui/account-search-combobox.tsx
+./components/ui/IconButton.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx
+./app/api/crm/targets/[id]/contacts/route.ts
+./components/typography/h4.tsx
+./components/typography/h2.tsx
+./components/support.tsx
+./lib/enrichment/agent-architecture/agents/tech-stack-agent.ts
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts
+./lib/enrichment/agent-architecture/agents/general-agent.ts
+./lib/enrichment/agent-architecture/agents/funding-agent.ts
+./lib/enrichment/agent-architecture/agents/discovery-agent.ts
+./lib/enrichment/agent-architecture/agents/company-profile-agent.ts
+./app/[locale]/(routes)/emails/components/mail-display.tsx
+./app/[locale]/(routes)/emails/components/nav.tsx
+./app/[locale]/(routes)/emails/components/mail.tsx
+./app/[locale]/(routes)/emails/components/mail-list.tsx
+./app/[locale]/(routes)/emails/components/account-switcher.tsx
+./app/[locale]/(routes)/emails/components/ComposeModal.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/data.tsx
+./components/skeletons/table-skeleton.tsx
+./components/skeletons/search-skeleton.tsx
+./components/skeletons/reports-skeleton.tsx
+./components/skeletons/projects-skeleton.tsx
+./components/skeletons/profile-skeleton.tsx
+./components/skeletons/emails-skeleton.tsx
+./components/skeletons/documents-skeleton.tsx
+./components/skeletons/crm-table-skeleton.tsx
+./components/skeletons/crm-accounts-skeleton.tsx
+./components/skeletons/app-shell-skeleton.tsx
+./components/skeletons/admin-skeleton.tsx
+./app/[locale]/(routes)/documents/page.tsx
+./app/[locale]/(routes)/documents/loading.tsx
+./app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts
+./components/sheets/form-sheet.tsx
+./components/sheets/form-sheet-no-trigger.tsx
+./app/[locale]/(routes)/documents/data/schema.tsx
+./app/[locale]/(routes)/documents/data/data.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx
+./app/[locale]/(routes)/projects/tasks/page.tsx
+./app/[locale]/(routes)/campaigns/templates/page.tsx
+./app/api/crm/leads/create-lead-from-web/route.ts
+./app/[locale]/(routes)/projects/tasks/data/schema.tsx
+./app/[locale]/(routes)/projects/tasks/data/data.tsx
+./components/reports/ScheduleDialog.tsx
+./components/reports/SavedReportsDropdown.tsx
+./components/reports/SaveConfigDialog.tsx
+./components/reports/ReportToolbar.tsx
+./components/reports/ReportTable.tsx
+./components/reports/ReportPageLayout.tsx
+./components/reports/ReportChart.tsx
+./components/reports/KPICard.tsx
+./components/reports/FilterBar.tsx
+./components/reports/DateRangePicker.tsx
+./app/[locale]/(routes)/campaigns/templates/new/page.tsx
+./app/[locale]/(routes)/documents/components/processing-status-badge.tsx
+./app/[locale]/(routes)/documents/components/modal-dropzone.tsx
+./app/[locale]/(routes)/documents/components/document-detail-panel.tsx
+./app/[locale]/(routes)/documents/components/data-table.tsx
+./app/[locale]/(routes)/documents/components/data-table-view-options.tsx
+./app/[locale]/(routes)/documents/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/documents/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/documents/components/data-table-pagination.tsx
+./app/[locale]/(routes)/documents/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/documents/components/data-table-column-header.tsx
+./app/[locale]/(routes)/documents/components/columns.tsx
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx
+./app/[locale]/(routes)/documents/components/batch-actions-bar.tsx
+./app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-pagination.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/tasks/components/columns.tsx
+./app/[locale]/(routes)/databox/page.tsx
+./components/modals/ImportTargetsModal.tsx
+./components/modals/upload-file-modal.tsx
+./components/modals/right-view-notrigger.tsx
+./components/modals/password-reset.tsx
+./components/modals/loading-modal.tsx
+./components/modals/document-view-modal.tsx
+./components/modals/alert-modal.tsx
+./components/modals/CreateTargetListModal.tsx
+./components/modals/AddTargetToListModal.tsx
+./app/api/crm/contacts/enrich/validate.ts
+./app/api/crm/contacts/enrich/route.ts
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx
+./app/[locale]/(routes)/projects/tasks/[userId]/page.tsx
+./components/fulltext-search/result-card.tsx
+./components/fulltext-search/entity-result-section.tsx
+./app/api/crm/contacts/enrich-bulk/route.ts
+./app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx
+./app/api/crm/contacts/create-from-remote/route.ts
+./components/form/from-select.tsx
+./components/form/form-textarea.tsx
+./components/form/form-submit.tsx
+./components/form/form-input.tsx
+./components/form/form-errors.tsx
+./components/form/form-datepicker.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/projects/table-components/data-table.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/table-components/columns.tsx
+./app/[locale]/(routes)/projects/page.tsx
+./app/[locale]/(routes)/projects/loading.tsx
+./app/api/crm/contacts/[id]/route.ts
+./app/[locale]/(routes)/projects/forms/UpdateProject.tsx
+./components/crm/similar-records-drawer.tsx
+./components/crm/find-similar-button.tsx
+./app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx
+./components/crm/audit-log/Timeline.tsx
+./components/crm/audit-log/Entry.tsx
+./components/crm/audit-log/AdminTable.tsx
+./components/crm/audit-log/AdminPageClient.tsx
+./components/crm/audit-log/AdminFilters.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx
+./app/[locale]/(routes)/projects/data/schema.tsx
+./app/[locale]/(routes)/projects/data/data.tsx
+./components/crm/activities/ActivityForm.tsx
+./components/crm/activities/ActivityEntry.tsx
+./components/crm/activities/ActivitiesView.tsx
+./app/api/campaigns/webhooks/resend/route.ts
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/data.tsx
+./app/[locale]/(routes)/projects/dashboard/page.tsx
+./components/campaigns/TipTapEditor.tsx
+./components/ThemeToggle.tsx
+./components/SetLanguage.tsx
+./components/CurrencySwitcher.tsx
+./components/CommandComponent.tsx
+./app/api/campaigns/unsubscribe/route.ts
+./app/[locale]/(routes)/profile/page.tsx
+./app/[locale]/(routes)/profile/loading.tsx
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/page.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx
+./app/api/campaigns/targets/enrich/route.ts
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/StepsTimeline.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/CampaignDetail.tsx
+./app/api/campaigns/targets/enrich-bulk/route.ts
+./app/[locale]/(routes)/projects/boards/[boardId]/page.tsx
+./app/api/campaigns/targets/[id]/route.ts
+./app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx
+./app/[locale]/(routes)/crm/products/table-data/schema.tsx
+./app/[locale]/(routes)/crm/products/table-data/data.tsx
+./app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx
+./app/[locale]/(routes)/profile/components/ProfileTabs.tsx
+./app/[locale]/(routes)/profile/components/ProfileHeroAvatar.tsx
+./app/[locale]/(routes)/profile/components/ProfileHero.tsx
+./app/[locale]/(routes)/profile/components/ProfileForm.tsx
+./app/[locale]/(routes)/profile/components/OpenAiForm.tsx
+./app/[locale]/(routes)/profile/components/LanguageForm.tsx
+./app/[locale]/(routes)/profile/components/EmailAccountsList.tsx
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx
+./app/api/campaigns/targets/[id]/enrich/route.ts
+./app/[locale]/(routes)/profile/actions/api-keys.ts
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx
+./app/[locale]/(routes)/page.tsx
+./app/[locale]/(routes)/loading.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx
+./app/[locale]/(routes)/layout.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/products/table-components/columns.tsx
+./app/[locale]/(routes)/crm/products/page.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx
+./app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx
+./app/[locale]/(routes)/admin/users/table-data/schema.tsx
+./app/[locale]/(routes)/admin/users/table-data/data.tsx
+./app/api/auth/test-otp/route.ts
+./app/[locale]/(routes)/projects/actions/get-task-done.ts
+./app/[locale]/(routes)/fulltext-search/search/page.tsx
+./app/[locale]/(routes)/crm/products/_forms/update-product.tsx
+./app/[locale]/(routes)/crm/products/_forms/create-product.tsx
+./app/api/auth/[...all]/route.ts
+./app/[locale]/(routes)/projects/_components/ProjectsView.tsx
+./app/[locale]/(routes)/fulltext-search/search/components/ResultPage.tsx
+./app/[locale]/(routes)/fulltext-search/page.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/products/[productId]/page.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx
+./app/[locale]/(routes)/admin/users/page.tsx
+./app/[locale]/(routes)/admin/actions/api-keys.ts
+./__mocks__/e2b.ts
+./LICENSE
+./CONTRIBUTING.md
+./CHANGELOG.md
+./AGENTS.md
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/EditProductButton.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx
+./app/[locale]/(routes)/crm/page.tsx
+./app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx
+./app/[locale]/(routes)/admin/users/components/IviteForm.tsx
+./app/[locale]/(routes)/admin/_components/copy-key.tsx
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx
+./app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx
+./app/[locale]/(routes)/admin/page.tsx
+./app/[locale]/(routes)/admin/loading.tsx
+./app/[locale]/(routes)/admin/llm-keys/page.tsx
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx
+./app/[locale]/(routes)/admin/layout.tsx
+./app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx
+./app/[locale]/(routes)/crm/opportunities/table-data/data.tsx
+./app/[locale]/(auth)/sign-in/page.tsx
+./actions/user/update-profile.ts
+./actions/user/set-language.ts
+./actions/user/update-profile-photo.ts
+./actions/user/search-users.ts
+./actions/user/get-user-by-id.ts
+./app/[locale]/(routes)/admin/currencies/page.tsx
+./__tests__/reports/users.test.ts
+./__tests__/reports/types.test.ts
+./__tests__/reports/schedule.test.ts
+./__tests__/reports/sales.test.ts
+./__tests__/reports/leads.test.ts
+./__tests__/reports/export-csv.test.ts
+./__tests__/reports/dashboard.test.ts
+./__tests__/reports/config.test.ts
+./__tests__/reports/campaigns.test.ts
+./__tests__/reports/activity.test.ts
+./__tests__/reports/accounts.test.ts
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+./actions/system/get-next-version.ts
+./app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx
+./app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx
+./app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx
+./__tests__/lib/email-crypto.test.ts
+./__tests__/lib/currency.test.ts
+./__tests__/lib/api-tokens.test.ts
+./__tests__/lib/api-keys.test.ts
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx
+./app/[locale]/(routes)/crm/opportunities/page.tsx
+./app/[locale]/(auth)/pending/page.tsx
+./app/[locale]/(routes)/admin/currencies/_actions/currencies.ts
+./actions/reports/users.ts
+./actions/reports/types.ts
+./actions/reports/schedule.ts
+./actions/reports/sales.ts
+./actions/reports/leads.ts
+./actions/reports/export-pdf.ts
+./actions/reports/export-csv.ts
+./actions/reports/dashboard.ts
+./actions/reports/config.ts
+./actions/reports/campaigns.ts
+./actions/reports/activity.ts
+./actions/reports/accounts.ts
+./app/[locale]/(auth)/pending/components/TryAgain.tsx
+./app/[locale]/(auth)/layout.tsx
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx
+./__tests__/inngest/emails/embed-email.test.ts
+./app/[locale]/(routes)/admin/crm-settings/page.tsx
+./app/[locale]/(auth)/inactive/page.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/page.tsx
+./__tests__/enrichment/utils.test.ts
+./__tests__/enrichment/enrich-target-route.test.ts
+./__tests__/enrichment/enrich-target-job.test.ts
+./app/[locale]/(auth)/inactive/components/TryAgain.tsx
+./__tests__/enrichment/enrich-route.test.ts
+./__tests__/enrichment/enrich-contact-job.test.ts
+./__tests__/enrichment/e2b-apply-result.test.ts
+./app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx
+./__tests__/crm-settings-actions.test.ts
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/OpportunityDetailActions.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/ActivitiesSection.tsx
+./actions/projects/watch-project.ts
+./actions/projects/update-task.ts
+./actions/projects/update-section-title.ts
+./actions/projects/update-project.ts
+./actions/projects/update-kanban-position.ts
+./actions/projects/mark-task-done.ts
+./actions/projects/delete-task.ts
+./actions/projects/delete-section.ts
+./actions/projects/delete-project.ts
+./actions/projects/create-task.ts
+./actions/projects/create-task-in-board.ts
+./actions/projects/create-section.ts
+./actions/projects/create-project.ts
+./actions/projects/assign-document-to-task.ts
+./actions/projects/add-comment-to-task.ts
+./actions/projects/get-user-tasks.ts
+./actions/projects/get-tasks.ts
+./actions/projects/get-tasks-past-due.ts
+./actions/projects/get-task.ts
+./actions/projects/get-task-documents.ts
+./actions/projects/get-task-comments.ts
+./actions/projects/get-sections.ts
+./actions/projects/get-kanban-data.ts
+./actions/projects/get-boards.ts
+./actions/projects/get-board.ts
+./actions/projects/get-board-sections.ts
+./app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts
+./__tests__/campaigns/merge-tags.test.ts
+./app/[locale]/(routes)/admin/audit-log/page.tsx
+./__tests__/campaigns/inngest/send-step.test.ts
+./actions/github/get-repo-stars.ts
+./actions/github/get-repo-commits.ts
+./actions/get-users.ts
+./actions/get-user.ts
+./actions/get-empoloyees.ts
+./app/[locale]/(routes)/crm/leads/page.tsx
+./app/[locale]/(routes)/campaigns/new/page.tsx
+./actions/fulltext/unified-search.ts
+./__tests__/campaigns/api/webhooks-resend.test.ts
+./__tests__/campaigns/api/unsubscribe.test.ts
+./app/[locale]/(routes)/crm/leads/table-data/schema.tsx
+./app/[locale]/(routes)/crm/leads/table-data/data.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-data/schema.tsx
+./app/[locale]/(routes)/campaigns/new/components/WizardShell.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step4Schedule.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step1Details.tsx
+./actions/emails/sync.ts
+./actions/emails/messages.ts
+./actions/emails/accounts.ts
+./__tests__/actions/emails/accounts.test.ts
+./actions/api-tokens.ts
+./app/[locale]/(routes)/crm/leads/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/campaigns/target-lists/page.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx
+./actions/documents/unlink-from-account.ts
+./actions/documents/search-documents.ts
+./actions/documents/retry-enrichment.ts
+./actions/documents/get-storage-size.ts
+./actions/documents/get-documents.ts
+./actions/documents/get-documents-by-opportunityId.ts
+./actions/documents/get-documents-by-contactId.ts
+./actions/documents/get-documents-by-accountId.ts
+./actions/documents/get-document-versions.ts
+./actions/documents/delete-document.ts
+./actions/documents/create-document.ts
+./actions/documents/create-document-version.ts
+./actions/documents/check-duplicate.ts
+./actions/documents/bulk-link-to-account.ts
+./actions/documents/bulk-delete-documents.ts
+./actions/documents/bulk-change-type.ts
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx
+./app/[locale]/(routes)/campaigns/targets/components/EnrichFieldSelector.tsx
+./app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/page.tsx
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx
+./actions/ai/projects/boards/getAiReport.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx
+./actions/dashboard/get-tasks-count.ts
+./actions/dashboard/get-opportunities-count.ts
+./actions/dashboard/get-leads-count.ts
+./actions/dashboard/get-documents-count.ts
+./actions/dashboard/get-contracts-count.ts
+./actions/dashboard/get-contacts-count.ts
+./actions/dashboard/get-boards-count.ts
+./actions/dashboard/get-active-users-count.ts
+./actions/dashboard/get-accounts-count.ts
+./app/[locale]/(routes)/crm/leads/[leadId]/components/LeadDetailActions.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx
+./app/[locale]/(routes)/campaigns/table-data/schema.tsx
+./app/[locale]/(routes)/campaigns/page.tsx
+./app/[locale]/(routes)/campaigns/targets/page.tsx
+./actions/admin/users/set-role.ts
+./actions/admin/users/invite-user.ts
+./actions/admin/users/delete-user.ts
+./actions/admin/users/deactivate-user.ts
+./actions/admin/users/activate-user.ts
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx
+./app/[locale]/(routes)/crm/dashboard/page.tsx
+./actions/admin/send-mail-to-all/index.ts
+./actions/admin/send-mail-to-all/types.ts
+./actions/admin/send-mail-to-all/schema.ts
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx
+./actions/crm/account/get-tasks.ts
+./actions/crm/account/get-task.ts
+./actions/crm/get-opportunities.ts
+./app/[locale]/(routes)/crm/contacts/table-data/schema.tsx
+./app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx
+./actions/crm/contacts/update-contact.ts
+./actions/crm/contacts/unlink-opportunity.ts
+./actions/crm/contacts/restore-contact.ts
+./actions/crm/contacts/delete-contact.ts
+./actions/crm/contacts/create-contact.ts
+./actions/crm/tasks/delete-task.ts
+./actions/crm/tasks/add-comment.ts
+./actions/crm/tasks/get-user-tasks.ts
+./app/[locale]/(routes)/crm/contacts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx
+./actions/crm/account-products/update-assignment/index.ts
+./app/[locale]/(routes)/crm/contacts/page.tsx
+./actions/crm/account-products/update-assignment/types.ts
+./actions/crm/account-products/update-assignment/schema.ts
+./actions/crm/audit-log/get-audit-log-by-entity.ts
+./actions/crm/audit-log/get-audit-log-admin.ts
+./actions/crm/targets/import-targets.ts
+./actions/crm/targets/suggest-mapping.ts
+./actions/crm/targets/convert-target.ts
+./actions/crm/targets/update-target.ts
+./actions/crm/targets/delete-target.ts
+./app/[locale]/(routes)/crm/contracts/table-data/schema.tsx
+./actions/crm/targets/create-target.ts
+./app/[locale]/(routes)/crm/contracts/table-data/data.tsx
+./actions/crm/account-products/remove-assignment/index.ts
+./actions/crm/account-products/get-account-products.ts
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx
+./app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx
+./actions/crm/activities/update-activity.ts
+./actions/crm/activities/get-activities-by-entity.ts
+./actions/crm/activities/delete-activity.ts
+./actions/crm/activities/create-activity.ts
+./actions/crm/target-lists/update-target-list.ts
+./actions/crm/target-lists/remove-target-from-list.ts
+./actions/crm/target-lists/delete-target-list.ts
+./actions/crm/target-lists/create-target-list.ts
+./actions/crm/target-lists/add-targets-to-list.ts
+./actions/crm/account-products/assign-product/index.ts
+./actions/crm/account-products/assign-product/types.ts
+./actions/crm/account-products/assign-product/schema.ts
+./app/[locale]/(routes)/crm/contracts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx
+./app/[locale]/(routes)/crm/contracts/page.tsx
+./actions/crm/accounts/watch-account.ts
+./actions/crm/accounts/update-account.ts
+./actions/crm/accounts/unwatch-account.ts
+./actions/crm/accounts/restore-account.ts
+./actions/crm/accounts/delete-account.ts
+./actions/crm/accounts/create-task.ts
+./actions/crm/accounts/create-account.ts
+./actions/crm/accounts/search-accounts.ts
+./actions/crm/accounts/get-accounts.ts
+./actions/crm/similarity/get-similar-opportunities.ts
+./actions/crm/similarity/get-similar-leads.ts
+./actions/crm/similarity/get-similar-contacts.ts
+./app/[locale]/(routes)/crm/contacts/[contactId]/page.tsx
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx
+./actions/crm/similarity/get-similar-accounts.ts
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx
+./actions/crm/get-opportunities-with-includes-by-accountId.ts
+./actions/crm/get-leads.ts
+./actions/crm/get-leads-by-accountId.ts
+./actions/crm/get-lead.ts
+./actions/crm/get-industries.ts
+./actions/crm/get-currencies.ts
+./actions/crm/get-crm-data.ts
+./actions/crm/get-contracts.ts
+./actions/crm/get-contract.ts
+./actions/crm/get-contacts.ts
+./actions/crm/get-contacts-by-opportunityId.ts
+./actions/crm/get-contacts-by-accountId.ts
+./actions/crm/get-contact.ts
+./actions/crm/get-campaigns.ts
+./actions/crm/get-accounts.ts
+./actions/crm/get-accounts-by-opportunityId.ts
+./actions/crm/get-accounts-by-contactId.ts
+./actions/crm/get-account.ts
+./actions/campaigns/update-campaign.ts
+./app/[locale]/(routes)/crm/contracts/[contractId]/page.tsx
+./actions/crm/products/import-products.ts
+./actions/campaigns/templates/update-template.ts
+./actions/campaigns/templates/get-templates.ts
+./actions/campaigns/templates/get-template.ts
+./actions/campaigns/templates/generate-template.ts
+./actions/campaigns/templates/delete-template.ts
+./actions/campaigns/templates/create-template.ts
+./actions/campaigns/send-campaign-now.ts
+./actions/campaigns/schedule-campaign.ts
+./actions/campaigns/pause-campaign.ts
+./actions/campaigns/get-campaigns.ts
+./actions/campaigns/get-campaign.ts
+./actions/campaigns/delete-campaign.ts
+./actions/campaigns/create-campaign.ts
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/ContactDetailActions.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/ActivitiesSection.tsx
+./actions/crm/products/update-product/index.ts
+./actions/crm/products/update-product/types.ts
+./actions/crm/products/update-product/schema.ts
+./actions/crm/products/get-products.ts
+./actions/crm/products/get-product.ts
+./actions/crm/products/get-product-categories.ts
+./actions/crm/contracts/update-contract/index.ts
+./actions/crm/contracts/update-contract/types.ts
+./actions/crm/contracts/update-contract/schema.ts
+./actions/crm/contracts/create-new-contract/index.ts
+./actions/crm/contracts/create-new-contract/types.ts
+./actions/crm/contracts/create-new-contract/schema.ts
+./actions/crm/products/delete-product/index.ts
+./actions/crm/contracts/restore-contract/index.ts
+./actions/crm/get-target.ts
+./actions/crm/get-target-lists.ts
+./actions/crm/get-target-list.ts
+./actions/crm/get-sales-type.ts
+./actions/crm/get-sales-stage.ts
+./actions/crm/get-opportunity.ts
+./actions/crm/get-opportunities-with-includes.ts
+./actions/crm/get-opportunities-with-includes-by-contactId.ts
+./actions/crm/contracts/delete-contract/index.ts
+./actions/crm/contracts/delete-contract/types.ts
+./actions/crm/contracts/delete-contract/schema.ts
+./actions/crm/get-user-leads.ts
+./actions/crm/get-targets.ts
+./actions/crm/get-user-opportunities.ts
+./actions/crm/products/create-product/index.ts
+./actions/crm/products/create-product/types.ts
+./actions/crm/products/create-product/schema.ts
+./app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx
+./app/[locale]/(routes)/crm/components/line-items/EditLineItemForm.tsx
+./app/[locale]/(routes)/crm/components/line-items/AddLineItemForm.tsx
+./app/[locale]/(routes)/crm/components/ProductsView.tsx
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx
+./app/[locale]/(routes)/crm/components/MainPageView.tsx
+./app/[locale]/(routes)/crm/components/LeadsView.tsx
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx
+./app/[locale]/(routes)/crm/components/ContractsView.tsx
+./app/[locale]/(routes)/crm/components/ContactsView.tsx
+./actions/crm/leads/update-lead.ts
+./actions/crm/leads/restore-lead.ts
+./actions/crm/leads/delete-lead.ts
+./actions/crm/leads/create-lead.ts
+./app/[locale]/(routes)/crm/components/AccountsView.tsx
+./actions/crm/contract-line-items/update-line-item/index.ts
+./actions/crm/contract-line-items/update-line-item/types.ts
+./actions/crm/contract-line-items/update-line-item/schema.ts
+./actions/crm/opportunity/get-expected-revenue.ts
+./actions/crm/contract-line-items/reorder-line-items/index.ts
+./actions/crm/opportunity-line-items/update-line-item/index.ts
+./actions/crm/opportunity-line-items/update-line-item/types.ts
+./actions/crm/opportunity-line-items/update-line-item/schema.ts
+./actions/crm/opportunity/dashboard/set-inactive.ts
+./app/[locale]/(routes)/crm/accounts/loading.tsx
+./actions/crm/contract-line-items/remove-line-item/index.ts
+./actions/crm/contract-line-items/get-line-items.ts
+./app/[locale]/(routes)/components/FeedbackForm.tsx
+./app/[locale]/(routes)/components/Feedback.tsx
+./app/[locale]/(routes)/crm/accounts/table-data/schema.tsx
+./app/[locale]/(routes)/components/Footer.tsx
+./app/[locale]/(routes)/crm/accounts/table-data/data.tsx
+./actions/crm/opportunity-line-items/reorder-line-items/index.ts
+./actions/crm/contract-line-items/copy-from-opportunity/index.ts
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx
+./actions/crm/opportunity-line-items/remove-line-item/index.ts
+./actions/crm/opportunity-line-items/get-line-items.ts
+./app/[locale]/(routes)/components/ui/Container.tsx
+./app/[locale]/(routes)/components/ui/AvatarDropdown.tsx
+./app/[locale]/(routes)/components/nav-user.tsx
+./app/[locale]/(routes)/components/nav-secondary.tsx
+./app/[locale]/(routes)/components/nav-main.tsx
+./actions/crm/contract-line-items/add-line-item/index.ts
+./actions/crm/contract-line-items/add-line-item/types.ts
+./actions/crm/contract-line-items/add-line-item/schema.ts
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx
+./app/[locale]/(routes)/crm/accounts/page.tsx
+./actions/crm/opportunity-line-items/add-line-item/schema.ts
+./actions/crm/opportunity-line-items/add-line-item/types.ts
+./actions/crm/opportunity-line-items/add-line-item/index.ts
+./app/[locale]/(routes)/components/app-sidebar.tsx
+./actions/crm/opportunities/update-opportunity.ts
+./actions/crm/opportunities/restore-opportunity.ts
+./actions/crm/opportunities/delete-opportunity.ts
+./actions/crm/opportunities/create-opportunity.ts
+./app/[locale]/(routes)/components/__tests__/nav-main-demo.tsx
+./app/[locale]/(routes)/components/Header.tsx
+./app/[locale]/(routes)/components/FulltextSearch.tsx
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx
+./app/[locale]/(routes)/components/menu-items/Dashboard.tsx
+./app/[locale]/(routes)/components/menu-items/Crm.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/page.tsx
+./app/[locale]/(routes)/components/menu-items/Campaigns.tsx
+./app/[locale]/(routes)/components/menu-items/Administration.tsx
+./app/[locale]/(routes)/components/menu-items/Emails.tsx
+./app/[locale]/(routes)/components/menu-items/Documents.tsx
+./app/[locale]/(routes)/components/menu-items/Projects.tsx
+./app/[locale]/(routes)/components/menu-items/Reports.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/schema.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/data.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountDetailActions.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-pagination.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-view-options.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx
+./app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx
+
+codex
+The direct search already surfaced the likely mismatch: the live component contains a `typeof window` branch that returns `Login` on the server and `Sign in` in the browser. I’m reading the surrounding files to confirm the render path and whether any i18n layer is involved.
+exec
+/usr/bin/bash -lc "sed -n '680,820p' 'docs/superpowers/plans/2026-04-01-better-auth-migration.md'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'i18n/request.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,180p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+git commit -m "chore: remove next-auth type definitions"
+```
+
+---
+
+### Task 12: Rewrite LoginComponent for Google OAuth + Email OTP
+
+**Files:**
+- Modify: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` (full rewrite)
+
+- [ ] **Step 1: Write the new login component**
+
+Replace the entire contents of `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`:
+
+```tsx
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.verifyEmail({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">Login</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              Or continue with email
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+ succeeded in 0ms:
+import { getRequestConfig } from "next-intl/server";
+import { hasLocale } from "next-intl";
+import { routing } from "./routing";
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  const requested = await requestLocale;
+  const locale = hasLocale(routing.locales, requested)
+    ? requested
+    : routing.defaultLocale;
+
+  return {
+    locale,
+    messages: (await import(`../locales/${locale}.json`)).default,
+    timeZone: "Europe/Prague",
+  };
+});
+
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+
+exec
+/usr/bin/bash -lc "sed -n '180,320p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+codex
+The page route is straightforward: `/en/sign-in` server-renders `SignInPage`, which includes this client component. The mismatch is not coming from locale files; the divergent text is hard-coded inside `LoginComponent` before hydration.
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/page.tsx' | sed -n '1,30p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '25,115p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { LoginComponent } from "./components/LoginComponent";
+     2	
+     3	const SignInPage = async () => {
+     4	  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+     5	
+     6	  return (
+     7	    <div className="h-full">
+     8	      <div className="py-10">
+     9	        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+    10	          {title}
+    11	        </h1>
+    12	      </div>
+    13	      <div>
+    14	        <LoginComponent />
+    15	      </div>
+    16	    </div>
+    17	  );
+    18	};
+    19	
+    20	export default SignInPage;
+
+ succeeded in 0ms:
+    25	type Step = "email" | "otp";
+    26	
+    27	function getSubmitLabel(step: Step) {
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+    46	        provider: "google",
+    47	        callbackURL: "/",
+    48	      });
+    49	    } catch (error) {
+    50	      toast.error("Something went wrong with Google sign-in.");
+    51	    } finally {
+    52	      setIsLoading(false);
+    53	    }
+    54	  };
+    55	
+    56	  const sendOtp = async () => {
+    57	    if (!email) {
+    58	      toast.error("Please enter your email address.");
+    59	      return;
+    60	    }
+    61	    setIsLoading(true);
+    62	    try {
+    63	      const { error } = await authClient.emailOtp.sendVerificationOtp({
+    64	        email,
+    65	        type: "sign-in",
+    66	      });
+    67	      if (error) {
+    68	        toast.error(error.message || "Failed to send verification code.");
+    69	        return;
+    70	      }
+    71	      setStep("otp");
+    72	      toast.success("Verification code sent to your email.");
+    73	    } catch (error) {
+    74	      toast.error("Failed to send verification code.");
+    75	    } finally {
+    76	      setIsLoading(false);
+    77	    }
+    78	  };
+    79	
+    80	  const verifyOtp = async () => {
+    81	    if (otp.length !== 6) {
+    82	      toast.error("Please enter the 6-digit code.");
+    83	      return;
+    84	    }
+    85	    setIsLoading(true);
+    86	    try {
+    87	      const { error } = await authClient.signIn.emailOtp({
+    88	        email,
+    89	        otp,
+    90	      });
+    91	      if (error) {
+    92	        toast.error(error.message || "Invalid or expired code.");
+    93	        return;
+    94	      }
+    95	      toast.success("Login successful.");
+    96	      window.location.href = "/";
+    97	    } catch (error) {
+    98	      toast.error("Verification failed.");
+    99	    } finally {
+   100	      setIsLoading(false);
+   101	    }
+   102	  };
+   103	
+   104	  return (
+   105	    <Card className="shadow-lg my-5">
+   106	      <CardHeader className="space-y-1">
+   107	        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+   108	        <CardDescription>Choose your sign-in method</CardDescription>
+   109	      </CardHeader>
+   110	      <CardContent className="grid gap-4">
+   111	        <Button
+   112	          variant="outline"
+   113	          onClick={loginWithGoogle}
+   114	          disabled={isLoading}
+   115	          className="w-full"
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "git blame -L 31,39 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+7acea671 app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-07 09:44:58 +0200 31) export function LoginComponent() {
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 32)   const [isLoading, setIsLoading] = useState(false);
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 33)   const [step, setStep] = useState<Step>("email");
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 34)   const [email, setEmail] = useState("");
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 35)   const [otp, setOtp] = useState("");
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 36)   const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 37)   const dividerLabel =
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 38)     typeof window === "undefined"
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 39)       ? "Or continue with email"
+
+exec
+/usr/bin/bash -lc "git show --stat --oneline --decorate --no-renames 9be250f3 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+ .../(auth)/sign-in/components/LoginComponent.tsx        | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+exec
+/usr/bin/bash -lc "git show --format=fuller --no-ext-diff --unified=40 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' 9be250f3" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:02:42 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:02:42 2026 +0300
+
+    Polish sign-in copy and labels
+
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -1,185 +1,194 @@
+ "use client";
+ 
+ import React, { useState } from "react";
+ import { authClient } from "@/lib/auth-client";
+ 
+ import { Icons } from "@/components/ui/icons";
+ import { Button } from "@/components/ui/button";
+ import {
+   Card,
+   CardContent,
+   CardDescription,
+   CardHeader,
+   CardTitle,
+ } from "@/components/ui/card";
+ import { Input } from "@/components/ui/input";
+ import { Label } from "@/components/ui/label";
+ import { toast } from "sonner";
+ import { MailIcon } from "lucide-react";
+ import {
+   InputOTP,
+   InputOTPGroup,
+   InputOTPSlot,
+ } from "@/components/ui/input-otp";
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+     try {
+       await authClient.signIn.social({
+         provider: "google",
+         callbackURL: "/",
+       });
+     } catch (error) {
+       toast.error("Something went wrong with Google sign-in.");
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   const sendOtp = async () => {
+     if (!email) {
+       toast.error("Please enter your email address.");
+       return;
+     }
+     setIsLoading(true);
+     try {
+       const { error } = await authClient.emailOtp.sendVerificationOtp({
+         email,
+         type: "sign-in",
+       });
+       if (error) {
+         toast.error(error.message || "Failed to send verification code.");
+         return;
+       }
+       setStep("otp");
+       toast.success("Verification code sent to your email.");
+     } catch (error) {
+       toast.error("Failed to send verification code.");
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   const verifyOtp = async () => {
+     if (otp.length !== 6) {
+       toast.error("Please enter the 6-digit code.");
+       return;
+     }
+     setIsLoading(true);
+     try {
+       const { error } = await authClient.signIn.emailOtp({
+         email,
+         otp,
+       });
+       if (error) {
+         toast.error(error.message || "Invalid or expired code.");
+         return;
+       }
+       toast.success("Login successful.");
+       window.location.href = "/";
+     } catch (error) {
+       toast.error("Verification failed.");
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+         <Button
+           variant="outline"
+           onClick={loginWithGoogle}
+           disabled={isLoading}
+           className="w-full"
+         >
+           <Icons.google className="mr-2 h-4 w-4" />
+           Continue with Google
+         </Button>
+ 
+         <div className="relative">
+           <div className="absolute inset-0 flex items-center">
+             <span className="w-full border-t" />
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+ 
+         {step === "email" && (
+           <div className="grid gap-3">
+             <div className="grid gap-1.5">
+               <Label htmlFor="email">Email</Label>
+               <Input
+                 id="email"
+                 type="email"
+                 placeholder="name@domain.com"
+                 value={email}
+                 onChange={(e) => setEmail(e.target.value)}
+                 disabled={isLoading}
+                 onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+               />
+             </div>
+             <Button onClick={sendOtp} disabled={isLoading || !email}>
+               <MailIcon className="mr-2 h-4 w-4" />
+-              Send verification code
++              {getSubmitLabel(step)}
+             </Button>
+           </div>
+         )}
+ 
+         {step === "otp" && (
+           <div className="grid gap-3">
+             <p className="text-sm text-muted-foreground">
+               Enter the 6-digit code sent to <strong>{email}</strong>
+             </p>
+             <div className="flex justify-center">
+               <InputOTP
+                 maxLength={6}
+                 value={otp}
+                 onChange={setOtp}
+                 disabled={isLoading}
+               >
+                 <InputOTPGroup>
+                   <InputOTPSlot index={0} />
+                   <InputOTPSlot index={1} />
+                   <InputOTPSlot index={2} />
+                   <InputOTPSlot index={3} />
+                   <InputOTPSlot index={4} />
+                   <InputOTPSlot index={5} />
+                 </InputOTPGroup>
+               </InputOTP>
+             </div>
+             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+-              Verify and sign in
++              {getSubmitLabel(step)}
+             </Button>
+             <Button
+               variant="ghost"
+               size="sm"
+               onClick={() => {
+                 setStep("email");
+                 setOtp("");
+               }}
+               disabled={isLoading}
+             >
+               Use a different email
+             </Button>
+           </div>
+         )}
+       </CardContent>
+     </Card>
+   );
+ }
+
+codex
+**Incident Report**
+
+Most likely root cause: a deliberate server/client render branch in `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`.
+
+At line 36, the component renders:
+
+```tsx
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a Next.js client component, it is still server-rendered first, then hydrated in the browser. The server therefore emits `Login`, while the browser’s first render emits `Sign in`. That exactly matches the incident payload:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second mismatch in the same component:
+
+```tsx
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+So even if the title mismatch were absent, the divider text could also trigger hydration drift.
+
+The regression was introduced by commit `9be250f3` titled `Polish sign-in copy and labels` on 2026-05-01. The incident occurred on 2026-05-04, after that change.
+
+**Conclusion**
+
+This is not caused by i18n, auth state, locale loading, or browser extensions. The root cause is render-time use of `typeof window` to choose visible text, producing different initial HTML on the server and client.
+
+**Recommended fix**
+
+Make the initial render deterministic: use the same literal text on both server and client, for example always `Sign in` or always `Login`. If browser-only behavior is genuinely needed, defer it until after hydration with state updated from `useEffect`, but visible static copy should not depend on `typeof window`.
+
+No code changes were made.
+tokens used
+31,389
+**Incident Report**
+
+Most likely root cause: a deliberate server/client render branch in `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`.
+
+At line 36, the component renders:
+
+```tsx
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a Next.js client component, it is still server-rendered first, then hydrated in the browser. The server therefore emits `Login`, while the browser’s first render emits `Sign in`. That exactly matches the incident payload:
+
+```diff
++ Sign in
+- Login
+```
+
+There is a second mismatch in the same component:
+
+```tsx
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+So even if the title mismatch were absent, the divider text could also trigger hydration drift.
+
+The regression was introduced by commit `9be250f3` titled `Polish sign-in copy and labels` on 2026-05-01. The incident occurred on 2026-05-04, after that change.
+
+**Conclusion**
+
+This is not caused by i18n, auth state, locale loading, or browser extensions. The root cause is render-time use of `typeof window` to choose visible text, producing different initial HTML on the server and client.
+
+**Recommended fix**
+
+Make the initial render deterministic: use the same literal text on both server and client, for example always `Sign in` or always `Login`. If browser-only behavior is genuinely needed, defer it until after hydration with state updated from `useEffect`, but visible static copy should not depend on `typeof window`.
+
+No code changes were made.

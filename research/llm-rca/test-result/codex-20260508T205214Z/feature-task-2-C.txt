@@ -1,0 +1,1608 @@
+run_name: feature-task-2-C
+case_name: feature-task-2
+variant: C
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:06:56Z
+elapsed_seconds: 53
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/C/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the first client render.
+
+In [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component contains:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a `"use client"` component that is still server-rendered during SSR, the server emits `Login`, then the browser hydrates with `Sign in`. That exactly matches the incident diff:
+
+```text
++ Sign in
+- Login
+```
+
+There is a second likely hydration mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This was introduced in commit `9be250f` / `Polish sign-in copy and labels` on May 1, 2026. The incident occurred on May 4, 2026.
+
+**Confidence:** High. The logged React hydration error, route, component stack, and current source all point to the same server/client branch.
+
+**Recommended fix:** Make the initial render deterministic. Use the same static text on both server and client, or move truly client-only variation behind a post-mount state update. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e096a-362b-75e0-a58b-c09642a15f29
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e205c05bab2c1e0f7842fa624396f721",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:30:26.512Z",
+      "lastSeen": "2026-05-04T18:30:26.512Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:30:26.512Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.client-error-listener",
+          "route": "/en/sign-in",
+          "clientUrl": "http://localhost:3000/en/sign-in",
+          "message": "Unhandled client error",
+          "error": {
+            "name": "Error",
+            "message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+            "stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n"
+          },
+          "correlation": {
+            "traceId": "e205c05bab2c1e0f7842fa624396f721",
+            "spanId": "f6f18ebb5ee63701",
+            "clientSessionId": "f4e338ce-1d65-492f-9a53-16026bf86155"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'SKILL.md' -g 'AGENTS.md' -g 'package.json'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+package.json
+AGENTS.md
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' package.json" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+{
+  "name": "nextcrm-app",
+  "version": "0.6.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "migrate:mongo-to-postgres": "pnpm exec tsx scripts/migrate-mongo-to-postgres.ts",
+    "validate:migration": "pnpm exec tsx scripts/validate-migration.ts",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
+  },
+  "prisma": {
+    "seed": "ts-node ./prisma/seeds/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0",
+    "@aws-sdk/signature-v4-crt": "^3.997.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hookform/resolvers": "^5.2.2",
+    "@mendable/firecrawl-js": "^1.29.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@openai/agents": "^0.8.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@prisma/adapter-pg": "7.6.0",
+    "@prisma/client": "7.6.0",
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-hover-card": "^1.1.15",
+    "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@react-email/components": "^1.0.8",
+    "@react-email/markdown": "0.0.18",
+    "@react-email/render": "^2.0.4",
+    "@react-pdf/renderer": "^4.3.2",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@tanstack/react-table": "^8.21.3",
+    "@tiptap/extension-link": "^3.20.5",
+    "@tiptap/extension-underline": "^3.20.5",
+    "@tiptap/pm": "^3.20.5",
+    "@tiptap/react": "^3.20.5",
+    "@tiptap/starter-kit": "^3.20.5",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "@vercel/otel": "^2.1.2",
+    "ai": "^6.0.99",
+    "autoprefixer": "^10.4.24",
+    "aws-crt": "^1.29.0",
+    "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-auth": "^1.5.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "e2b": "^2.18.0",
+    "encoding": "^0.1.13",
+    "entities": "^7.0.1",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "16.1.6",
+    "form-data": "^4.0.5",
+    "geist": "^1.7.0",
+    "imap": "^0.8.19",
+    "inngest": "^4.0.2",
+    "input-otp": "^1.4.2",
+    "jotai": "^2.18.0",
+    "lucide-react": "^0.574.0",
+    "mailparser": "^3.9.3",
+    "mammoth": "^1.12.0",
+    "mcp-handler": "^1.1.0",
+    "moment": "^2.30.1",
+    "mongodb": "^7.1.0",
+    "next": "^16.2.1",
+    "next-intl": "^4.8.3",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^8.0.4",
+    "openai": "^6.25.0",
+    "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.18.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "postcss": "^8.5.6",
+    "primeicons": "^7.0.0",
+    "primereact": "^10.9.7",
+    "react": "19.2.4",
+    "react-day-picker": "^9.13.2",
+    "react-doc-viewer": "^0.1.15",
+    "react-dom": "19.2.4",
+    "react-dropzone": "^15.0.0",
+    "react-hook-form": "^7.71.2",
+    "react-hot-toast": "^2.6.0",
+    "react-icons": "^5.5.0",
+    "react-resizable-panels": "^4.6.5",
+    "react-youtube": "^10.1.0",
+    "recharts": "2.15.4",
+    "resend": "6.9.2",
+    "sharp": "^0.34.5",
+    "sonner": "^2.0.7",
+    "swr": "^2.4.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.1",
+    "tailwindcss-animate": "^1.0.7",
+    "vaul": "^1.1.2",
+    "xmlbuilder2": "^4.0.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/imap": "^0.8.43",
+    "@types/jest": "^30.0.0",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^25.3.0",
+    "@types/nodemailer": "^7.0.11",
+    "@types/papaparse": "^5.5.2",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.16.0",
+    "@types/react": "npm:types-react@19.0.0-rc.1",
+    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
+    "dotenv": "^17.3.1",
+    "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0",
+    "prisma": "^7.6.0",
+    "shadcn": "^3.8.5",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "npm:types-react@19.0.0-rc.1",
+      "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
+      "tar@<=7.5.3": ">=7.5.4",
+      "lodash@>=4.0.0 <=4.17.22": ">=4.17.23",
+      "hono@<4.11.7": ">=4.11.7",
+      "tar@<7.5.7": ">=7.5.7",
+      "semver@>=2.0.0-alpha <5.7.2": ">=5.7.2",
+      "tar@<=7.5.2": ">=7.5.3",
+      "hono@<4.11.10": ">=4.11.10",
+      "tar@<7.5.8": ">=7.5.8",
+      "@types/pg": "8.16.0",
+      "minimatch@<3.1.3": "3.1.5",
+      "minimatch@>=9.0.0 <9.0.7": "9.0.7",
+      "minimatch@>=10.0.0 <10.2.3": "10.2.3",
+      "flatted@<=3.4.1": "3.4.2",
+      "express-rate-limit@>=8.2.0 <8.2.2": "8.2.2",
+      "@hono/node-server@<1.19.10": "1.19.10",
+      "fast-xml-parser@>=4.0.0-beta.3 <=5.5.6": "5.5.7",
+      "effect@<3.20.0": "3.20.0",
+      "handlebars@>=4.0.0 <=4.7.8": "4.7.9",
+      "picomatch@>=2.0.0 <2.3.2": "2.3.2",
+      "picomatch@>=4.0.0 <4.0.4": "4.0.4",
+      "path-to-regexp@>=8.0.0 <8.4.0": "8.4.0",
+      "brace-expansion@<1.1.13": "1.1.13",
+      "brace-expansion@>=5.0.0 <5.0.5": "5.0.5",
+      "yaml@<2.8.3": "2.8.3",
+      "defu@<=6.1.4": "6.1.5",
+      "nodemailer@<8.0.4": ">=8.0.4",
+      "lodash@>=4.0.0 <=4.17.23": ">=4.18.0",
+      "lodash@<=4.17.23": ">=4.18.0",
+      "hono@<4.12.12": ">=4.12.12",
+      "nodemailer@<=8.0.4": ">=8.0.5",
+      "hono@>=4.0.0 <=4.12.11": ">=4.12.12",
+      "@hono/node-server@<1.19.13": ">=1.19.13",
+      "next@>=16.0.0-beta.0 <16.2.3": ">=16.2.3",
+      "follow-redirects@<=1.15.11": ">=1.16.0",
+      "hono@<4.12.14": ">=4.12.14",
+      "axios@>=1.0.0 <1.15.0": ">=1.15.0",
+      "fast-xml-parser@<5.7.0": ">=5.7.0",
+      "@xmldom/xmldom@<0.8.13": ">=0.8.13",
+      "uuid@<14.0.0": ">=14.0.0",
+      "postcss@<8.5.10": ">=8.5.10",
+      "protobufjs@<7.5.5": ">=7.5.5",
+      "next-intl@<4.9.1": ">=4.9.1"
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@prisma/engines",
+      "@swc/core",
+      "aws-crt",
+      "bcrypt",
+      "canvas",
+      "esbuild",
+      "msgpackr-extract",
+      "msw",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
+  }
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "find . -maxdepth 3 -type d | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ succeeded in 0ms:
+.
+./.git
+./.git/hooks
+./.git/info
+./.git/refs
+./.git/refs/heads
+./.git/refs/tags
+./.git/refs/remotes
+./.git/objects
+./.git/objects/pack
+./.git/objects/info
+./.git/objects/23
+./.git/objects/e5
+./.git/objects/bd
+./.git/objects/d3
+./.git/objects/9b
+./.git/objects/df
+./.git/objects/e1
+./.git/objects/1e
+./.git/objects/3d
+./.git/objects/cd
+./.git/objects/c8
+./.git/objects/19
+./.git/objects/45
+./.git/objects/fb
+./.git/objects/75
+./.git/objects/fe
+./.git/objects/8e
+./.git/objects/4b
+./.git/objects/62
+./.git/objects/4c
+./.git/objects/06
+./.git/objects/6d
+./.git/objects/c9
+./.git/objects/80
+./.git/objects/95
+./.git/objects/05
+./.git/objects/3e
+./.git/objects/cb
+./.git/objects/33
+./.git/objects/2c
+./.git/objects/3f
+./.git/objects/82
+./.git/objects/07
+./.git/objects/b6
+./.git/objects/8a
+./.git/objects/69
+./.git/objects/f6
+./.git/objects/d1
+./.git/objects/11
+./.git/objects/d7
+./.git/objects/2e
+./.git/objects/85
+./.git/objects/5c
+./.git/objects/c2
+./.git/objects/13
+./.git/objects/b7
+./.git/objects/a7
+./.git/objects/30
+./.git/objects/35
+./.git/objects/f8
+./.git/objects/f3
+./.git/objects/46
+./.git/objects/47
+./.git/objects/90
+./.git/objects/f1
+./.git/objects/4f
+./.git/objects/27
+./.git/objects/7a
+./.git/objects/53
+./.git/objects/01
+./.git/objects/20
+./.git/objects/4a
+./.git/objects/c6
+./.git/objects/9d
+./.git/objects/d2
+./.git/objects/55
+./.git/objects/04
+./.git/objects/21
+./.git/objects/5b
+./.git/objects/58
+./.git/objects/96
+./.git/objects/52
+./.git/objects/7e
+./.git/objects/d6
+./.git/objects/37
+./.git/objects/42
+./.git/objects/7c
+./.git/objects/0d
+./.git/objects/fd
+./.git/objects/f4
+./.git/objects/a6
+./.git/objects/17
+./.git/objects/bc
+./.git/objects/8c
+./.git/objects/c3
+./.git/objects/0c
+./.git/objects/38
+./.git/objects/8f
+./.git/objects/00
+./.git/objects/cc
+./.git/objects/9e
+./.git/objects/ad
+./.git/objects/de
+./.git/objects/87
+./.git/objects/db
+./.git/objects/b1
+./.git/objects/89
+./.git/objects/57
+./.git/objects/26
+./.git/objects/63
+./.git/objects/40
+./.git/objects/4e
+./.git/objects/70
+./.git/objects/d9
+./.git/objects/72
+./.git/objects/2a
+./.git/objects/b9
+./.git/objects/0b
+./.git/objects/15
+
+exec
+/usr/bin/bash -lc 'rg -n "Sign in|LoginComponent|Login|sign-in|CardTitle|useTranslations|next-intl|i18n" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./package.json:101:    "next-intl": "^4.8.3",
+./package.json:204:      "next-intl@<4.9.1": ">=4.9.1"
+./pnpm-lock.yaml:51:  next-intl@<4.9.1: '>=4.9.1'
+./pnpm-lock.yaml:282:      next-intl:
+./pnpm-lock.yaml:6977:  next-intl-swc-plugin-extractor@4.9.1:
+./pnpm-lock.yaml:6980:  next-intl@4.9.1:
+./pnpm-lock.yaml:16486:  next-intl-swc-plugin-extractor@4.9.1: {}
+./pnpm-lock.yaml:16488:  next-intl@4.9.1(@swc/helpers@0.5.18)(next@16.2.4(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.58.2)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react@19.2.4)(typescript@5.9.3):
+./pnpm-lock.yaml:16496:      next-intl-swc-plugin-extractor: 4.9.1
+./next.config.js:1:const withNextIntl = require("next-intl/plugin")(
+./next.config.js:2:  "./i18n/request.ts"
+./README.md:185:### i18n
+./README.md:187:- [next-intl](https://next-intl-docs.vercel.app/) – Internationalization for Next.js — English, Czech, German, Ukrainian
+./README.md:195:3. ✅ i18n / localization — 4 languages (English, Czech, German, Ukrainian)
+./tests/e2e/home.spec.ts:12:    await expect(page).toHaveURL(/.*sign-in|.*/);
+./tests/e2e/home.spec.ts:15:  test("should display sign-in page when not authenticated", async ({ browser }) => {
+./tests/e2e/home.spec.ts:22:    // Check for sign-in related elements (OTP email flow)
+./tests/e2e/crm.spec.ts:12:    // Check if we're redirected to sign-in (user not authenticated) or on accounts page
+./tests/e2e/crm.spec.ts:14:    if (currentUrl.includes("sign-in")) {
+./tests/e2e/crm.spec.ts:15:      // If redirected to sign-in, that's expected for this test setup
+./tests/e2e/crm.spec.ts:16:      await expect(page).toHaveURL(/.*sign-in.*/);
+./tests/e2e/auth.spec.ts:7:  test("should show sign-in page with Google and Email OTP options", async ({ page }) => {
+./tests/e2e/auth.spec.ts:8:    await page.goto("/sign-in");
+./tests/e2e/auth.spec.ts:24:    await page.goto("/sign-in");
+./tests/e2e/auth.spec.ts:41:  test("should redirect unauthenticated users to sign-in", async ({ page }) => {
+./tests/e2e/auth.spec.ts:45:    // Should be redirected to sign-in
+./tests/e2e/auth.spec.ts:46:    await expect(page).toHaveURL(/sign-in/);
+./tests/auth.setup.ts:22:      data: { email: TEST_USER_EMAIL, type: "sign-in" },
+./tests/auth.setup.ts:39:    // 4. Sign in with OTP — cookies shared with browser context via context.request
+./tests/auth.setup.ts:40:    const signInRes = await api.post("/api/auth/sign-in/email-otp", {
+./tests/auth.setup.ts:50:        !url.pathname.includes("sign-in"),
+./scripts/validation/table-schema.ts:93:      { name: 'lastLoginAt', type: 'DateTime' },
+./scripts/VALIDATION_README.md:357:   - Login as admin
+./proxy.ts:1:import createMiddleware from "next-intl/middleware";
+./proxy.ts:2:import { routing } from "./i18n/routing";
+./proxy.ts:41:  // Non-API routes — redirect to sign-in if no session cookie
+./proxy.ts:44:      // Allow auth pages (sign-in, register, pending, inactive)
+./proxy.ts:45:      const authPaths = ["/sign-in", "/register", "/pending", "/inactive"];
+./proxy.ts:48:        return NextResponse.redirect(new URL("/sign-in", req.nextUrl));
+./proxy.ts:53:  // Non-API routes — delegate to next-intl
+./scripts/migration/transformers/users-transformer.ts:27:    lastLoginAt: convertDateToISO(mongoRecord.lastLoginAt),
+./prisma/schema.prisma:930:  lastLoginAt      DateTime?
+./prisma/schema.prisma:980:  @@index([lastLoginAt])
+./i18n/routing.ts:1:import { defineRouting } from "next-intl/routing";
+./i18n/request.ts:1:import { getRequestConfig } from "next-intl/server";
+./i18n/request.ts:2:import { hasLocale } from "next-intl";
+./i18n/navigation.ts:1:import {createNavigation} from 'next-intl/navigation';
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:60:2. Add unauthenticated redirect: requests to `/(routes)/*` without session cookie redirect to `/sign-in`
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:61:3. Keep `next-intl` integration — `intlMiddleware` unchanged
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:74:        → Non-API? → cookie check → no cookie = redirect /sign-in
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:75:                   → intlMiddleware for i18n
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:82:### Login page rewrite (`components/LoginComponent.tsx`)
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:88:   - Step 1: email input → `authClient.emailOtp.sendVerificationOtp({ email, type: "sign-in" })`
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:119:- New: admin enters email/name → user created `ACTIVE` with role `member` → email with sign-in link (user authenticates via OTP on first visit, no password to communicate)
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:126:- `lastLoginAt` updated, DB session created
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:131:- Redirect to `/sign-in`
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:135:- `components/LoginComponent.tsx` — full rewrite
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:250:if (!session) redirect("/sign-in");
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:256:if (!session) redirect("/sign-in");
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:319:- [ ] `proxy.ts` redirects unauthenticated non-API requests to `/sign-in`
+./docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md:79:  titleKey: string;           // i18n key
+./docs/superpowers/specs/2026-03-31-reports-remaster-design.md:200:- Column headers are human-readable, localized via `next-intl`
+./docs/superpowers/specs/2026-03-31-reports-remaster-design.md:274:All report titles, KPI labels, filter labels, button text, date format, and number formatting use `next-intl`. New translation keys added under `ReportsPage` namespace for all supported locales (en, cs, de, uk).
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:57:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md:169:| `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` | Replace conditional spinner with 3 `<Skeleton>` rows |
+./docs/superpowers/specs/2026-03-21-profile-settings-redesign.md:151:- i18n: extend existing `ProfilePage` translation namespace with new keys:
+./components/ui/card.tsx:34:const CardTitle = ({
+./components/ui/card.tsx:48:CardTitle.displayName = "CardTitle"
+./components/ui/card.tsx:85:export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+./prisma/migrations/0_init/migration.sql:525:    "lastLoginAt" TIMESTAMP(3),
+./prisma/migrations/0_init/migration.sql:970:CREATE INDEX "Users_lastLoginAt_idx" ON "Users"("lastLoginAt");
+./docs/superpowers/plans/2026-04-05-products-module.md:9:**Tech Stack:** Next.js (App Router), Prisma, Zod, React Hook Form (via FormInput/FormSheet), TanStack Table, PapaParse, Sonner (toasts), next-intl (i18n), Inngest (events), lucide-react (icons)
+./docs/superpowers/plans/2026-04-05-products-module.md:2027:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2048:          <CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2052:          </CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2144:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2180:          <CardTitle>Product Information</CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2214:          <CardTitle>Pricing</CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2774:Find where `getCrmMenuItem` is called and add the `products` localization. This is in `app/[locale]/(routes)/components/app-sidebar.tsx`. Add `products: t("products")` (or the appropriate i18n key) to the localizations object passed to `getCrmMenuItem`. The exact key depends on the existing i18n setup — check the file for the existing pattern and follow it.
+./docs/superpowers/plans/2026-04-05-products-module.md:2939:  CardTitle,
+./docs/superpowers/plans/2026-04-05-products-module.md:2991:          <CardTitle>
+./docs/superpowers/plans/2026-04-05-products-module.md:2995:          </CardTitle>
+./CONTRIBUTING.md:200:- Use `next-intl` for translations
+./CONTRIBUTING.md:202:- Use the `useTranslations()` hook in components
+./CHANGELOG.md:276:- Auth: Redirect to sign-in after sign-out
+./CHANGELOG.md:295:- Login page rewritten — credentials/register flow removed, Google OAuth + Email OTP only
+./docs/superpowers/plans/2026-04-05-line-items.md:9:**Tech Stack:** Next.js (App Router), Prisma, Zod, TanStack Table (not needed — simple table), shadcn/ui (Card, Table, Dialog, FormSheet), next-intl, Sonner (toasts)
+./docs/superpowers/plans/2026-04-05-line-items.md:1674:  CardTitle,
+./docs/superpowers/plans/2026-04-05-line-items.md:1710:          <CardTitle>Line Items</CardTitle>
+./docs/superpowers/plans/2026-04-05-line-items.md:1819:  CardTitle,
+./docs/superpowers/plans/2026-04-05-line-items.md:1898:          <CardTitle>Line Items</CardTitle>
+./docs/superpowers/plans/2026-04-04-currency-support.md:1102:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-04-04-currency-support.md:1119:          <CardTitle>Currencies</CardTitle>
+./docs/superpowers/plans/2026-04-04-currency-support.md:1128:          <CardTitle>Exchange Rates</CardTitle>
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1838:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2357:  CardTitle,
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2375:            <CardTitle
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2380:            </CardTitle>
+./components/reports/ScheduleDialog.tsx:12:import { useTranslations } from "next-intl";
+./components/reports/ScheduleDialog.tsx:24:  const t = useTranslations("ReportsPage.scheduleDialog");
+./components/reports/SavedReportsDropdown.tsx:8:import { useTranslations } from "next-intl";
+./components/reports/SavedReportsDropdown.tsx:13:  const t = useTranslations("ReportsPage.savedReports");
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:536:import createMiddleware from "next-intl/middleware";
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:537:import { routing } from "./i18n/routing";
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:576:  // Non-API routes — redirect to sign-in if no session cookie
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:579:      // Allow auth pages (sign-in, register, pending, inactive)
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:580:      const authPaths = ["/sign-in", "/register", "/pending", "/inactive"];
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:583:        return NextResponse.redirect(new URL("/sign-in", req.nextUrl));
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:588:  // Non-API routes — delegate to next-intl
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:685:### Task 12: Rewrite LoginComponent for Google OAuth + Email OTP
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:688:- Modify: `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx` (full rewrite)
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:692:Replace the entire contents of `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`:
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:707:  CardTitle,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:721:export function LoginComponent() {
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:735:      toast.error("Something went wrong with Google sign-in.");
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:750:        type: "sign-in",
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:780:      toast.success("Login successful.");
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:792:        <CardTitle className="text-2xl">Login</CardTitle>
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:793:        <CardDescription>Choose your sign-in method</CardDescription>
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:892:git add app/[locale]/(auth)/sign-in/components/LoginComponent.tsx components/ui/input-otp.tsx
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1249:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1321:        lastLoginAt: true,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1393:Update `emails/InviteUser.tsx` — remove the `invitedUserPassword` prop and the password display section. The email should now say "Sign in using your email address" instead of showing a password:
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1615:- [ ] **Step 4: Test sign-in page loads**
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1617:Open `http://localhost:3000/sign-in` — should show Google button and email OTP form. No password fields.
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1644:- Redirected to `/sign-in`
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1645:- Accessing protected routes redirects to `/sign-in`
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1745:7. Test sign-in flow manually
+./components/reports/SaveConfigDialog.tsx:11:import { useTranslations } from "next-intl";
+./components/reports/SaveConfigDialog.tsx:16:  const t = useTranslations("ReportsPage.saveDialog");
+./components/reports/ReportToolbar.tsx:9:import { useTranslations } from "next-intl";
+./components/reports/ReportToolbar.tsx:14:  const t = useTranslations("ReportsPage.toolbar");
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:9:**Tech Stack:** shadcn/ui charts, Recharts, Next.js (app router, server components), next-intl, Tailwind CSS
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:105:  CardTitle,
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:108:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:144:  const t = useTranslations("ReportsPage.charts");
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:152:          <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:166:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:287:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md:307:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./components/reports/ReportTable.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./components/reports/ReportTable.tsx:8:import { useTranslations } from "next-intl";
+./components/reports/ReportTable.tsx:18:  const t = useTranslations("ReportsPage.charts");
+./components/reports/ReportTable.tsx:25:      <CardHeader><CardTitle className="text-base">{t(titleKey)}</CardTitle></CardHeader>
+./components/reports/ReportChart.tsx:28:  CardTitle,
+./components/reports/ReportChart.tsx:31:import { useTranslations } from "next-intl";
+./components/reports/ReportChart.tsx:67:  const t = useTranslations("ReportsPage.charts");
+./components/reports/ReportChart.tsx:75:          <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./components/reports/ReportChart.tsx:89:        <CardTitle className="text-base">{t(titleKey)}</CardTitle>
+./components/reports/KPICard.tsx:4:import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+./components/reports/KPICard.tsx:7:import { useTranslations } from "next-intl";
+./components/reports/KPICard.tsx:23:  const t = useTranslations("ReportsPage.kpi");
+./components/reports/KPICard.tsx:31:          <CardTitle className="text-sm font-medium">{t(kpi.label)}</CardTitle>
+./components/reports/FilterBar.tsx:9:import { useTranslations } from "next-intl";
+./components/reports/FilterBar.tsx:26:  const t = useTranslations("ReportsPage");
+./components/reports/DateRangePicker.tsx:10:import { useTranslations } from "next-intl";
+./components/reports/DateRangePicker.tsx:16:  const t = useTranslations("ReportsPage");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:9:**Tech Stack:** Next.js 16, React 19, Prisma 7, Tremor, `@react-pdf/renderer`, Inngest 4, Resend, next-intl, shadcn/ui
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2694:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2700:  const t = useTranslations("ReportsPage");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2796:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2813:  const t = useTranslations("ReportsPage");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2906:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2929:  const t = useTranslations("ReportsPage.kpi");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2974:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:2991:  const t = useTranslations("ReportsPage.charts");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3043:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3058:  const t = useTranslations("ReportsPage.charts");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3131:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3139:  const t = useTranslations("ReportsPage.toolbar");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3223:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3238:  const t = useTranslations("ReportsPage.saveDialog");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3325:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3340:  const t = useTranslations("ReportsPage.scheduleDialog");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3485:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3492:  const t = useTranslations("ReportsPage.savedReports");
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3636:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3730:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3840:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3903:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:3955:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:4023:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:4091:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:4766:## Task 23: i18n Translation Keys
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:4899:git commit -m "feat(reports): add i18n translation keys for reports module"
+./components/crm/similar-records-drawer.tsx:5:import { useLocale } from "next-intl";
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:9:**Tech Stack:** Next.js 14 App Router, TypeScript, Zod, Radix UI (Sheet/DropdownMenu), Playwright, next-intl, Prisma, Sonner toasts
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:489:  <CardTitle>{data.name}</CardTitle>
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:499:      <CardTitle>{data.name}</CardTitle>
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:649:**Label text mismatch** — The forms use `next-intl` translations. If `getByLabel("Account Name")` fails, the actual label text comes from the translation key `CrmAccountForm.accountName`. Check `messages/en.json` for the exact English string and update the test.
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:692:- **Translation keys:** All form labels come from `next-intl`. If `getByLabel()` doesn't find a field, open `messages/en.json` and search for the field name to find the exact translated string.
+./docs/superpowers/plans/2026-03-22-emails.md:9:**Tech Stack:** Next.js 16 server actions, Prisma/PostgreSQL, `imap` + `mailparser` + `nodemailer` (already installed), Inngest, OpenAI `text-embedding-3-small`, pgvector, NextAuth session, next-intl, Radix UI / shadcn components.
+./docs/superpowers/plans/2026-03-28-crm-activities.md:936:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-28-crm-activities.md:982:        <CardTitle className="text-base">Activities</CardTitle>
+./components/crm/activities/ActivitiesView.tsx:4:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./components/crm/activities/ActivitiesView.tsx:52:          <CardTitle className="text-base">Activities</CardTitle>
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:59:- `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:724:- [ ] **Step 10: Update `app/[locale]/(auth)/sign-in/components/LoginComponent.tsx`**
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md:746:  "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx"
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:9:**Tech Stack:** Next.js 15 App Router, `useSearchParams` + `useRouter` (next/navigation), shadcn/ui (`Card`, `Button`, `Separator`), Tailwind CSS, next-intl, TypeScript.
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:31:| `locales/en.json` | Add new i18n keys for tabs, tab descriptions, and card titles |
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:39:## Task 1: Add i18n keys
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:76:git commit -m "feat(profile): add i18n keys for settings redesign"
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:91:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:158:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:189:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:211:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:233:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:283:import { useTranslations } from "next-intl";
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:315:  const t = useTranslations("ProfilePage");
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:424:import { getTranslations } from "next-intl/server";
+./components/SetLanguage.tsx:34:import { useRouter, usePathname } from "@/i18n/navigation";
+./components/SetLanguage.tsx:35:import { useLocale, useTranslations } from "next-intl";
+./components/SetLanguage.tsx:54:  const t = useTranslations("LanguageSelector");
+./components/CommandComponent.tsx:30:import { useTranslations } from "next-intl";
+./components/CommandComponent.tsx:37:  const t = useTranslations("CommandComponent");
+./components/CommandComponent.tsx:67:        signOut().then(() => { window.location.href = "/sign-in"; });
+./components/CommandComponent.tsx:139:            <CommandItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+./docs/superpowers/plans/2026-03-20-pgvector-embeddings.md:993:import { useLocale } from "next-intl";
+./app/[locale]/layout.tsx:7:import { NextIntlClientProvider } from "next-intl";
+./app/[locale]/layout.tsx:8:import { getTranslations, getMessages } from "next-intl/server";
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1281:import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1359:        <CardTitle>API Tokens</CardTitle>
+./docs/superpowers/plans/2026-03-25-campaigns-module.md:508:In that file, import and add `getCampaignsMenuItem` alongside `getCrmMenuItem`, passing English labels (or localisation keys if i18n is used).
+./docs/deployment/better-auth-migration-runbook.md:19:7. Test sign-in flow manually
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1504:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1529:  if (!session?.user?.id) redirect("/sign-in");
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1559:          <CardTitle className="text-base">
+./docs/superpowers/plans/2026-03-23-target-enrichment.md:1561:          </CardTitle>
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md:9:**Tech Stack:** Next.js 15, Prisma/PostgreSQL, shadcn/ui, Tailwind CSS (CSS vars for theming), next-intl for translations, AES-256-GCM via Node.js `crypto` (already in `lib/email-crypto.ts`), Jest for unit tests.
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md:819:import { useLocale } from "next-intl";
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md:1225:import { getTranslations } from "next-intl/server";
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md:1357:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/reports/users/page.tsx:1:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+./app/[locale]/(routes)/reports/sales/page.tsx:1:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/reports/page.tsx:7:import { getTranslations } from "next-intl/server";
+./actions/admin/users/set-role.ts:36:        lastLoginAt: true,
+./app/[locale]/(routes)/reports/leads/page.tsx:1:import { getTranslations } from "next-intl/server";
+./actions/admin/users/invite-user.ts:59:        lastLoginAt: true,
+./actions/admin/users/delete-user.ts:31:        lastLoginAt: true,
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+./app/[locale]/(routes)/reports/campaigns/page.tsx:1:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/users/page.tsx:13:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/reports/activity/page.tsx:1:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:27:  const t = useTranslations("AdminPage");
+./app/[locale]/(routes)/admin/users/components/IviteForm.tsx:28:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/admin/users/components/IviteForm.tsx:43:  const t = useTranslations("AdminPage");
+./app/[locale]/(routes)/reports/accounts/page.tsx:1:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/llm-keys/page.tsx:5:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:7:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:74:            <CardTitle className="text-base">{meta.name}</CardTitle>
+./app/[locale]/(routes)/admin/currencies/page.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/admin/currencies/page.tsx:18:          <CardTitle>Currencies</CardTitle>
+./app/[locale]/(routes)/admin/currencies/page.tsx:27:          <CardTitle>Exchange Rates</CardTitle>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:24:  CardTitle,
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:68:              <CardTitle>{task.title}</CardTitle>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:10:  CardTitle,
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:103:          <CardTitle>Team conversation</CardTitle>
+./app/[locale]/(routes)/projects/tasks/page.tsx:8:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:7:  CardTitle,
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:64:        <CardTitle>Resend.com - API Key</CardTitle>
+./app/[locale]/(routes)/projects/_components/ProjectsView.tsx:15:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/emails/page.tsx:9:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/profile/page.tsx:4:import { getTranslations } from "next-intl/server";
+./app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+./app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:15:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:27:  const t = useTranslations("ProfileForm");
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:13:  CardTitle,
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:50:      toast.error("Something went wrong with Google sign-in.");
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:        type: "sign-in",
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107:        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+./app/[locale]/(auth)/pending/page.tsx:59:          <Link href="/sign-in">Log-in with another account</Link>
+./app/[locale]/(routes)/documents/page.tsx:7:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx:3:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:35:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:52:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(auth)/layout.tsx:3:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:15:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:24:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx:2:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:12:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:22:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(auth)/inactive/page.tsx:12:  CardTitle,
+./app/[locale]/(auth)/inactive/page.tsx:31:      <CardTitle className="flex justify-center py-10">
+./app/[locale]/(auth)/inactive/page.tsx:33:      </CardTitle>
+./app/[locale]/(auth)/inactive/page.tsx:59:            <Link href="/sign-in">Log-in with another account</Link>
+./app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:17:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:26:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(routes)/profile/components/ProfileTabs.tsx:5:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/profile/components/ProfileTabs.tsx:40:  const t = useTranslations("ProfilePage");
+./app/[locale]/(routes)/profile/components/ProfileHero.tsx:3:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/page.tsx:9:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/page.tsx:17:  if (!session) return redirect("/sign-in");
+./app/[locale]/(routes)/profile/components/ProfileForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/profile/components/ProfileForm.tsx:44:  const t = useTranslations("ProfileForm");
+./app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:13:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:23:  const t = useTranslations("DocumentsPage");
+./app/[locale]/(routes)/profile/components/OpenAiForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/profile/components/OpenAiForm.tsx:44:  const t = useTranslations("OpenAiForm");
+./app/[locale]/(routes)/page.tsx:19:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/page.tsx:36:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/page.tsx:82:              <CardTitle className="text-sm font-medium">
+./app/[locale]/(routes)/page.tsx:84:              </CardTitle>
+./app/[locale]/(routes)/page.tsx:95:              <CardTitle className="text-sm font-medium">
+./app/[locale]/(routes)/page.tsx:97:              </CardTitle>
+./app/[locale]/(routes)/page.tsx:198:          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+./app/[locale]/(routes)/profile/components/LanguageForm.tsx:4:import { useLocale, useTranslations } from "next-intl";
+./app/[locale]/(routes)/profile/components/LanguageForm.tsx:5:import { useRouter, usePathname } from "@/i18n/navigation";
+./app/[locale]/(routes)/profile/components/LanguageForm.tsx:21:  const t = useTranslations("LanguageSelector");
+./app/[locale]/(routes)/layout.tsx:12:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/layout.tsx:56:    return redirect("/sign-in");
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx:6:import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx:84:        <CardTitle>API Tokens</CardTitle>
+./app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:64:        <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:45:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:65:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:66:  const c = useTranslations("Common");
+./app/[locale]/(routes)/components/nav-user.tsx:138:            <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx:35:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx:51:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(routes)/projects/dashboard/page.tsx:9:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:17:  CardTitle,
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:100:              <CardTitle className="text-xl">
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:102:              </CardTitle>
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:204:              <CardTitle className="text-xl">
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:206:              </CardTitle>
+./app/[locale]/(routes)/employees/page.tsx:5:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx:3:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx:19:        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:1:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:8:        <CardTitle className="text-sm font-medium bg-gray-200 text-gray-200 animate-pulse ">
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx:10:        </CardTitle>
+./app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:30:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:44:  const t = useTranslations("ProjectsPage");
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:109:          <CardTitle>Team conversation</CardTitle>
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:35:  CardTitle,
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:222:            <CardTitle
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:227:            </CardTitle>
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:35:  CardTitle,
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:263:            <CardTitle>All Campaigns</CardTitle>
+./app/[locale]/(routes)/crm/opportunities/page.tsx:9:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:39:  if (!session) redirect("/sign-in");
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:69:          <CardTitle className="text-base">
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:71:          </CardTitle>
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:10:  CardTitle,
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:38:            <CardTitle
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx:43:            </CardTitle>
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:8:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:60:  const t = useTranslations("CrmOpportunityForm");
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:61:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:9:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:72:  const t = useTranslations("CrmOpportunityForm");
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:73:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:5:  CardTitle,
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:79:              <CardTitle>Product Information</CardTitle>
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx:167:            <CardTitle>Pricing</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:14:  CardTitle,
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:53:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:55:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:63:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:65:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:73:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:75:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:83:            <CardTitle className="text-sm font-medium text-muted-foreground">
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:85:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:99:            <CardTitle className="text-base">My Tasks</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:159:            <CardTitle className="text-base">My Opportunities</CardTitle>
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:203:            <CardTitle className="text-base">My Leads</CardTitle>
+./app/[locale]/(routes)/crm/page.tsx:5:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/crm/contacts/page.tsx:9:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/crm/accounts/page.tsx:8:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:45:import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:105:      <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:125:      </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:400:              <CardTitle className="flex gap-2 p-3 justify-between">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:409:              </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:434:            <CardTitle className="flex gap-2 p-3 justify-between">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:436:            </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:440:                  <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:442:                  </CardTitle>
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:479:              <CardTitle className="p-2 text-sm">
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:483:              </CardTitle>
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx:42:            <CardTitle>Line Items</CardTitle>
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:14:import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:31:  if (!session) redirect("/sign-in");
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:61:          <CardTitle className="text-base">
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:63:          </CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:52:              <CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:54:              </CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:176:            <CardTitle>Contact information</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:218:            <CardTitle>Social networks</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:264:            <CardTitle>Notes</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:281:            <CardTitle>Target Lists</CardTitle>
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:297:          <CardTitle>Contacts</CardTitle>
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:46:  const t = useTranslations("CrmAccountForm");
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:47:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:60:            <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:4:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:37:  const t = useTranslations("CrmAccountForm");
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:38:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:47:  const t = useTranslations("CrmContactForm");
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:48:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/leads/page.tsx:11:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:45:  const t = useTranslations("CrmContactForm");
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:46:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/contracts/page.tsx:7:import { getTranslations } from "next-intl/server";
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:8:  CardTitle,
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:25:            <CardTitle
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx:30:            </CardTitle>
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:7:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:35:  const t = useTranslations("CrmContractForm");
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:36:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:46:              <CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:48:              </CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:212:            <CardTitle>Contacts</CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:287:            <CardTitle>Social networks</CardTitle>
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:363:            <CardTitle>Notes</CardTitle>
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:52:              <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:108:            <CardTitle>Targets ({data.targets?.length || 0})</CardTitle>
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:44:  const t = useTranslations("CrmLeadForm");
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:45:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:4:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:10:  CardTitle,
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:30:  const t = useTranslations("CrmPage");
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:36:          <CardTitle>
+./app/[locale]/(routes)/crm/components/ContractsView.tsx:40:          </CardTitle>
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:12:  CardTitle,
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:88:            <CardTitle>Line Items</CardTitle>
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:6:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:42:  const t = useTranslations("CrmLeadForm");
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:43:  const c = useTranslations("Common");
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:13:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:47:            <CardTitle
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:52:            </CardTitle>
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:5:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:40:  const t = useTranslations("CrmPage");
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:49:            <CardTitle>
+./app/[locale]/(routes)/crm/components/ContactsView.tsx:53:            </CardTitle>
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:5:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:39:  const t = useTranslations("CrmPage");
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:48:            <CardTitle>
+./app/[locale]/(routes)/crm/components/AccountsView.tsx:52:            </CardTitle>
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:60:              <CardTitle>{data.title}</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:82:          <CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:86:          </CardTitle>
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:9:  CardTitle,
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:31:          <CardTitle>
+./app/[locale]/(routes)/crm/components/ProductsView.tsx:35:          </CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:48:              <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:233:            <CardTitle>Billing Address</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:288:            <CardTitle>Shipping Address</CardTitle>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:347:        <CardTitle>{data.name}</CardTitle>
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:5:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:39:  const t = useTranslations("CrmPage");
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:46:            <CardTitle>
+./app/[locale]/(routes)/crm/components/LeadsView.tsx:50:            </CardTitle>
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:6:  CardTitle,
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:52:              <CardTitle>
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:54:              </CardTitle>
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:12:  CardTitle,
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:30:            <CardTitle
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:35:            </CardTitle>
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:5:import { useTranslations } from "next-intl";
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:11:  CardTitle,
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:46:  const t = useTranslations("CrmPage");
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:71:            <CardTitle>
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx:75:            </CardTitle>
+
+exec
+/usr/bin/bash -lc "sed -n '1,240p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' i18n/request.ts && sed -n '1,220p' i18n/routing.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { getRequestConfig } from "next-intl/server";
+import { hasLocale } from "next-intl";
+import { routing } from "./routing";
+
+export default getRequestConfig(async ({ requestLocale }) => {
+  const requested = await requestLocale;
+  const locale = hasLocale(routing.locales, requested)
+    ? requested
+    : routing.defaultLocale;
+
+  return {
+    locale,
+    messages: (await import(`../locales/${locale}.json`)).default,
+    timeZone: "Europe/Prague",
+  };
+});
+import { defineRouting } from "next-intl/routing";
+
+export const routing = defineRouting({
+  // A list of all locales that are supported
+  locales: ["en", "cz", "de", "uk"],
+
+  // Used when no locale matches
+  defaultLocale: "en",
+});
+
+exec
+/usr/bin/bash -lc "rg -n '\"Login\"|\"Sign in\"|\"LoginComponent\"|\"choose|Choose|signIn|login|title\"' messages app components i18n -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: messages: No such file or directory (os error 2)
+components/crm/activities/ActivityForm.tsx:142:            <Label htmlFor="activity-title">Title *</Label>
+components/crm/activities/ActivityForm.tsx:144:              id="activity-title"
+app/api/og/route.tsx:22:    const hasTitle = searchParams.has("title");
+app/api/og/route.tsx:24:      ? searchParams.get("title")?.slice(0, 200)
+app/[locale]/layout.tsx:31:    title: t("title"),
+app/[locale]/layout.tsx:39:          alt: t("title"),
+app/[locale]/layout.tsx:48:      alt: t("title"),
+components/reports/ScheduleDialog.tsx:53:        <DialogHeader><DialogTitle>{t("title")}</DialogTitle></DialogHeader>
+components/reports/SaveConfigDialog.tsx:35:        <DialogHeader><DialogTitle>{t("title")}</DialogTitle></DialogHeader>
+app/[locale]/(routes)/reports/users/page.tsx:34:      title={t("users.title")}
+app/[locale]/(routes)/reports/sales/page.tsx:48:      title={t("sales.title")}
+app/[locale]/(routes)/reports/page.tsx:31:    <Container title={t("title")} description={t("description")}>
+app/[locale]/(routes)/reports/leads/page.tsx:38:      title={t("leads.title")}
+app/[locale]/(routes)/employees/page.tsx:13:      title={t("title")}
+app/[locale]/(routes)/reports/campaigns/page.tsx:34:      title={t("campaigns.title")}
+app/[locale]/(routes)/reports/activity/page.tsx:40:      title={t("activity.title")}
+app/[locale]/(routes)/reports/accounts/page.tsx:34:      title={t("accounts.title")}
+app/[locale]/(routes)/documents/page.tsx:19:    <Container title={t("title")} description={t("description")}>
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:29:          value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:31:            table.getColumn("title")?.setFilterValue(event.target.value)
+app/[locale]/(routes)/projects/tasks/page.tsx:16:      title={t("tasks.title")}
+app/[locale]/(routes)/projects/table-components/columns.tsx:44:    accessorKey: "title",
+app/[locale]/(routes)/projects/table-components/columns.tsx:50:        <div className="w-[300px]">{row.getValue("title")}</div>
+app/[locale]/(routes)/projects/page.tsx:21:      title={t("title")}
+app/[locale]/(routes)/crm/page.tsx:11:      title={t("title")}
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:98:              name="title"
+app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx:27:          value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
+app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx:29:            table.getColumn("title")?.setFilterValue(event.target.value)
+app/[locale]/(routes)/profile/page.tsx:28:    <Container title={t("title")} description={t("description")}>
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:68:    accessorKey: "title",
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:81:            {row.getValue("title")}
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:145:              name="title"
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:242:                  <FormLabel>Choose task priority</FormLabel>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:129:          <DialogTitle>{t("newTask.title")}</DialogTitle>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:149:                  name="title"
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:101:          <DialogTitle>{t("newProject.title")}</DialogTitle>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:121:                  name="title"
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:362:                          placeholder="Choose account"
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:413:                            <SelectValue placeholder="Choose account " />
+app/[locale]/(routes)/layout.tsx:78:      title: dict("crm.title"),
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:45:  const titleValue = form.watch("title") || "";
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:85:            name="title"
+app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx:27:          value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
+app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx:29:            table.getColumn("title")?.setFilterValue(event.target.value)
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:73:import { updateSectionTitle } from "@/actions/projects/update-section-title";
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:145:                  name="title"
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:241:                      <FormLabel>Choose section</FormLabel>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:268:                      <FormLabel>Choose task priority</FormLabel>
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:57:    accessorKey: "title",
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:62:    cell: ({ row }) => <div className="w-[150px]">{row.getValue("title")}</div>,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:94:          <DialogTitle>{t("newSection.title")}</DialogTitle>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:113:                name="title"
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:73:    const title = formData.get("title") as string;
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:124:            id="title"
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:52:    const title = formData.get("title") as string;
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:95:        <FormInput id="title" label={t("title")} type="text" errors={fieldErrors} />
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx:96:          <TabsTrigger value="existing">Choose Existing</TabsTrigger>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:109:                  name="title"
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:202:                      <FormLabel>Choose task priority</FormLabel>
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:39:      <DataTableColumnHeader column={column} title="Last login" />
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:46:              {item.usageCount} record{item.usageCount !== 1 ? "s" : ""} use this value. Choose a replacement before deleting.
+app/[locale]/(routes)/admin/users/page.tsx:24:        title={t("title")}
+app/[locale]/(routes)/admin/users/page.tsx:36:      title={t("users.title")}
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:42:  const loginWithGoogle = async () => {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:45:      await authClient.signIn.social({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:87:      const { error } = await authClient.signIn.emailOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:113:          onClick={loginWithGoogle}
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:47:    accessorKey: "title",
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:60:            {row.getValue("title")}
+app/[locale]/(auth)/layout.tsx:22:    title: t("title"),
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:40:    const title = formData.get("title") as string;
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:53:          <SheetTitle>{t("sendMail.title")}</SheetTitle>
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:61:              id="title"
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx:27:          value={(table.getColumn("title")?.getFilterValue() as string) ?? ""}
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx:29:            table.getColumn("title")?.setFilterValue(event.target.value)
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' 'app/[locale]/(auth)/layout.tsx' && sed -n '1,120p' 'app/[locale]/layout.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import Link from "next/link";
+import { GithubIcon, Star } from "lucide-react";
+import { getTranslations } from "next-intl/server";
+
+import "@/app/[locale]/globals.css";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import Footer from "@/app/[locale]/(routes)/components/Footer";
+import getGithubRepoStars from "@/actions/github/get-repo-stars";
+import { DiscordLogoIcon } from "@radix-ui/react-icons";
+
+type Props = {
+  params: Promise<{ locale: string }>;
+};
+
+export async function generateMetadata(props: Props) {
+  const params = await props.params;
+  const { locale } = params;
+
+  const t = await getTranslations({ locale, namespace: "RootLayout" });
+
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
+
+const AuthLayout = async ({ children }: { children: React.ReactNode }) => {
+  //Get github stars from github api
+  const githubStars = await getGithubRepoStars();
+
+  return (
+    <div className="flex flex-col justify-center items-center min-h-screen w-full">
+      <div className="flex justify-end items-center space-x-5 w-full p-5">
+        <Link
+          href={process.env.NEXT_PUBLIC_GITHUB_REPO_URL || "#"}
+          className=" border rounded-md p-2"
+        >
+          <GithubIcon className="size-5" />
+        </Link>
+        <div className="flex items-center border rounded-md p-2 ">
+          <span className="sr-only">Github stars</span>
+          {githubStars}
+          <Star className="size-4" />
+        </div>
+        <div className="flex items-center border rounded-md p-2">
+          <Link href="https://discord.gg/Dd4Aj6S4Dz">
+            <DiscordLogoIcon className="size-5" />
+          </Link>
+        </div>
+        <ThemeToggle />
+      </div>
+      <div className="flex items-center grow h-full overflow-hidden">
+        {children}
+      </div>
+      <Footer />
+    </div>
+  );
+};
+
+export default AuthLayout;
+import "./globals.css";
+
+import { Inter } from "next/font/google";
+
+import { ReactNode } from "react";
+
+import { NextIntlClientProvider } from "next-intl";
+import { getTranslations, getMessages } from "next-intl/server";
+
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { ClientErrorListener } from "@/app/client-error-listener";
+import { ThemeProvider } from "@/app/providers/ThemeProvider";
+
+const inter = Inter({ subsets: ["latin"] });
+
+type Props = {
+  children: ReactNode;
+  params: Promise<{ locale: string }>;
+};
+
+export async function generateMetadata(props: Props) {
+  const params = await props.params;
+
+  const { locale } = params;
+
+  const t = await getTranslations({ locale, namespace: "RootLayout" });
+
+  return {
+    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+    title: t("title"),
+    description: t("description"),
+    openGraph: {
+      images: [
+        {
+          url: "/images/opengraph-image.png",
+          width: 1200,
+          height: 630,
+          alt: t("title"),
+        },
+      ],
+    },
+    twitter: {
+      cardType: "summary_large_image",
+      image: "/images/opengraph-image.png",
+      width: 1200,
+      height: 630,
+      alt: t("title"),
+    },
+  };
+}
+
+export default async function RootLayout(props: Props) {
+  const params = await props.params;
+
+  const { locale } = params;
+
+  const { children } = props;
+
+  const messages = await getMessages();
+
+  return (
+    <html lang={locale} suppressHydrationWarning>
+      <body className={inter.className + " min-h-screen"}>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <ClientErrorListener />
+            {children}
+          </ThemeProvider>
+        </NextIntlClientProvider>
+        <Toaster />
+        <SonnerToaster />
+      </body>
+    </html>
+  );
+}
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate --max-count=8 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git blame -L 30,42 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+9560934 fix(auth): fix better-auth schema compatibility and E2E test infrastructure
+1eb6635 feat(auth): rewrite login page with Google OAuth + Email OTP
+8e5f07e feat: replace inline spinners with skeleton rows in forms and dialogs
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+6cd94a3 feat: remove invoice module completely
+c18e3a2 Fix bugs #44, #30, #22
+7af3302 feat:GitHub nextAuth provider - added github provider for nextAuth
+
+ succeeded in 0ms:
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 30) 
+7acea671 app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-07 09:44:58 +0200 31) export function LoginComponent() {
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 32)   const [isLoading, setIsLoading] = useState(false);
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 33)   const [step, setStep] = useState<Step>("email");
+849ad50a app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-16 12:43:15 +0200 34)   const [email, setEmail] = useState("");
+1eb66350 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Pavel -  ClawdBot   2026-04-01 09:49:20 +0200 35)   const [otp, setOtp] = useState("");
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 36)   const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 37)   const dividerLabel =
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 38)     typeof window === "undefined"
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 39)       ? "Or continue with email"
+9be250f3 app/[locale]/(auth)/sign-in/components/LoginComponent.tsx (Dmytro Rekechynskyi 2026-05-01 18:02:42 +0300 40)       : "Or continue with Email";
+7acea671 app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-07 09:44:58 +0200 41) 
+7acea671 app/(auth)/(routes)/sign-in/components/LoginComponent.tsx (pdovhomilja         2023-07-07 09:44:58 +0200 42)   const loginWithGoogle = async () => {
+
+exec
+/usr/bin/bash -lc "git show --stat --patch --find-renames --unified=3 9be250f -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:02:42 2026 +0300
+
+    Polish sign-in copy and labels
+---
+ .../(auth)/sign-in/components/LoginComponent.tsx        | 17 +++++++++++++----
+ 1 file changed, 13 insertions(+), 4 deletions(-)
+
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -24,11 +24,20 @@ import {
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+@@ -95,7 +104,7 @@ export function LoginComponent() {
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+@@ -115,7 +124,7 @@ export function LoginComponent() {
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+@@ -136,7 +145,7 @@ export function LoginComponent() {
+             </div>
+             <Button onClick={sendOtp} disabled={isLoading || !email}>
+               <MailIcon className="mr-2 h-4 w-4" />
+-              Send verification code
++              {getSubmitLabel(step)}
+             </Button>
+           </div>
+         )}
+@@ -164,7 +173,7 @@ export function LoginComponent() {
+               </InputOTP>
+             </div>
+             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+-              Verify and sign in
++              {getSubmitLabel(step)}
+             </Button>
+             <Button
+               variant="ghost"
+
+codex
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the first client render.
+
+In [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component contains:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a `"use client"` component that is still server-rendered during SSR, the server emits `Login`, then the browser hydrates with `Sign in`. That exactly matches the incident diff:
+
+```text
++ Sign in
+- Login
+```
+
+There is a second likely hydration mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This was introduced in commit `9be250f` / `Polish sign-in copy and labels` on May 1, 2026. The incident occurred on May 4, 2026.
+
+**Confidence:** High. The logged React hydration error, route, component stack, and current source all point to the same server/client branch.
+
+**Recommended fix:** Make the initial render deterministic. Use the same static text on both server and client, or move truly client-only variation behind a post-mount state update. No code changes were made.
+tokens used
+31,640
+**Incident Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and on the first client render.
+
+In [app/[locale]/(auth)/sign-in/components/LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component contains:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+Because this is a `"use client"` component that is still server-rendered during SSR, the server emits `Login`, then the browser hydrates with `Sign in`. That exactly matches the incident diff:
+
+```text
++ Sign in
+- Login
+```
+
+There is a second likely hydration mismatch in the same component:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This was introduced in commit `9be250f` / `Polish sign-in copy and labels` on May 1, 2026. The incident occurred on May 4, 2026.
+
+**Confidence:** High. The logged React hydration error, route, component stack, and current source all point to the same server/client branch.
+
+**Recommended fix:** Make the initial render deterministic. Use the same static text on both server and client, or move truly client-only variation behind a post-mount state update. No code changes were made.

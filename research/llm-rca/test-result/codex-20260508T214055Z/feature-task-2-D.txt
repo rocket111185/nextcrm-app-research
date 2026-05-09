@@ -1,0 +1,610 @@
+run_name: feature-task-2-D
+case_name: feature-task-2
+variant: D
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T22:01:02Z
+elapsed_seconds: 58
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/D/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+**Most likely root cause:**  
+`LoginComponent` renders different text on the server and client during the initial render.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+During SSR, `typeof window === "undefined"` is true, so the server HTML contains:
+
+```text
+Login
+```
+
+During client hydration, `window` exists, so React expects:
+
+```text
+Sign in
+```
+
+That exactly matches the incident trace:
+
+```text
++ Sign in
+- Login
+```
+
+**Additional related issue:**  
+The same server/client render mismatch exists for the divider label:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This may also trigger hydration mismatch once the title mismatch is removed.
+
+**Why this was introduced:**  
+Commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` titled `Polish sign-in copy and labels` changed the sign-in copy from static text to `typeof window`-dependent text in `LoginComponent.tsx`.
+
+**Recommended fix:**  
+Render identical initial text on server and client. For example, use one stable value such as `"Sign in"` and `"Or continue with email"` without checking `typeof window`. If client-only text changes are truly required, they should happen after hydration, not during the initial render.
+
+**Confidence:** High. The code path directly explains the exact React hydration diff reported in the incident. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e099b-beb5-7733-9fde-5e7eb657742f
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e205c05bab2c1e0f7842fa624396f721",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:30:26.512Z",
+      "lastSeen": "2026-05-04T18:30:26.512Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:30:26.512Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.client-error-listener",
+          "route": "/en/sign-in",
+          "clientUrl": "http://localhost:3000/en/sign-in",
+          "message": "Unhandled client error",
+          "error": {
+            "name": "Error",
+            "message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+            "stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n"
+          },
+          "correlation": {
+            "traceId": "e205c05bab2c1e0f7842fa624396f721",
+            "spanId": "f6f18ebb5ee63701",
+            "clientSessionId": "f4e338ce-1d65-492f-9a53-16026bf86155"
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-2",
+    "commit": "9be250f3b729ab946e5f722fcf5c443d9e9ab516",
+    "changedFiles": [
+      "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx",
+      "app/[locale]/(auth)/sign-in/page.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx"
+    ],
+    "diffStat": ".../(auth)/sign-in/components/LoginComponent.tsx   | 17 ++++++++++----\n app/[locale]/(auth)/sign-in/page.tsx               |  4 +++-\n .../boards/[boardId]/components/Kanban.tsx         | 27 ++++++++++------------\n .../projects/boards/[boardId]/forms/NewSection.tsx |  5 ++++\n 4 files changed, 33 insertions(+), 20 deletions(-)"
+  }
+}
+```
+
+codex
+I’ll inspect the sign-in page and localization usage around the reported mismatch, then tie it back to the trace without editing files.
+exec
+/usr/bin/bash -lc "sed -n '1,260p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+codex
+The referenced `.claude/skills` files are not present in this checkout, so I’m continuing with the requested investigation using the repo files available here.
+exec
+/usr/bin/bash -lc "git diff -- app/[locale]/\\(auth\\)/sign-in/components/LoginComponent.tsx app/[locale]/\\(auth\\)/sign-in/page.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '.claude/**' -g 'app/**/sign-in/**' -g 'messages/**' -g 'i18n/**' -g 'locales/**'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+locales/uk.json
+locales/en.json
+locales/de.json
+locales/cz.json
+i18n/routing.ts
+i18n/request.ts
+i18n/navigation.ts
+AGENTS.md
+app/[locale]/(auth)/sign-in/page.tsx
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+codex
+The worktree is clean, so the incident likely reflects committed code on `feature/task-2` rather than uncommitted local edits. I’m narrowing on the exact rendered text path: `Sign in` on the client versus `Login` in the server HTML.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (error) {
+        toast.error(error.message || "Failed to send verification code.");
+        return;
+      }
+      setStep("otp");
+      toast.success("Verification code sent to your email.");
+    } catch (error) {
+      toast.error("Failed to send verification code.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otp.length !== 6) {
+      toast.error("Please enter the 6-digit code.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await authClient.signIn.emailOtp({
+        email,
+        otp,
+      });
+      if (error) {
+        toast.error(error.message || "Invalid or expired code.");
+        return;
+      }
+      toast.success("Login successful.");
+      window.location.href = "/";
+    } catch (error) {
+      toast.error("Verification failed.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+          <Icons.google className="mr-2 h-4 w-4" />
+          Continue with Google
+        </Button>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">
+              {dividerLabel}
+            </span>
+          </div>
+        </div>
+
+        {step === "email" && (
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@domain.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
+                onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+              />
+            </div>
+            <Button onClick={sendOtp} disabled={isLoading || !email}>
+              <MailIcon className="mr-2 h-4 w-4" />
+              {getSubmitLabel(step)}
+            </Button>
+          </div>
+        )}
+
+        {step === "otp" && (
+          <div className="grid gap-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit code sent to <strong>{email}</strong>
+            </p>
+            <div className="flex justify-center">
+              <InputOTP
+                maxLength={6}
+                value={otp}
+                onChange={setOtp}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+              {getSubmitLabel(step)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep("email");
+                setOtp("");
+              }}
+              disabled={isLoading}
+            >
+              Use a different email
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+exec
+/usr/bin/bash -lc "rg -n 'Sign in|Login|login|signIn|sign-in|Sign In' locales app i18n" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+locales/en.json:46:    "cardDescription": "Create account by login with",
+app/[locale]/(auth)/sign-in/page.tsx:1:import { LoginComponent } from "./components/LoginComponent";
+app/[locale]/(auth)/sign-in/page.tsx:14:        <LoginComponent />
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:31:export function LoginComponent() {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:42:  const loginWithGoogle = async () => {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:45:      await authClient.signIn.social({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:50:      toast.error("Something went wrong with Google sign-in.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:        type: "sign-in",
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:87:      const { error } = await authClient.signIn.emailOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:95:      toast.success("Login successful.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:108:        <CardDescription>Choose your sign-in method</CardDescription>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:113:          onClick={loginWithGoogle}
+app/[locale]/(auth)/pending/page.tsx:59:          <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(auth)/inactive/page.tsx:59:            <Link href="/sign-in">Log-in with another account</Link>
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:64:        <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/components/nav-user.tsx:138:            <DropdownMenuItem onClick={async () => { await signOut(); window.location.href = "/sign-in"; }}>
+app/[locale]/(routes)/components/app-sidebar.tsx:71:  lastLoginAt?: Date;
+app/[locale]/(routes)/projects/page.tsx:17:  if (!session) return redirect("/sign-in");
+app/[locale]/(routes)/layout.tsx:56:    return redirect("/sign-in");
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:39:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/admin/users/table-data/schema.tsx:9:  lastLoginAt: z.date().nullable().optional(),
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:31:  if (!session) redirect("/sign-in");
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:37:    accessorKey: "lastLoginAt",
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:39:      <DataTableColumnHeader column={column} title="Last login" />
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:43:        {/*   {moment(row.getValue("lastLoginAt")).format("YYYY/MM/DD-HH:mm")} */}
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:45:          new Date(row.original.lastLoginAt || new Date()),
+
+codex
+The mismatch is already visible in the component: it deliberately renders different text on server and browser during the initial render. I’m checking the commit context now so the report can identify whether this was introduced by the incident branch.
+exec
+/usr/bin/bash -lc "git show --format='%H%n%P%n%s' --no-patch HEAD" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '28,46p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --name-only --format='%H%n%s' HEAD | sed -n '1,12p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f3b729ab946e5f722fcf5c443d9e9ab516
+6d8033adb41928d9e794987f58ebfc2ce94cef56
+Polish sign-in copy and labels
+
+ succeeded in 0ms:
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+    41	
+    42	  const loginWithGoogle = async () => {
+    43	    setIsLoading(true);
+    44	    try {
+    45	      await authClient.signIn.social({
+    46	        provider: "google",
+
+ succeeded in 0ms:
+9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Polish sign-in copy and labels
+
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+
+exec
+/usr/bin/bash -lc "git show --unified=2 HEAD -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | rg -n 'cardTitle|dividerLabel|Login|Sign in|Or continue' -C 2" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+5-    Polish sign-in copy and labels
+6-
+7:diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+8-index 736b5fd..7e6e3bb 100644
+9:--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+10:+++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+11-@@ -25,4 +25,8 @@ import {
+12- type Step = "email" | "otp";
+--
+16-+}
+17-+
+18: export function LoginComponent() {
+19-   const [isLoading, setIsLoading] = useState(false);
+20:@@ -30,4 +34,9 @@ export function LoginComponent() {
+21-   const [email, setEmail] = useState("");
+22-   const [otp, setOtp] = useState("");
+23:+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+24:+  const dividerLabel =
+25-+    typeof window === "undefined"
+26:+      ? "Or continue with email"
+27:+      : "Or continue with Email";
+28- 
+29-   const loginWithGoogle = async () => {
+30:@@ -96,5 +105,5 @@ export function LoginComponent() {
+31-     <Card className="shadow-lg my-5">
+32-       <CardHeader className="space-y-1">
+33:-        <CardTitle className="text-2xl">Login</CardTitle>
+34:+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+35-         <CardDescription>Choose your sign-in method</CardDescription>
+36-       </CardHeader>
+37:@@ -116,5 +125,5 @@ export function LoginComponent() {
+38-           <div className="relative flex justify-center text-xs uppercase">
+39-             <span className="bg-background px-2 text-muted-foreground">
+40:-              Or continue with email
+41:+              {dividerLabel}
+42-             </span>
+43-           </div>
+44:@@ -137,5 +146,5 @@ export function LoginComponent() {
+45-             <Button onClick={sendOtp} disabled={isLoading || !email}>
+46-               <MailIcon className="mr-2 h-4 w-4" />
+--
+49-             </Button>
+50-           </div>
+51:@@ -165,5 +174,5 @@ export function LoginComponent() {
+52-             </div>
+53-             <Button onClick={verifyOtp} disabled={isLoading || otp.length !== 6}>
+
+codex
+**Incident Report**
+
+**Most likely root cause:**  
+`LoginComponent` renders different text on the server and client during the initial render.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+During SSR, `typeof window === "undefined"` is true, so the server HTML contains:
+
+```text
+Login
+```
+
+During client hydration, `window` exists, so React expects:
+
+```text
+Sign in
+```
+
+That exactly matches the incident trace:
+
+```text
++ Sign in
+- Login
+```
+
+**Additional related issue:**  
+The same server/client render mismatch exists for the divider label:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This may also trigger hydration mismatch once the title mismatch is removed.
+
+**Why this was introduced:**  
+Commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` titled `Polish sign-in copy and labels` changed the sign-in copy from static text to `typeof window`-dependent text in `LoginComponent.tsx`.
+
+**Recommended fix:**  
+Render identical initial text on server and client. For example, use one stable value such as `"Sign in"` and `"Or continue with email"` without checking `typeof window`. If client-only text changes are truly required, they should happen after hydration, not during the initial render.
+
+**Confidence:** High. The code path directly explains the exact React hydration diff reported in the incident. No code changes were made.
+tokens used
+11,445
+**Incident Report**
+
+**Most likely root cause:**  
+`LoginComponent` renders different text on the server and client during the initial render.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36):
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+During SSR, `typeof window === "undefined"` is true, so the server HTML contains:
+
+```text
+Login
+```
+
+During client hydration, `window` exists, so React expects:
+
+```text
+Sign in
+```
+
+That exactly matches the incident trace:
+
+```text
++ Sign in
+- Login
+```
+
+**Additional related issue:**  
+The same server/client render mismatch exists for the divider label:
+
+```ts
+const dividerLabel =
+  typeof window === "undefined"
+    ? "Or continue with email"
+    : "Or continue with Email";
+```
+
+This may also trigger hydration mismatch once the title mismatch is removed.
+
+**Why this was introduced:**  
+Commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` titled `Polish sign-in copy and labels` changed the sign-in copy from static text to `typeof window`-dependent text in `LoginComponent.tsx`.
+
+**Recommended fix:**  
+Render identical initial text on server and client. For example, use one stable value such as `"Sign in"` and `"Or continue with email"` without checking `typeof window`. If client-only text changes are truly required, they should happen after hydration, not during the initial render.
+
+**Confidence:** High. The code path directly explains the exact React hydration diff reported in the incident. No code changes were made.

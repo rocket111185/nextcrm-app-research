@@ -1,0 +1,534 @@
+run_name: feature-task-2-D
+case_name: feature-task-2
+variant: D
+target_branch: feature/task-2
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:36:42Z
+elapsed_seconds: 58
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-2/D/context.md
+
+===== RESPONSE =====
+**Root Cause Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and client.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component branches on `typeof window`:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+That value is rendered in the card title at [LoginComponent.tsx:107](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107). During SSR, `window` is undefined, so the server HTML contains `Login`. During browser hydration, `window` exists, so React expects `Sign in`. This exactly matches the incident diff:
+
+```diff
++ Sign in
+- Login
+```
+
+A second same-pattern mismatch also exists for `dividerLabel` at [LoginComponent.tsx:37](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37), where the server renders `Or continue with email` and the client renders `Or continue with Email`.
+
+This was introduced by commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` (`Polish sign-in copy and labels`), which replaced static sign-in copy with server/client conditional text. The changed board files are unrelated to this `/en/sign-in` hydration failure.
+
+Recommended fix direction: make the initial server and client render identical. For this case, use one stable string for `cardTitle` and `dividerLabel`, or defer any client-only text change until after hydration with state/effect if the difference is genuinely required.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0985-7769-7b00-b6c8-51ef1e2b6baf
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e205c05bab2c1e0f7842fa624396f721",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:30:26.512Z",
+      "lastSeen": "2026-05-04T18:30:26.512Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:30:26.512Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.client-error-listener",
+          "route": "/en/sign-in",
+          "clientUrl": "http://localhost:3000/en/sign-in",
+          "message": "Unhandled client error",
+          "error": {
+            "name": "Error",
+            "message": "Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n",
+            "stack": "throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n"
+          },
+          "correlation": {
+            "traceId": "e205c05bab2c1e0f7842fa624396f721",
+            "spanId": "f6f18ebb5ee63701",
+            "clientSessionId": "f4e338ce-1d65-492f-9a53-16026bf86155"
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-2",
+    "commit": "9be250f3b729ab946e5f722fcf5c443d9e9ab516",
+    "changedFiles": [
+      "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx",
+      "app/[locale]/(auth)/sign-in/page.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx"
+    ],
+    "diffStat": ".../(auth)/sign-in/components/LoginComponent.tsx   | 17 ++++++++++----\n app/[locale]/(auth)/sign-in/page.tsx               |  4 +++-\n .../boards/[boardId]/components/Kanban.tsx         | 27 ++++++++++------------\n .../projects/boards/[boardId]/forms/NewSection.tsx |  5 ++++\n 4 files changed, 33 insertions(+), 20 deletions(-)"
+  }
+}
+```
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,200p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'SKILL.md' -g 'AGENTS.md' -g 'LoginComponent.tsx' -g 'page.tsx' -g 'messages*' -g '*.json' | head -n 80" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+package.json
+tsconfig.json
+skills-lock.json
+release-please-config.json
+public/tmp/data.json
+.release-please-manifest.json
+.eslintrc.json
+AGENTS.md
+buildCount.json
+prisma/initial-data/crm_Opportunities_Type.json
+prisma/initial-data/crm_Opportunities_Sales_Stages.json
+prisma/initial-data/crm_Lead_Types.json
+prisma/initial-data/crm_Lead_Statuses.json
+prisma/initial-data/crm_Lead_Sources.json
+prisma/initial-data/crm_Industry_Type.json
+prisma/initial-data/crm_Contact_Types.json
+locales/uk.json
+locales/en.json
+locales/de.json
+locales/cz.json
+actions/emails/messages.ts
+components.json
+app/[locale]/(routes)/reports/users/page.tsx
+app/[locale]/(routes)/reports/sales/page.tsx
+app/[locale]/(routes)/reports/page.tsx
+app/[locale]/(routes)/reports/leads/page.tsx
+app/[locale]/(routes)/employees/page.tsx
+app/[locale]/(routes)/reports/campaigns/page.tsx
+app/[locale]/(routes)/emails/page.tsx
+app/[locale]/(routes)/databox/page.tsx
+app/[locale]/(routes)/reports/activity/page.tsx
+app/[locale]/(routes)/reports/accounts/page.tsx
+app/[locale]/(routes)/documents/page.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(routes)/campaigns/templates/page.tsx
+app/[locale]/(auth)/pending/page.tsx
+app/[locale]/(routes)/campaigns/templates/new/page.tsx
+app/[locale]/(routes)/projects/dashboard/page.tsx
+app/[locale]/(auth)/inactive/page.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx
+app/[locale]/(routes)/admin/users/page.tsx
+app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx
+app/[locale]/(routes)/admin/crm-settings/page.tsx
+app/[locale]/(routes)/admin/page.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/page.tsx
+app/[locale]/(routes)/admin/llm-keys/page.tsx
+app/[locale]/(routes)/projects/tasks/page.tsx
+app/[locale]/(routes)/admin/audit-log/page.tsx
+app/[locale]/(routes)/admin/currencies/page.tsx
+app/[locale]/(routes)/campaigns/targets/page.tsx
+app/[locale]/(routes)/crm/products/page.tsx
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx
+app/[locale]/(routes)/campaigns/page.tsx
+app/[locale]/(routes)/projects/tasks/[userId]/page.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/page.tsx
+app/[locale]/(routes)/campaigns/new/page.tsx
+app/[locale]/(routes)/crm/products/[productId]/page.tsx
+app/[locale]/(routes)/projects/page.tsx
+app/[locale]/(routes)/profile/page.tsx
+app/[locale]/(routes)/crm/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/page.tsx
+app/[locale]/(routes)/crm/contracts/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx
+app/[locale]/(routes)/page.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/page.tsx
+app/[locale]/(routes)/crm/opportunities/page.tsx
+app/[locale]/(routes)/crm/accounts/page.tsx
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx
+app/[locale]/(routes)/fulltext-search/search/page.tsx
+app/[locale]/(routes)/crm/contacts/page.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/page.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/page.tsx
+app/[locale]/(routes)/fulltext-search/page.tsx
+app/[locale]/(routes)/crm/dashboard/user/page.tsx
+app/[locale]/(routes)/crm/dashboard/page.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/page.tsx
+app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx
+
+exec
+/usr/bin/bash -lc "rg -n \"Sign in|Login|LoginComponent|useTranslations|getTranslations|metadata|auth\" 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "rg -n \"Sign in|Login|t\\(|useTranslations|getTranslations|CardTitle|CardDescription\" 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+11:  CardDescription,
+13:  CardTitle,
+31:export function LoginComponent() {
+36:  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+95:      toast.success("Login successful.");
+107:        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+108:        <CardDescription>Choose your sign-in method</CardDescription>
+
+ succeeded in 0ms:
+1:import { LoginComponent } from "./components/LoginComponent";
+14:        <LoginComponent />
+
+exec
+/usr/bin/bash -lc "rg -n '\"Login\"|\"Sign in\"|\"sign-in\"|\"auth\"|\"signin\"|\"signIn\"' locales/en.json locales/de.json locales/uk.json locales/cz.json" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ exited 1 in 0ms:
+exec
+/usr/bin/bash -lc "sed -n '1,45p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '100,116p' 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git log --oneline --decorate -5' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,40p' 'app/[locale]/(auth)/sign-in/page.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg my-5">
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+        <CardDescription>Choose your sign-in method</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <Button
+          variant="outline"
+          onClick={loginWithGoogle}
+          disabled={isLoading}
+          className="w-full"
+        >
+
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+6d8033a Polish board task card presentation
+80870cb (origin/develop, develop) FInalized improving telemetry techniques. Sweet!
+6d1b947 Provided project telemetry
+fe8a466 Self-hosted solution improvements
+
+ succeeded in 0ms:
+"use client";
+
+import React, { useState } from "react";
+import { authClient } from "@/lib/auth-client";
+
+import { Icons } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
+import { MailIcon } from "lucide-react";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+
+type Step = "email" | "otp";
+
+function getSubmitLabel(step: Step) {
+  return step === "email" ? "Send verification code" : "Verify and sign in";
+}
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+  const dividerLabel =
+    typeof window === "undefined"
+      ? "Or continue with email"
+      : "Or continue with Email";
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+
+ succeeded in 0ms:
+import { LoginComponent } from "./components/LoginComponent";
+
+const SignInPage = async () => {
+  const title = `Welcome to ${process.env.NEXT_PUBLIC_APP_NAME}`;
+
+  return (
+    <div className="h-full">
+      <div className="py-10">
+        <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+          {title}
+        </h1>
+      </div>
+      <div>
+        <LoginComponent />
+      </div>
+    </div>
+  );
+};
+
+export default SignInPage;
+
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --decorate HEAD' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f (HEAD -> feature/task-2, origin/feature/task-2) Polish sign-in copy and labels
+ .../(auth)/sign-in/components/LoginComponent.tsx        | 17 +++++++++++++----
+ app/[locale]/(auth)/sign-in/page.tsx                    |  4 +++-
+ 2 files changed, 16 insertions(+), 5 deletions(-)
+
+exec
+/usr/bin/bash -lc 'git show HEAD''^:'"'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '25,45p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --unified=6 -- 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+type Step = "email" | "otp";
+
+export function LoginComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<Step>("email");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+
+  const loginWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/",
+      });
+    } catch (error) {
+      toast.error("Something went wrong with Google sign-in.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+ succeeded in 0ms:
+commit 9be250f3b729ab946e5f722fcf5c443d9e9ab516
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:02:42 2026 +0300
+
+    Polish sign-in copy and labels
+
+diff --git a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+index 736b5fd..7e6e3bb 100644
+--- a/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
++++ b/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+@@ -21,17 +21,26 @@ import {
+   InputOTPGroup,
+   InputOTPSlot,
+ } from "@/components/ui/input-otp";
+ 
+ type Step = "email" | "otp";
+ 
++function getSubmitLabel(step: Step) {
++  return step === "email" ? "Send verification code" : "Verify and sign in";
++}
++
+ export function LoginComponent() {
+   const [isLoading, setIsLoading] = useState(false);
+   const [step, setStep] = useState<Step>("email");
+   const [email, setEmail] = useState("");
+   const [otp, setOtp] = useState("");
++  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
++  const dividerLabel =
++    typeof window === "undefined"
++      ? "Or continue with email"
++      : "Or continue with Email";
+ 
+   const loginWithGoogle = async () => {
+     setIsLoading(true);
+     try {
+       await authClient.signIn.social({
+         provider: "google",
+@@ -92,13 +101,13 @@ export function LoginComponent() {
+     }
+   };
+ 
+   return (
+     <Card className="shadow-lg my-5">
+       <CardHeader className="space-y-1">
+-        <CardTitle className="text-2xl">Login</CardTitle>
++        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+         <CardDescription>Choose your sign-in method</CardDescription>
+       </CardHeader>
+       <CardContent className="grid gap-4">
+         <Button
+           variant="outline"
+           onClick={loginWithGoogle}
+@@ -112,13 +121,13 @@ export function LoginComponent() {
+         <div className="relative">
+           <div className="absolute inset-0 flex items-center">
+             <span className="w-full border-t" />
+           </div>
+           <div className="relative flex justify-center text-xs uppercase">
+             <span className="bg-background px-2 text-muted-foreground">
+-              Or continue with email
++              {dividerLabel}
+             </span>
+           </div>
+         </div>
+ 
+         {step === "email" && (
+           <div className="grid gap-3">
+@@ -133,13 +142,13 @@ export function LoginComponent() {
+                 disabled={isLoading}
+                 onKeyDown={(e) => e.key === "Enter" && sendOtp()}
+               />
+             </div>
+             <Button onClick={sendOtp} disabled={isLoading || !email}>
+               <MailIcon className="mr-2 h-4 w-4" />
+-              Send verification code
++              {getSubmitLabel(step)}
+             </Button>
+           </div>
+         )}
+ 
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '104,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '28,40p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '120,126p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+   104	  return (
+   105	    <Card className="shadow-lg my-5">
+   106	      <CardHeader className="space-y-1">
+   107	        <CardTitle className="text-2xl">{cardTitle}</CardTitle>
+   108	        <CardDescription>Choose your sign-in method</CardDescription>
+   109	      </CardHeader>
+   110	      <CardContent className="grid gap-4">
+
+ succeeded in 0ms:
+    28	  return step === "email" ? "Send verification code" : "Verify and sign in";
+    29	}
+    30	
+    31	export function LoginComponent() {
+    32	  const [isLoading, setIsLoading] = useState(false);
+    33	  const [step, setStep] = useState<Step>("email");
+    34	  const [email, setEmail] = useState("");
+    35	  const [otp, setOtp] = useState("");
+    36	  const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+    37	  const dividerLabel =
+    38	    typeof window === "undefined"
+    39	      ? "Or continue with email"
+    40	      : "Or continue with Email";
+
+ succeeded in 0ms:
+   120	
+   121	        <div className="relative">
+   122	          <div className="absolute inset-0 flex items-center">
+   123	            <span className="w-full border-t" />
+   124	          </div>
+   125	          <div className="relative flex justify-center text-xs uppercase">
+   126	            <span className="bg-background px-2 text-muted-foreground">
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(auth)/sign-in/components/LoginComponent.tsx' | sed -n '126,130p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+   126	            <span className="bg-background px-2 text-muted-foreground">
+   127	              {dividerLabel}
+   128	            </span>
+   129	          </div>
+   130	        </div>
+
+codex
+**Root Cause Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and client.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component branches on `typeof window`:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+That value is rendered in the card title at [LoginComponent.tsx:107](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107). During SSR, `window` is undefined, so the server HTML contains `Login`. During browser hydration, `window` exists, so React expects `Sign in`. This exactly matches the incident diff:
+
+```diff
++ Sign in
+- Login
+```
+
+A second same-pattern mismatch also exists for `dividerLabel` at [LoginComponent.tsx:37](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37), where the server renders `Or continue with email` and the client renders `Or continue with Email`.
+
+This was introduced by commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` (`Polish sign-in copy and labels`), which replaced static sign-in copy with server/client conditional text. The changed board files are unrelated to this `/en/sign-in` hydration failure.
+
+Recommended fix direction: make the initial server and client render identical. For this case, use one stable string for `cardTitle` and `dividerLabel`, or defer any client-only text change until after hydration with state/effect if the difference is genuinely required.
+tokens used
+11,957
+**Root Cause Report**
+
+Most likely root cause: `LoginComponent` renders different text on the server and client.
+
+In [LoginComponent.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:36), the component branches on `typeof window`:
+
+```ts
+const cardTitle = typeof window === "undefined" ? "Login" : "Sign in";
+```
+
+That value is rendered in the card title at [LoginComponent.tsx:107](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:107). During SSR, `window` is undefined, so the server HTML contains `Login`. During browser hydration, `window` exists, so React expects `Sign in`. This exactly matches the incident diff:
+
+```diff
++ Sign in
+- Login
+```
+
+A second same-pattern mismatch also exists for `dividerLabel` at [LoginComponent.tsx:37](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:37), where the server renders `Or continue with email` and the client renders `Or continue with Email`.
+
+This was introduced by commit `9be250f3b729ab946e5f722fcf5c443d9e9ab516` (`Polish sign-in copy and labels`), which replaced static sign-in copy with server/client conditional text. The changed board files are unrelated to this `/en/sign-in` hydration failure.
+
+Recommended fix direction: make the initial server and client render identical. For this case, use one stable string for `cardTitle` and `dividerLabel`, or defer any client-only text change until after hydration with state/effect if the difference is genuinely required.

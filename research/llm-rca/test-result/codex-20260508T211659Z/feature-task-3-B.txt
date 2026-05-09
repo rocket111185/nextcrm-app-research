@@ -1,0 +1,2089 @@
+run_name: feature-task-3-B
+case_name: feature-task-3
+variant: B
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:25:11Z
+elapsed_seconds: 73
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/B/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` was empty in the development environment.
+
+The failing path is `/api/upload/presigned-url`. The route successfully reaches the presigned upload flow, but after calling `getSignedUrl(...)`, it builds the public file URL here:
+
+`app/api/upload/presigned-url/route.ts:15-18`
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+`MINIO_PUBLIC_URL` comes from:
+
+`lib/minio.ts:19`
+
+```ts
+process.env.NEXT_PUBLIC_MINIO_ENDPOINT
+```
+
+Local evidence shows `.env` and `.env.local` both have `NEXT_PUBLIC_MINIO_ENDPOINT` present but empty. That makes `new URL("")` throw:
+
+```text
+TypeError: Invalid URL
+code: ERR_INVALID_URL
+input: ""
+```
+
+The local log confirms the same trace ID as the incident:
+
+```text
+trace_id=dd675312fb402fed6a9ff838a3d9a064
+module=api.upload.presigned-url
+err.type=TypeError
+err.message=Invalid URL
+err.code=ERR_INVALID_URL
+err.input=""
+contentType=application/pdf
+folder=documents
+```
+
+The incident message says “Presigned upload URL generation failed,” but the actual failure is more specifically public URL construction after or around presigned URL generation. The catch block wraps both operations, so the log message is slightly misleading.
+
+Secondary observability issue: the source log stores the serialized exception under `err`, while the incident JSON shows `error.name/message/stack` as null. The observability pipeline likely maps `error.*` but not Pino’s `err.*`, causing the useful exception details to be dropped.
+
+Recommended immediate fix: set `NEXT_PUBLIC_MINIO_ENDPOINT` to a valid absolute browser-accessible MinIO/S3 endpoint in the active environment and restart the dev server. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e097a-ed6a-7371-9682-dc36b6d8990a
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:44:22.320Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "api.upload.presigned-url",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Presigned upload URL generation failed",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+        "spanId": "8f0a9636dd20584e",
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the relevant upload presigned-url path and logging/error handling around it, staying read-only and avoiding code edits.
+exec
+/usr/bin/bash -lc "rg --files -g 'AGENTS.md' -g 'package.json' -g '.env*' -g '*upload*' -g '*s3*' -g '*storage*'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+package.json
+.env.local
+.env
+.env.local.example
+.env.example
+scripts/migration/transformers/image-upload-transformer.ts
+components/ui/minio-uploader.tsx
+components/ui/file-uploader.tsx
+components/ui/file-uploader-dropzone.tsx
+AGENTS.md
+components/modals/upload-file-modal.tsx
+actions/documents/get-storage-size.ts
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx
+app/[locale]/(routes)/components/dasboard/storage-quota.tsx
+
+exec
+/usr/bin/bash -lc "pwd && rg -n \"presigned|Presigned upload URL|api\\.upload\\.presigned|upload.*url|signed\" -S ." in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+./tests/e2e/sales-flow.spec.ts:90:    await selectUserInCombobox(page, "Assigned to", "a");
+./tests/e2e/sales-flow.spec.ts:125:    await selectUserInCombobox(page, "Assigned user", "a");
+./tests/e2e/sales-flow.spec.ts:209:    await selectUserInCombobox(page, "Assigned to", "a");
+./tests/e2e/sales-flow.spec.ts:211:    // "Assigned Account" label from CrmOpportunityForm.assignedAccount
+./tests/e2e/sales-flow.spec.ts:212:    await page.getByLabel("Assigned Account").click();
+./tests/e2e/sales-flow.spec.ts:217:    // "Assigned Contact" is hardcoded in the Opportunity form (no translation key)
+./tests/e2e/sales-flow.spec.ts:218:    await page.getByLabel("Assigned Contact").click();
+./scripts/validation/table-schema.ts:101:      { field: 'assigned_to', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:117:      { field: 'assigned_to', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:137:      { field: 'assigned_to', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:152:      { field: 'assigned_to', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:171:      { field: 'assigned_to', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:246:      { field: 'assigned_user', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:265:      { field: 'assigned_user_id', referencedTable: 'Users' },
+./scripts/validation/table-schema.ts:266:      { field: 'assigned_account_id', referencedTable: 'crm_Accounts' },
+./public/tmp/data.json:257:      "assigned_at": "2023-08-09T20:12:56.576474Z"
+./scripts/migration/transformers/tasks-comments-transformer.ts:18:    assigned_crm_account_task: uuidMapper.transformForeignKey(mongoRecord.assigned_crm_account_task),
+./inngest/functions/embed-opportunity.ts:21:        assigned_sales_stage: { select: { name: true } },
+./inngest/functions/embed-opportunity.ts:26:    const stageName = opportunity.assigned_sales_stage?.name;
+./scripts/migration/transformers/invoices-transformer.ts:77:    assigned_user_id: uuidMapper.transformForeignKey(mongoRecord.assigned_user_id),
+./scripts/migration/transformers/invoices-transformer.ts:78:    assigned_account_id: uuidMapper.transformForeignKey(mongoRecord.assigned_account_id),
+./scripts/migration/transformers/documents-transformer.ts:41:    assigned_user: uuidMapper.transformForeignKey(mongoRecord.assigned_user),
+./scripts/migration/transformers/crm-opportunities-transformer.ts:17:    assigned_to: uuidMapper.transformForeignKey(mongoRecord.assigned_to),
+./prisma/schema.prisma:20:  assigned_to          String?   @db.Uuid
+./prisma/schema.prisma:52:  assigned_to_user   Users?                @relation("AccountAssignedTo", fields: [assigned_to], references: [id])
+./prisma/schema.prisma:61:  @@index([assigned_to])
+./prisma/schema.prisma:94:  assigned_to       String?            @db.Uuid
+./prisma/schema.prisma:95:  assigned_to_user  Users?             @relation("LeadAssignedTo", fields: [assigned_to], references: [id])
+./prisma/schema.prisma:97:  assigned_accounts crm_Accounts?      @relation(fields: [accountsIDs], references: [id])
+./prisma/schema.prisma:103:  @@index([assigned_to])
+./prisma/schema.prisma:199:  assigned_to      String?                 @db.Uuid
+./prisma/schema.prisma:222:  assigned_type        crm_Opportunities_Type?         @relation(fields: [type], references: [id])
+./prisma/schema.prisma:223:  assigned_sales_stage crm_Opportunities_Sales_Stages? @relation("assinged_sales_stage", fields: [sales_stage], references: [id])
+./prisma/schema.prisma:224:  assigned_to_user     Users?                          @relation("assigned_to_user_relation", fields: [assigned_to], references: [id])
+./prisma/schema.prisma:226:  assigned_account     crm_Accounts?                   @relation(fields: [account], references: [id])
+./prisma/schema.prisma:227:  assigned_campaings   crm_campaigns?                  @relation(fields: [campaign], references: [id])
+./prisma/schema.prisma:228:  assigned_currency    Currency?                       @relation(fields: [currency], references: [code])
+./prisma/schema.prisma:237:  @@index([assigned_to])
+./prisma/schema.prisma:399:  assigned_opportunities_sales_stage crm_Opportunities[] @relation("assinged_sales_stage")
+./prisma/schema.prisma:407:  assigned_opportunities crm_Opportunities[]
+./prisma/schema.prisma:450:  assigned_to      String?   @db.Uuid
+./prisma/schema.prisma:482:  assigned_to_user  Users?                    @relation("assigned_contacts", fields: [assigned_to], references: [id])
+./prisma/schema.prisma:485:  assigned_accounts crm_Accounts?             @relation(fields: [accountsIDs], references: [id])
+./prisma/schema.prisma:496:  @@index([assigned_to])
+./prisma/schema.prisma:520:  assigned_to         String?              @db.Uuid
+./prisma/schema.prisma:532:  assigned_account  crm_Accounts? @relation(fields: [account], references: [id])
+./prisma/schema.prisma:533:  assigned_to_user  Users?        @relation(fields: [assigned_to], references: [id])
+./prisma/schema.prisma:534:  assigned_currency Currency?     @relation(fields: [currency], references: [code])
+./prisma/schema.prisma:538:  @@index([assigned_to])
+./prisma/schema.prisma:674:  assigned_user Users?          @relation("assigned_user", fields: [user], references: [id])
+./prisma/schema.prisma:722:  assigned_user          String?   @db.Uuid
+./prisma/schema.prisma:738:  assigned_to_user     Users?                        @relation("assigned_to_user", fields: [assigned_user], references: [id])
+./prisma/schema.prisma:753:  @@index([assigned_user])
+./prisma/schema.prisma:785:  assigned_documents Documents[]
+./prisma/schema.prisma:828:  assigned_user    Users?             @relation(fields: [user], references: [id])
+./prisma/schema.prisma:829:  assigned_section Sections?          @relation(fields: [section], references: [id])
+./prisma/schema.prisma:860:  assigned_user Users?          @relation(fields: [user], references: [id])
+./prisma/schema.prisma:885:  assigned_crm_account_task String?  @db.Uuid
+./prisma/schema.prisma:887:  assigned_crm_account_task_task crm_Accounts_Tasks? @relation(fields: [assigned_crm_account_task], references: [id])
+./prisma/schema.prisma:888:  assigned_task                  Tasks?              @relation(fields: [task], references: [id], onDelete: Cascade)
+./prisma/schema.prisma:889:  assigned_user                  Users?              @relation(fields: [user], references: [id])
+./prisma/schema.prisma:893:  @@index([assigned_crm_account_task])
+./prisma/schema.prisma:942:  assigned_documents   Documents[]           @relation("assigned_to_user")
+./prisma/schema.prisma:945:  accounts             crm_Accounts[]        @relation("AccountAssignedTo")
+./prisma/schema.prisma:946:  leads                crm_Leads[]           @relation("LeadAssignedTo")
+./prisma/schema.prisma:948:  assigned_opportunity crm_Opportunities[]   @relation("assigned_to_user_relation")
+./prisma/schema.prisma:949:  assigned_contacts    crm_Contacts[]        @relation("assigned_contacts")
+./prisma/schema.prisma:952:  assigned_contracts   crm_Contracts[]
+./prisma/schema.prisma:953:  boards               Boards[]              @relation("assigned_user")
+./prisma/schema.prisma:1591:  assigned_currency Currency?            @relation(fields: [currency], references: [code])
+./prisma/schema.prisma:1628:  assigned_currency Currency?    @relation(fields: [currency], references: [code])
+./scripts/migration/transformers/crm-leads-transformer.ts:30:    assigned_to: uuidMapper.transformForeignKey(mongoRecord.assigned_to),
+./scripts/migration/transformers/crm-contracts-transformer.ts:25:    assigned_to: uuidMapper.transformForeignKey(mongoRecord.assigned_to),
+./scripts/migration/transformers/crm-contacts-transformer.ts:19:    assigned_to: uuidMapper.transformForeignKey(mongoRecord.assigned_to),
+./scripts/migration/transformers/crm-accounts-transformer.ts:19:    assigned_to: uuidMapper.transformForeignKey(mongoRecord.assigned_to),
+./CHANGELOG.md:32:* **mcp:** add documents tools (8 tools, presigned URLs, entity linking) ([756d2be](https://github.com/pdovhomilja/nextcrm-app/commit/756d2bea8630cbd1196df6e14884139fe22fa465))
+./CHANGELOG.md:281:- CRM: `assigned_to_user` null guard in account BasicView
+./emails/UpdatedTaskFromProject.tsx:62:                ? ` has updated a task and assigned to you. `
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:59:  // Presigned URL valid for 10 minutes
+./app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./app/api/upload/presigned-url/route.ts:73:      "Presigned upload URL generated"
+./app/api/upload/presigned-url/route.ts:76:    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+./app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+./components/ui/minio-uploader.tsx:37:        // Step 1: Get presigned URL from our server
+./components/ui/minio-uploader.tsx:38:        const res = await fetch("/api/upload/presigned-url", {
+./components/ui/minio-uploader.tsx:49:        const { presignedUrl, fileUrl, key } = await res.json();
+./components/ui/minio-uploader.tsx:54:        const uploadRes = await fetch(presignedUrl, {
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:100:| `crm_create_document` | Create record + get presigned upload URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:101:| `crm_get_upload_url` | Get presigned upload URL for existing doc |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:102:| `crm_get_download_url` | Get presigned download URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:186:| `reports_run` | Trigger report + get presigned URL to result |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:234:| Accounts, Contacts, Leads, Opportunities, Targets | `assigned_to: userId` | `createdBy` / `updatedBy` |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:270:// Presigned URL (documents)
+./docs/superpowers/specs/2026-04-05-products-module-design.md:188:| **Accounts** | Which accounts have this product assigned (with status, dates) |
+./docs/superpowers/specs/2026-04-05-products-module-design.md:193:A new **Products** tab is added to the Account detail page showing assigned products with assign/remove actions.
+./docs/superpowers/specs/2026-04-05-products-module-design.md:261:| `status` | Defaults to `DRAFT` on create. Only `ACTIVE` products can be assigned to accounts |
+./docs/superpowers/specs/2026-04-05-products-module-design.md:269:| Duplicate check | Same product cannot be assigned to same account twice with `ACTIVE` or `PENDING` status |
+./docs/superpowers/specs/2026-04-05-products-module-design.md:275:| Product status | Only `ACTIVE` products can be assigned |
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:76:4. Request presigned URL from existing `/api/upload/presigned-url`
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:77:5. Upload directly to MinIO via presigned URL
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:222:| POST | `/api/upload/presigned-url` | Accept all supported MIME types in a single upload flow |
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:99:5. Select Assigned To via UserSearchCombobox
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:114:   - Assigned To
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:115:   - Assigned Account → select using `testData.accountId`
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:127:3. Fill required fields (first name, last name, email, assigned to, linked account)
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md:144:   - Assigned To
+./docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:65:  { "field": "assigned_to", "old": "uuid-1", "new": "uuid-2" }
+./docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:178:  assigned_to:  Alice Johnson → Bob Williams
+./docs/superpowers/specs/2026-03-27-crm-audit-log-design.md:182:- FK values (assigned_to, industry, type etc.) resolved to human-readable names
+./docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:23:- Admins can configure system-wide keys at `/en/admin` (new redesigned UI)
+./prisma/migrations/0_init/migration.sql:40:    "assigned_to" UUID,
+./prisma/migrations/0_init/migration.sql:88:    "assigned_to" UUID,
+./prisma/migrations/0_init/migration.sql:99:    "assigned_to" UUID,
+./prisma/migrations/0_init/migration.sql:161:    "assigned_to" UUID,
+./prisma/migrations/0_init/migration.sql:209:    "assigned_to" UUID,
+./prisma/migrations/0_init/migration.sql:365:    "assigned_user_id" UUID,
+./prisma/migrations/0_init/migration.sql:366:    "assigned_account_id" UUID,
+./prisma/migrations/0_init/migration.sql:401:    "assigned_user" UUID,
+./prisma/migrations/0_init/migration.sql:498:    "assigned_crm_account_task" UUID,
+./prisma/migrations/0_init/migration.sql:676:CREATE INDEX "crm_Accounts_assigned_to_idx" ON "crm_Accounts"("assigned_to");
+./prisma/migrations/0_init/migration.sql:697:CREATE INDEX "crm_Leads_assigned_to_idx" ON "crm_Leads"("assigned_to");
+./prisma/migrations/0_init/migration.sql:721:CREATE INDEX "crm_Opportunities_assigned_to_idx" ON "crm_Opportunities"("assigned_to");
+./prisma/migrations/0_init/migration.sql:751:CREATE INDEX "crm_Contacts_assigned_to_idx" ON "crm_Contacts"("assigned_to");
+./prisma/migrations/0_init/migration.sql:781:CREATE INDEX "crm_Contracts_assigned_to_idx" ON "crm_Contracts"("assigned_to");
+./prisma/migrations/0_init/migration.sql:829:CREATE INDEX "Invoices_assigned_user_id_idx" ON "Invoices"("assigned_user_id");
+./prisma/migrations/0_init/migration.sql:832:CREATE INDEX "Invoices_assigned_account_id_idx" ON "Invoices"("assigned_account_id");
+./prisma/migrations/0_init/migration.sql:859:CREATE INDEX "Documents_assigned_user_idx" ON "Documents"("assigned_user");
+./prisma/migrations/0_init/migration.sql:946:CREATE INDEX "tasksComments_assigned_crm_account_task_idx" ON "tasksComments"("assigned_crm_account_task");
+./prisma/migrations/0_init/migration.sql:1042:ALTER TABLE "crm_Accounts" ADD CONSTRAINT "crm_Accounts_assigned_to_fkey" FOREIGN KEY ("assigned_to") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1045:ALTER TABLE "crm_Leads" ADD CONSTRAINT "crm_Leads_assigned_to_fkey" FOREIGN KEY ("assigned_to") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1057:ALTER TABLE "crm_Opportunities" ADD CONSTRAINT "crm_Opportunities_assigned_to_fkey" FOREIGN KEY ("assigned_to") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1069:ALTER TABLE "crm_Contacts" ADD CONSTRAINT "crm_Contacts_assigned_to_fkey" FOREIGN KEY ("assigned_to") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1081:ALTER TABLE "crm_Contracts" ADD CONSTRAINT "crm_Contracts_assigned_to_fkey" FOREIGN KEY ("assigned_to") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1090:ALTER TABLE "Invoices" ADD CONSTRAINT "Invoices_assigned_user_id_fkey" FOREIGN KEY ("assigned_user_id") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1093:ALTER TABLE "Invoices" ADD CONSTRAINT "Invoices_assigned_account_id_fkey" FOREIGN KEY ("assigned_account_id") REFERENCES "crm_Accounts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1099:ALTER TABLE "Documents" ADD CONSTRAINT "Documents_assigned_user_fkey" FOREIGN KEY ("assigned_user") REFERENCES "Users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./prisma/migrations/0_init/migration.sql:1120:ALTER TABLE "tasksComments" ADD CONSTRAINT "tasksComments_assigned_crm_account_task_fkey" FOREIGN KEY ("assigned_crm_account_task") REFERENCES "crm_Accounts_Tasks"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:99:**Data scoping:** All list/get/search tools filter by `assigned_to` field matching the authenticated `userId`. The `create_*` tools set `assigned_to` from the token's `userId`.
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:116:- `list_accounts` — paginated list (limit/offset), filtered by `assigned_to`
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:117:- `get_account` — single record by ID, 404 if not found or not assigned to user
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:119:- `create_account` — validated input, sets `assigned_to` from userId
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:120:- `update_account` — partial update by ID, verifies `assigned_to` before update
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:123:- `list_contacts` — paginated list, filtered by `assigned_to`
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:126:- `create_contact` — validated input, sets `assigned_to` from userId
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:127:- `update_contact` — partial update by ID, verifies `assigned_to` before update
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:130:- `list_leads` — paginated list, filtered by `assigned_to`
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:133:- `create_lead` — validated input, sets `assigned_to` from userId
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:134:- `update_lead` — partial update by ID, verifies `assigned_to` before update
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:137:- `list_opportunities` — paginated list, filtered by `assigned_to`
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:140:- `create_opportunity` — validated input, sets `assigned_to` from userId
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:141:- `update_opportunity` — partial update by ID, verifies `assigned_to` before update
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:144:- `list_targets` — paginated list, filtered by `created_by` (Targets model uses `created_by`, not `assigned_to`)
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md:205:| `assigned_to` for scoping | Primary user association field in 4 CRM models; Targets uses `created_by` |
+./locales/uk.json:61:    "assignedTo": "Призначено",
+./locales/uk.json:188:    "assignedUser": "Призначений користувач",
+./locales/uk.json:189:    "assignedUserPlaceholder": "Виберіть користувача",
+./locales/uk.json:226:    "assignedAccount": "Призначена компанія",
+./locales/uk.json:386:      "assignedToPlaceholder": "Призначити користувачу",
+./locales/en.json:62:    "assignedTo": "Assigned to",
+./locales/en.json:95:      "empty": "No assigned accounts found"
+./locales/en.json:104:      "empty": "No assigned contacts found"
+./locales/en.json:113:      "empty": "No assigned opportunities found"
+./locales/en.json:122:      "empty": "No assigned leads found"
+./locales/en.json:131:      "empty": "No assigned contracts found"
+./locales/en.json:189:    "assignedUser": "Assigned user",
+./locales/en.json:190:    "assignedUserPlaceholder": "Choose a user",
+./locales/en.json:192:    "assignAccountPlaceholder": "Choose assigned account",
+./locales/en.json:227:    "assignedAccount": "Assigned Account",
+./locales/en.json:259:    "customerSignedDate": "Customer signed date",
+./locales/en.json:260:    "companySignedDate": "Company signed date",
+./locales/en.json:406:      "assignedToPlaceholder": "Assign to user",
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:261:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:304:- `crm_list_contacts`: `const where = { assigned_to: userId, deletedAt: null };`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:305:- `crm_get_contact`: `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:306:- `crm_search_contacts`: `{ assigned_to: userId, deletedAt: null, OR: [...] }`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:307:- `crm_update_contact` (findFirst): `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:318:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:361:- `crm_list_leads`: `const where = { assigned_to: userId, deletedAt: null };`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:362:- `crm_get_lead`: `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:363:- `crm_search_leads`: `{ assigned_to: userId, deletedAt: null, OR: [...] }`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:364:- `crm_update_lead` (findFirst): `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md:375:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./locales/de.json:61:    "assignedTo": "Zugewiesen an",
+./locales/de.json:188:    "assignedUser": "Zugewiesener Benutzer",
+./locales/de.json:189:    "assignedUserPlaceholder": "Benutzer auswählen",
+./locales/de.json:226:    "assignedAccount": "Zugewiesenes Unternehmen",
+./locales/de.json:386:      "assignedToPlaceholder": "Benutzer zuweisen",
+./locales/cz.json:64:    "assignedTo": "Přiřazeno",
+./locales/cz.json:191:    "assignedUser": "Přiřazený uživatel",
+./locales/cz.json:192:    "assignedUserPlaceholder": "Vyberte uživatele",
+./locales/cz.json:229:    "assignedAccount": "Přiřazená firma",
+./locales/cz.json:389:      "assignedToPlaceholder": "Přiřadit uživateli",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:29:| `lib/mcp/tools/crm-documents.ts` | Create | Documents lifecycle + presigned URLs + entity linking (8 tools) |
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:149:    description: "List CRM accounts assigned to the authenticated user",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:154:      const where = { assigned_to: userId, ...isNotDeleted() };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:172:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:190:        assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:231:          assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:263:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:280:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:328:- Scoping: `assigned_to: userId`
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:332:- Create data: `v: 0`, `assigned_to: userId`, `createdBy: userId`, `updatedBy: userId`
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:351:    description: "List CRM contacts assigned to the authenticated user",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:354:      const where = { assigned_to: userId };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:372:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:387:        assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:435:          assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:468:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:495:- Scoping: `assigned_to: userId`
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:499:- Create data: `v: 0`, `assigned_to: userId`, `createdBy: userId`
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:518:    description: "List CRM leads assigned to the authenticated user",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:521:      const where = { assigned_to: userId };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:539:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:554:        assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:597:        data: { v: 0, lastName, ...rest, assigned_to: userId, createdBy: userId },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:627:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:676:    description: "List CRM opportunities assigned to the authenticated user",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:679:      const where = { assigned_to: userId, ...isNotDeleted() };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:697:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:712:        assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:760:          assigned_to: userId,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:795:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:819:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:837:- Scoping: `created_by: userId` (NOT `assigned_to`)
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1247:          include: { lineItems: true, assigned_account: { select: { id: true, name: true } } },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1263:          assigned_account: { select: { id: true, name: true } },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1278:      assigned_to: z.string().uuid().optional(),
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1318:      assigned_to: z.string().uuid().optional(),
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1668:    description: "Create a document record and get a presigned upload URL",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1711:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1715:    name: "crm_get_upload_url",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1716:    description: "Get a presigned upload URL for an existing document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1730:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1735:    description: "Get a presigned download URL for a document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1748:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1838:git commit -m "feat(mcp): add documents tools (8 tools, presigned URLs, entity linking)"
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2806:        where.assigned_section = { board: args.board };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2810:        where.assigned_section = { board_relation: userBoardWhere(userId) };
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2833:          assigned_section: { select: { id: true, title: true, board: true } },
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2973:          include: { assigned_user: { select: { id: true, name: true } } },
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md:464:- `crm_list_opportunities`: `const where = { assigned_to: userId, deletedAt: null };`
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md:465:- `crm_get_opportunity`: `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md:466:- `crm_search_opportunities`: `{ assigned_to: userId, deletedAt: null, OR: [...] }`
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md:467:- `crm_update_opportunity` (findFirst): `where: { id: args.id, assigned_to: userId, deletedAt: null },`
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md:477:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./docs/superpowers/plans/2026-04-05-products-module.md:104:  assigned_currency Currency?            @relation(fields: [currency], references: [code])
+./docs/superpowers/plans/2026-04-05-products-module.md:143:  assigned_currency Currency?    @relation(fields: [currency], references: [code])
+./docs/superpowers/plans/2026-04-05-products-module.md:689:      return { error: "Only active products can be assigned to accounts" };
+./docs/superpowers/plans/2026-04-05-products-module.md:701:      return { error: "This product is already assigned to this account with an active or pending status" };
+./docs/superpowers/plans/2026-04-05-products-module.md:2297:    return <p className="text-muted-foreground py-4">No accounts have this product assigned.</p>;
+./docs/superpowers/plans/2026-04-05-products-module.md:2840:      toast.success("Product assigned to account");
+./docs/superpowers/plans/2026-04-05-products-module.md:3012:          "No products assigned to this account."
+./docs/superpowers/plans/2026-04-04-currency-support.md:159:Add relation after `assigned_campaings` line:
+./docs/superpowers/plans/2026-04-04-currency-support.md:161:  assigned_currency Currency?              @relation(fields: [currency], references: [code])
+./docs/superpowers/plans/2026-04-04-currency-support.md:183:Add relation after `assigned_to_user`:
+./docs/superpowers/plans/2026-04-04-currency-support.md:185:  assigned_currency Currency? @relation(fields: [currency], references: [code])
+./docs/superpowers/plans/2026-04-04-currency-support.md:1264:  assigned_to: z.string(),
+./lib/mcp/tools/projects.ts:219:        where.assigned_section = { board: args.board };
+./lib/mcp/tools/projects.ts:223:        where.assigned_section = { board_relation: userBoardWhere(userId) };
+./lib/mcp/tools/projects.ts:246:          assigned_section: { select: { id: true, title: true, board: true } },
+./lib/mcp/tools/projects.ts:386:          include: { assigned_user: { select: { id: true, name: true } } },
+./lib/mcp/tools/crm-opportunities.ts:16:    description: "List CRM opportunities assigned to the authenticated user",
+./lib/mcp/tools/crm-opportunities.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+./lib/mcp/tools/crm-opportunities.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-opportunities.ts:52:        assigned_to: userId,
+./lib/mcp/tools/crm-opportunities.ts:100:          assigned_to: userId,
+./lib/mcp/tools/crm-opportunities.ts:135:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-opportunities.ts:159:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-leads.ts:16:    description: "List CRM leads assigned to the authenticated user",
+./lib/mcp/tools/crm-leads.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+./lib/mcp/tools/crm-leads.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-leads.ts:52:        assigned_to: userId,
+./lib/mcp/tools/crm-leads.ts:96:        data: { v: 0, lastName, ...rest, assigned_to: userId, createdBy: userId },
+./lib/mcp/tools/crm-leads.ts:126:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-leads.ts:143:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:44:| `app/api/upload/presigned-url/route.ts` | Accept all MIME types in unified flow |
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:91:  assigned_user          String?   @db.Uuid
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:105:  assigned_to_user     Users?                        @relation("assigned_to_user", fields: [assigned_user], references: [id])
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:119:  @@index([assigned_user])
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:227:  assigned_to_user: z.object({
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:340:      assigned_user: session.user.id,
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:377:      assigned_to_user: { select: { id: true, name: true, email: true } },
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:515:        assigned_user: session.user.id,
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1450:    accessorKey: "assigned_to_user",
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1452:      <DataTableColumnHeader column={column} title="Assigned to" />
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1456:        {(row.getValue("assigned_to_user") as { name: string | null } | null)?.name ?? "Unassigned"}
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1655:      // Get presigned URL
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1657:      const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1667:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1668:      const { presignedUrl, fileUrl, key } = await res.json();
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1673:      await fetch(presignedUrl, {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2391:          "No assigned documents found"
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2470:## Task 15: Update Presigned URL Route for Unified Upload
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2473:- Modify: `app/api/upload/presigned-url/route.ts`
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2475:- [ ] **Step 1: Ensure the presigned URL route accepts all needed MIME types**
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2495:git add app/api/upload/presigned-url/route.ts
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2496:git commit -m "fix(upload): ensure all document MIME types are allowed in presigned URL route"
+./lib/mcp/tools/crm-documents.ts:105:    description: "Create a document record and get a presigned upload URL",
+./lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:148:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:152:    name: "crm_get_upload_url",
+./lib/mcp/tools/crm-documents.ts:153:    description: "Get a presigned upload URL for an existing document",
+./lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:167:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:172:    description: "Get a presigned download URL for a document",
+./lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./lib/mcp/tools/crm-documents.ts:185:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1147:- Modify: `app/api/upload/presigned-url/route.ts`
+./lib/mcp/tools/crm-contracts.ts:48:          include: { lineItems: true, assigned_account: { select: { id: true, name: true } } },
+./lib/mcp/tools/crm-contracts.ts:64:          assigned_account: { select: { id: true, name: true } },
+./lib/mcp/tools/crm-contracts.ts:79:      assigned_to: z.string().uuid().optional(),
+./lib/mcp/tools/crm-contracts.ts:120:      assigned_to: z.string().uuid().optional(),
+./lib/mcp/tools/crm-contacts.ts:16:    description: "List CRM contacts assigned to the authenticated user",
+./lib/mcp/tools/crm-contacts.ts:19:      const where = { assigned_to: userId, deletedAt: null };
+./lib/mcp/tools/crm-contacts.ts:37:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-contacts.ts:52:        assigned_to: userId,
+./lib/mcp/tools/crm-contacts.ts:101:          assigned_to: userId,
+./lib/mcp/tools/crm-contacts.ts:134:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-contacts.ts:151:        where: { id: args.id, assigned_to: userId, deletedAt: null },
+./lib/mcp/tools/crm-accounts.ts:17:    description: "List CRM accounts assigned to the authenticated user",
+./lib/mcp/tools/crm-accounts.ts:22:      const where = { assigned_to: userId, ...isNotDeleted() };
+./lib/mcp/tools/crm-accounts.ts:40:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./lib/mcp/tools/crm-accounts.ts:58:        assigned_to: userId,
+./lib/mcp/tools/crm-accounts.ts:99:          assigned_to: userId,
+./lib/mcp/tools/crm-accounts.ts:131:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./lib/mcp/tools/crm-accounts.ts:148:        where: { id: args.id, assigned_to: userId, ...isNotDeleted() },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:544:        { assigned_sales_stage: { name: "Prospecting" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:545:        { assigned_sales_stage: { name: "Prospecting" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:546:        { assigned_sales_stage: { name: "Closed Won" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:628:        ? { assigned_sales_stage: { name: filters.salesStage } }
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:654:    select: { assigned_sales_stage: { select: { name: true } } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:658:    const stage = opp.assigned_sales_stage?.name ?? "Unassigned";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:866:        { assigned_accounts: { name: "Acme Corp" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:867:        { assigned_accounts: { name: "Acme Corp" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:868:        { assigned_accounts: null },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:874:        { name: "Unassigned", Number: 1 },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:990:    select: { assigned_accounts: { select: { name: true } } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:994:    const name = c.assigned_accounts?.name ?? "Unassigned";
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1321:    it("groups tasks by assigned user name", async () => {
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1323:        { assigned_user: { name: "Alice" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1324:        { assigned_user: { name: "Alice" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1325:        { assigned_user: { name: "Bob" } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1412:    select: { assigned_user: { select: { name: true } } },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1416:    const name = t.assigned_user?.name ?? "Unassigned";
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:460:    // Assigned To — UserSearchCombobox
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:461:    await selectUserInCombobox(page, "Assigned To", "a");
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:495:    // Assigned To — UserSearchCombobox
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:496:    await selectUserInCombobox(page, "Assigned User", "a");
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:584:    // Assigned To
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:585:    await selectUserInCombobox(page, "Assigned To", "a");
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:587:    // Assigned Account — pick from dropdown using the accountId
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:590:      .filter({ hasText: /Assigned Account/ })
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:597:    // Assigned Contact
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md:600:      .filter({ hasText: /Assigned Contact/ })
+./docs/superpowers/plans/2026-03-27-crm-settings.md:637:    countRelation: "assigned_opportunities",
+./docs/superpowers/plans/2026-03-27-crm-settings.md:642:    countRelation: "assigned_opportunities_sales_stage",
+./docs/superpowers/plans/2026-03-20-mcp-server.md:20:  - `crm_Accounts`, `crm_Contacts`, `crm_Leads`, `crm_Opportunities` → filter/set via `assigned_to` field
+./docs/superpowers/plans/2026-03-20-mcp-server.md:21:  - `crm_Targets` → uses `created_by` field (no `assigned_to` on this model — the spec's decisions log incorrectly lists `assigned_to` for all models; the plan is correct)
+./docs/superpowers/plans/2026-03-20-mcp-server.md:526:    description: "List CRM accounts assigned to the authenticated user",
+./docs/superpowers/plans/2026-03-20-mcp-server.md:534:          where: { assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:539:        prismadb.crm_Accounts.count({ where: { assigned_to: userId } }),
+./docs/superpowers/plans/2026-03-20-mcp-server.md:550:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:566:        assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:596:          assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:619:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:659:    description: "List CRM contacts assigned to the authenticated user",
+./docs/superpowers/plans/2026-03-20-mcp-server.md:667:          where: { assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:672:        prismadb.crm_Contacts.count({ where: { assigned_to: userId } }),
+./docs/superpowers/plans/2026-03-20-mcp-server.md:683:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:699:        assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:728:          assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:748:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:788:    description: "List CRM leads assigned to the authenticated user",
+./docs/superpowers/plans/2026-03-20-mcp-server.md:796:          where: { assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:801:        prismadb.crm_Leads.count({ where: { assigned_to: userId } }),
+./docs/superpowers/plans/2026-03-20-mcp-server.md:812:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:828:        assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:857:          assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:877:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:917:    description: "List CRM opportunities assigned to the authenticated user",
+./docs/superpowers/plans/2026-03-20-mcp-server.md:925:          where: { assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:930:        prismadb.crm_Opportunities.count({ where: { assigned_to: userId } }),
+./docs/superpowers/plans/2026-03-20-mcp-server.md:941:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:959:        assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:987:          assigned_to: userId,
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1009:        where: { id: args.id, assigned_to: userId },
+./docs/superpowers/plans/2026-03-20-mcp-server.md:1038:> **Note:** `crm_Targets` uses `created_by` (not `assigned_to`) for user association. Data scoping is done via this field.
+./lib/auth-server.ts:5:// when viewer role is first assigned to users
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md:5:**Goal:** Replace hard-coded `FIRECRAWL_API_KEY` / `OPENAI_API_KEY` env requirements with a 3-tier key system (ENV → admin system-wide → user profile), including encrypted DB storage, a redesigned admin panel, a new profile LLMs tab, and a "no key configured" modal.
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:62:| DocumentsToAccounts | `crm_Accounts.assigned_documents` | Links documents to accounts | `(document_id, account_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:63:| DocumentsToContacts | `crm_Contacts.assigned_documents` | Links documents to contacts | `(document_id, contact_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:64:| DocumentsToOpportunities | `crm_Opportunities.assigned_documents` | Links documents to opportunities | `(document_id, opportunity_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:65:| DocumentsToLeads | `crm_Leads.assigned_documents` | Links documents to leads | `(document_id, lead_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:68:| DocumentsToInvoices | `Invoices.assigned_documents` | Links documents to invoices | `(document_id, invoice_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:69:| ContactsToOpportunities | `crm_Opportunities.assigned_contacts` | Links contacts to opportunities | `(contact_id, opportunity_id)` |
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:207:    assigned_to_user: userId,
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:208:    assigned_documents: documentIds,  // Array of document IDs
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:221:    assigned_to_user: userId,
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:240:    assigned_documents: newDocumentIds  // Replace entire array
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:343:    assigned_documents: true  // Returns array of document IDs
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:347:// Result: account.assigned_documents = ["doc1", "doc2", "doc3"]
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:392:// Find documents assigned to account
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:413:// Find documents assigned to account
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:449:    assigned_contacts: {
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:506:    assigned_contacts: {
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:507:      set: opportunity.assigned_contacts.filter(c => c !== contactId)
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:776:      assigned_documents: true,
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:841:      assigned_opportunities: {
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:842:        set: contact.assigned_opportunities.filter(o => o !== opportunityId)
+./docs/POSTGRESQL_MIGRATION_GUIDE.md:1101:If empty, documents were never assigned. If populated, check query includes junction:
+./__tests__/reports/sales.test.ts:73:        { assigned_sales_stage: { name: "Prospecting" } },
+./__tests__/reports/sales.test.ts:74:        { assigned_sales_stage: { name: "Prospecting" } },
+./__tests__/reports/sales.test.ts:75:        { assigned_sales_stage: { name: "Closed Won" } },
+./__tests__/reports/leads.test.ts:65:        { assigned_accounts: { name: "Acme Corp" } },
+./__tests__/reports/leads.test.ts:66:        { assigned_accounts: { name: "Acme Corp" } },
+./__tests__/reports/leads.test.ts:67:        { assigned_accounts: null },
+./__tests__/reports/leads.test.ts:70:      expect(result).toEqual([{ name: "Acme Corp", Number: 2 }, { name: "Unassigned", Number: 1 }]);
+./__tests__/reports/activity.test.ts:41:    it("groups tasks by assigned user name", async () => {
+./__tests__/reports/activity.test.ts:43:        { assigned_user: { name: "Alice" } },
+./__tests__/reports/activity.test.ts:44:        { assigned_user: { name: "Alice" } },
+./__tests__/reports/activity.test.ts:45:        { assigned_user: { name: "Bob" } },
+./app/[locale]/(routes)/documents/data/schema.tsx:17:  assigned_to_user: z.object({
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:97:                <td className="py-2 px-4 border-b">Assigned to</td>
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:99:                  {task.assigned_user?.name || "Not assigned"}
+./app/[locale]/(routes)/documents/components/modal-dropzone.tsx:38:        size: 0, // size not available from presigned URL flow
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx:10:  /*   assigned_to_user: z.object({
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:136:                      Assigned to
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:139:                      {task.assigned_user?.name || "Not assigned"}
+./app/[locale]/(routes)/documents/components/columns.tsx:140:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/documents/components/columns.tsx:142:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/documents/components/columns.tsx:146:        {(row.getValue("assigned_to_user") as { name: string | null } | null)?.name ?? "Unassigned"}
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:94:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:95:      const { presignedUrl, fileUrl, key } = await res.json();
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:99:      const uploadRes = await fetch(presignedUrl, {
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx:10:  /*   assigned_to_user: z.object({
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:61:      toast.success("Document was assigned to task");
+./app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+./app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+./app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:223:                  <FormLabel>Assigned to</FormLabel>
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:228:                      placeholder="Select assigned user"
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:227:                      <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:232:                          placeholder={t("newTask.assignedToPlaceholder")}
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:38:    assigned_user: {
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:123:                    src={comment.assigned_user?.avatar || "/images/nouser.png"}
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:125:                  <AvatarFallback>{comment.assigned_user?.name}</AvatarFallback>
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:130:                      {comment.assigned_user?.name}
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx:49:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx:51:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx:59:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx:77:          row.getValue("company") ?? "Unassigned"
+./app/[locale]/(routes)/projects/data/schema.tsx:10:  assigned_user: z.object({
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:61:        toast.success("Document was assigned to task");
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:62:    assigned_to: z.string().optional().nullable(),
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:86:      assigned_to: data.assigned_to ?? undefined,
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:307:                name="assigned_to"
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:310:                    <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:117:                    src={comment.assigned_user?.avatar || "/images/nouser.png"}
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:119:                  <AvatarFallback>{comment.assigned_user?.name}</AvatarFallback>
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:124:                      {comment.assigned_user?.name}
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:58:    assigned_to: z.string().optional(),
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:80:      assigned_to: "",
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:323:                name="assigned_to"
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:326:                    <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:15:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:17:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:25:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:17:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:19:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:27:          row.original.assigned_to_user.name ?? "Unassigned"
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:15:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:17:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:25:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:151:                    Assigned to
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:154:                    {users.find((user) => user.id === data.assigned_to)?.name}
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:17:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:19:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:27:          row.original.assigned_to_user.name ?? "Unassigned"
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx:86:              Update task details, due date, priority, status, and assigned users
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:223:                      <FormLabel>Assigned to</FormLabel>
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:228:                          placeholder="Select assigned user"
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:104:                No tasks assigned.
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:164:                No opportunities assigned.
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:187:                        {opp.assigned_sales_stage?.name ?? "—"}
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx:208:                No leads assigned.
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:167:                opportunity.assigned_to_user?.avatar
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:168:                  ? opportunity.assigned_to_user.avatar
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:173:          <span className="text-xs">{opportunity.assigned_to_user?.name}</span>
+./app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:17:  assigned_to: z.string().nullable(),
+./app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:26:  assigned_account: z
+./app/[locale]/(routes)/crm/contracts/table-data/schema.tsx:31:  assigned_to_user: z
+./app/[locale]/(routes)/projects/tasks/components/columns.tsx:50:    accessorKey: "assigned_user",
+./app/[locale]/(routes)/projects/tasks/components/columns.tsx:52:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/projects/tasks/components/columns.tsx:60:          row.getValue("assigned_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:44:      <DataTableColumnHeader column={column} title="Customer signed" />
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:50:          : "Not signed yet"}
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:67:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:69:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:74:        {row.original.assigned_to_user
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:75:          ? row.original.assigned_to_user.name
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:76:          : "Unassigned"}
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:90:        {row.original.assigned_account
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:91:          ? row.original.assigned_account.name
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:92:          : "Unassigned"}
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:35:  const [assignedTo, setAssignedTo] = useState<string>(data.assigned_to ?? "");
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:89:    const assigned_to = formData.get("assigned_to") as string;
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:105:      assigned_to,
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:207:              Assigned To
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:210:              value={assignedTo}
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:211:              onChange={setAssignedTo}
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:212:              placeholder="Select assigned user"
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:213:              name="assigned_to"
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:34:  const [assignedTo, setAssignedTo] = useState<string>("");
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:67:    const assigned_to = formData.get("assigned_to") as string;
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:80:      assigned_to,
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:91:      description="Create a new contract with specified terms, dates, and assigned users"
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:148:          <label className="text-sm font-medium">{c("assignedTo")}</label>
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:150:            value={assignedTo}
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:151:            onChange={setAssignedTo}
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:154:            name="assigned_to"
+./app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx:58:        No accounts assigned to this product yet.
+./app/[locale]/(routes)/projects/table-components/columns.tsx:29:    accessorKey: "assigned_user",
+./app/[locale]/(routes)/projects/table-components/columns.tsx:31:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/projects/table-components/columns.tsx:36:        {row.original.assigned_user.name ?? "Unassigned"}
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:165:                    Assigned Account
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:168:                    {data.assigned_account ? (
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:170:                        href={`/crm/accounts/${data.assigned_account.id}`}
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:173:                        {data.assigned_account.name}
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:185:                  <p className="text-sm font-medium leading-none">Assigned To</p>
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx:187:                    {data.assigned_to_user?.name ?? "N/A"}
+./app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:20:  assigned_account: z.object({}).optional().nullable(),
+./app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:21:  assigned_sales_stage: z.object({}).optional().nullable(),
+./app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx:22:  assigned_to_user: z.object({}).optional().nullable(),
+./actions/reports/sales.ts:49:    select: { assigned_sales_stage: { select: { name: true } } },
+./actions/reports/sales.ts:53:    const stage = opp.assigned_sales_stage?.name ?? "Unassigned";
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:51:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:53:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:57:        {(row.getValue("assigned_to_user") as { name?: string } | null)?.name ??
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:58:          "Unassigned"}
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:65:    accessorKey: "assigned_account",
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:67:      <DataTableColumnHeader column={column} title="Assigned account" />
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:71:        {(row.original as any).assigned_accounts?.name ?? "Unassigned"}
+./actions/reports/leads.ts:58:    select: { assigned_accounts: { select: { name: true } } },
+./actions/reports/leads.ts:62:    const name = c.assigned_accounts?.name ?? "Unassigned";
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+./actions/reports/activity.ts:37:    select: { assigned_user: { select: { name: true } } },
+./actions/reports/activity.ts:41:    const name = t.assigned_user?.name ?? "Unassigned";
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:65:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:67:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:75:          row.getValue("assigned_to_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:83:    accessorKey: "assigned_account",
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:85:      <DataTableColumnHeader column={column} title="Assigned account" />
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:93:          row.getValue("assigned_account")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:66:    assigned_to: z.string(),
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:67:    assigned_account: z.string().nullable().optional(),
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:85:    assigned_to: initialData.assigned_to ?? "",
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:94:    assigned_account: initialData.accountsIDs ?? "",
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:360:                  name="assigned_to"
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:363:                      <FormLabel>{t("assignedUser")}</FormLabel>
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:368:                          placeholder={t("assignedUserPlaceholder")}
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:378:                  name="assigned_account"
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:63:    assigned_to: z.string(),
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:64:    assigned_account: z.string().optional(),
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:90:      assigned_to: "",
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:91:      assigned_account: "",
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:348:                  name="assigned_to"
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:351:                      <FormLabel>{t("assignedUser")}</FormLabel>
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:356:                          placeholder={t("assignedUserPlaceholder")}
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:366:                  name="assigned_account"
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:76:    assigned_to: z.string().nullable().optional(),
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:94:      assigned_to: initialData.assigned_to ?? "",
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:336:                  name="assigned_to"
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:339:                      <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:357:                      <FormLabel>{t("assignedAccount")}</FormLabel>
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:375:                      <FormLabel>Assigned Contact</FormLabel>
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:113:    assigned_to: z.string(),
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:132:      assigned_to: "",
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:156:        assigned_to: "",
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:385:                  name="assigned_to"
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:388:                      <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:406:                      <FormLabel>{t("assignedAccount")}</FormLabel>
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:439:                      <FormLabel>Assigned Contact</FormLabel>
+./actions/projects/get-user-tasks.ts:9:      assigned_user: {
+./actions/projects/get-tasks.ts:20:      assigned_user: {
+./actions/projects/get-tasks.ts:54:      assigned_user: {
+./actions/projects/get-tasks-past-due.ts:34:            assigned_user: {
+./actions/projects/get-tasks-past-due.ts:75:            assigned_user: {
+./actions/projects/get-task.ts:10:      assigned_user: {
+./actions/projects/get-task.ts:33:          assigned_user: {
+./actions/projects/get-task-documents.ts:19:      assigned_to_user: {
+./actions/projects/get-task-comments.ts:12:      assigned_user: {
+./actions/projects/get-boards.ts:23:      assigned_user: {
+./actions/projects/get-board.ts:11:      assigned_user: {
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx:46:          "No assigned documents found"
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:32:    assigned_sales_stage: { name: string };
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:33:    assigned_to_user: { name: string };
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:34:    assigned_account: { name: string };
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:35:    assigned_type: { name: string };
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:93:                {data.assigned_sales_stage?.name
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:94:                  ? data.assigned_sales_stage?.name
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:95:                  : "Not assigned"}
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:118:              <p className="text-sm font-medium leading-none">Assigned to</p>
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:120:                {data.assigned_to_user.name}
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:131:                {data.assigned_account?.name
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:132:                  ? data.assigned_account?.name
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:133:                  : "Not assigned"}
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:183:                {data.assigned_type?.name ? data.assigned_type?.name : "N/A"}
+./actions/emails/accounts.ts:115:      // tlsOptions: { rejectUnauthorized: false } intentionally disabled for self-signed cert support
+./app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:26:  opportunityType: { model: () => prisma.crm_Opportunities_Type,          countRelation: "assigned_opportunities",                updateMany: null },
+./app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:27:  salesStage:      { model: () => prisma.crm_Opportunities_Sales_Stages,  countRelation: "assigned_opportunities_sales_stage",    updateMany: null },
+./app/[locale]/(routes)/crm/accounts/table-data/schema.tsx:10:  assigned_to_user: z.object({}).nullable().optional(),
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:78:    assigned_to: z.string().min(3).max(50),
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:116:          assigned_to: "",
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:511:                name="assigned_to"
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:514:                    <FormLabel>{c("assignedTo")}</FormLabel>
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:59:    assigned_to: z.string().min(3).max(50),
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:444:                name="assigned_to"
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:447:                    <FormLabel>{c("assignedTo")}</FormLabel>
+./actions/documents/get-documents.ts:16:      assigned_to_user: { select: { id: true, name: true, email: true } },
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:34:          placeholder="Filter by assigned user ..."
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:36:            (table.getColumn("assigned_to_user")?.getFilterValue() as string) ??
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:41:              .getColumn("assigned_to_user")
+./actions/documents/get-documents-by-opportunityId.ts:21:      assigned_to_user: {
+./actions/documents/get-documents-by-contactId.ts:21:      assigned_to_user: {
+./actions/documents/get-documents-by-accountId.ts:21:      assigned_to_user: {
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:27:    accessorKey: "assigned_to_user",
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:29:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:34:        {(row.getValue("assigned_to_user") as { name?: string } | null)?.name ??
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:35:          "Unassigned"}
+./actions/documents/create-document.ts:33:      assigned_user: session.user.id,
+./actions/documents/create-document-version.ts:43:        assigned_user: session.user.id,
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:79:                    {data.assigned_accounts?.name}
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:120:                    Assigned to
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:123:                    {users.find((user) => user.id === data.assigned_to)?.name}
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:29:    accessorKey: "assigned_user",
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:31:      <DataTableColumnHeader column={column} title="Assigned to" />
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:39:          row.getValue("assigned_user")?.name ?? "Unassigned"
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:34:      toast.success("Product assigned successfully");
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:64:                    Create a new task for this account with assigned user, due
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx:82:          "No assigned tasks found"
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:105:          "No products assigned to this account"
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:84:                    {data.vat ? data.vat : "Not assigned"}
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:153:                    Assigned to
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:156:                    {data.assigned_to_user?.name ?? "Unassigned"}
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:391:              <p className="text-sm font-medium leading-none">Assigned to</p>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:393:                {data.assigned_to_user.name}
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:184:                      <FormLabel>Assigned to</FormLabel>
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:189:                          placeholder="Select assigned user"
+./actions/crm/account/get-tasks.ts:9:      assigned_user: {
+./actions/crm/account/get-task.ts:10:      assigned_user: {
+./actions/crm/account/get-task.ts:33:          assigned_user: {
+./actions/crm/get-opportunities.ts:10:      // Include assigned user (uses "assigned_to_user_relation")
+./actions/crm/get-opportunities.ts:11:      assigned_to_user: {
+./actions/crm/get-opportunities.ts:90:      assigned_sales_stage: {
+./actions/crm/get-opportunities.ts:105:      const stage = opportunity.assigned_sales_stage?.name;
+./actions/crm/tasks/get-user-tasks.ts:9:      assigned_user: {
+./actions/crm/account-products/assign-product/index.ts:29:      return { error: "Only active products can be assigned to accounts" };
+./actions/crm/account-products/assign-product/index.ts:36:      return { error: "This product is already assigned to this account with an active or pending status" };
+./actions/crm/get-leads-by-accountId.ts:10:      assigned_to_user: {
+./actions/crm/get-lead.ts:14:      // Include assigned user (uses "LeadAssignedTo" relation)
+./actions/crm/get-lead.ts:15:      assigned_to_user: {
+./actions/crm/get-lead.ts:21:      // Include assigned accounts
+./actions/crm/get-lead.ts:22:      assigned_accounts: true,
+./actions/crm/get-contracts.ts:10:      assigned_to_user: {
+./actions/crm/get-contracts.ts:15:      assigned_account: {
+./actions/crm/get-contracts.ts:35:      assigned_to_user: {
+./actions/crm/get-contracts.ts:40:      assigned_account: {
+./actions/crm/get-contract.ts:8:      assigned_account: { select: { id: true, name: true } },
+./actions/crm/get-contract.ts:9:      assigned_to_user: { select: { id: true, name: true } },
+./actions/crm/get-contacts.ts:8:      // Include assigned user (uses "assigned_contacts" relation)
+./actions/crm/get-contacts.ts:9:      assigned_to_user: {
+./actions/crm/get-contacts.ts:20:      // Include assigned accounts
+./actions/crm/get-contacts.ts:21:      assigned_accounts: true,
+./actions/crm/get-contacts-by-opportunityId.ts:15:      assigned_to_user: {
+./actions/crm/get-contacts-by-opportunityId.ts:25:      assigned_accounts: true,
+./actions/crm/get-contacts-by-accountId.ts:10:      assigned_to_user: {
+./actions/crm/get-contacts-by-accountId.ts:20:      assigned_accounts: true,
+./actions/crm/get-contact.ts:48:      // Include assigned account
+./actions/crm/get-contact.ts:49:      assigned_accounts: true,
+./actions/crm/get-contact.ts:50:      // Include assigned user (uses "assigned_contacts" relation)
+./actions/crm/get-contact.ts:51:      assigned_to_user: {
+./actions/crm/get-accounts.ts:8:      assigned_to_user: {
+./actions/crm/get-accounts-by-opportunityId.ts:14:      assigned_to_user: {
+./actions/crm/get-accounts-by-contactId.ts:14:      assigned_to_user: {
+./actions/crm/get-account.ts:34:      assigned_to_user: {
+./actions/crm/contracts/update-contract/index.ts:49:    assigned_to,
+./actions/crm/contracts/update-contract/index.ts:88:        assigned_to: assigned_to || undefined,
+./actions/crm/contracts/update-contract/schema.ts:22:  assigned_to: z.string(),
+./actions/crm/contracts/create-new-contract/index.ts:46:    assigned_to,
+./actions/crm/contracts/create-new-contract/index.ts:73:        assigned_to: assigned_to || undefined,
+./actions/crm/opportunity/dashboard/set-inactive.ts:26:        assigned_to: true,
+./actions/crm/opportunity/dashboard/set-inactive.ts:34:    if (session.user.role !== "admin" && opportunity.assigned_to !== session.user.id) {
+./actions/crm/contracts/create-new-contract/schema.ts:13:  assigned_to: z.string(),
+./actions/crm/opportunities/update-opportunity.ts:15:  assigned_to?: string;
+./actions/crm/opportunities/update-opportunity.ts:35:    assigned_to,
+./actions/crm/opportunities/update-opportunity.ts:61:        assigned_to: assigned_to || undefined,
+./actions/crm/opportunities/create-opportunity.ts:15:  assigned_to?: string;
+./actions/crm/opportunities/create-opportunity.ts:34:    assigned_to,
+./actions/crm/opportunities/create-opportunity.ts:56:        assigned_to: assigned_to || userId,
+./actions/crm/opportunities/create-opportunity.ts:76:    if (assigned_to && assigned_to !== userId) {
+./actions/crm/opportunities/create-opportunity.ts:78:        where: { id: assigned_to },
+./actions/crm/opportunities/create-opportunity.ts:87:              ? `New opportunity ${name} has been added to the system and assigned to you.`
+./actions/crm/opportunities/create-opportunity.ts:91:              ? `New opportunity ${name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/opportunities/${opportunity.id}`
+./actions/crm/contacts/update-contact.ts:13:  assigned_to?: string;
+./actions/crm/contacts/update-contact.ts:14:  assigned_account?: string | null;
+./actions/crm/contacts/update-contact.ts:42:    assigned_to,
+./actions/crm/contacts/update-contact.ts:43:    assigned_account,
+./actions/crm/contacts/update-contact.ts:60:        accountsIDs: assigned_account || undefined,
+./actions/crm/contacts/update-contact.ts:61:        assigned_to: assigned_to || undefined,
+./actions/crm/leads/update-lead.ts:26:  assigned_to?: string;
+./actions/crm/leads/update-lead.ts:47:    assigned_to,
+./actions/crm/leads/update-lead.ts:72:        assigned_to: assigned_to || userId,
+./actions/crm/leads/update-lead.ts:77:    if (assigned_to && assigned_to !== userId) {
+./actions/crm/leads/update-lead.ts:79:        where: { id: assigned_to },
+./actions/crm/leads/update-lead.ts:88:              ? `New lead ${firstName} ${lastName} has been added to the system and assigned to you.`
+./actions/crm/leads/update-lead.ts:92:              ? `New lead ${firstName} ${lastName} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`
+./actions/crm/contacts/create-contact.ts:13:  assigned_to?: string;
+./actions/crm/contacts/create-contact.ts:14:  assigned_account?: string;
+./actions/crm/contacts/create-contact.ts:41:    assigned_to,
+./actions/crm/contacts/create-contact.ts:42:    assigned_account,
+./actions/crm/contacts/create-contact.ts:56:        accountsIDs: assigned_account ?? undefined,
+./actions/crm/contacts/create-contact.ts:57:        assigned_to: assigned_to ?? undefined,
+./actions/crm/contacts/create-contact.ts:67:    if (assigned_to && assigned_to !== userId) {
+./actions/crm/contacts/create-contact.ts:69:        where: { id: assigned_to },
+./actions/crm/contacts/create-contact.ts:78:              ? `New contact ${data.first_name} ${data.last_name} has been added to the system and assigned to you.`
+./actions/crm/contacts/create-contact.ts:82:              ? `New contact ${data.first_name} ${data.last_name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/contacts/${contact.id}`
+./actions/crm/leads/create-lead.ts:25:  assigned_to?: string;
+./actions/crm/leads/create-lead.ts:45:    assigned_to,
+./actions/crm/leads/create-lead.ts:67:        assigned_to: assigned_to || userId,
+./actions/crm/leads/create-lead.ts:72:    if (assigned_to && assigned_to !== userId) {
+./actions/crm/leads/create-lead.ts:74:        where: { id: assigned_to },
+./actions/crm/leads/create-lead.ts:83:              ? `New lead ${first_name} ${last_name} has been added to the system and assigned to you.`
+./actions/crm/leads/create-lead.ts:87:              ? `New lead ${first_name} ${last_name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`
+./actions/crm/get-user-opportunities.ts:6:      assigned_to: userId,
+./actions/crm/get-user-opportunities.ts:10:      assigned_sales_stage: {
+./actions/crm/get-user-leads.ts:6:      assigned_to: userId,
+./actions/crm/get-opportunity.ts:10:      // Include assigned account
+./actions/crm/get-opportunity.ts:11:      assigned_account: {
+./actions/crm/get-opportunity.ts:17:      assigned_sales_stage: {
+./actions/crm/get-opportunity.ts:23:      assigned_type: {
+./actions/crm/get-opportunity.ts:43:      // Include assigned user (uses "assigned_to_user_relation")
+./actions/crm/get-opportunity.ts:44:      assigned_to_user: {
+./actions/crm/get-opportunities-with-includes.ts:10:      assigned_account: {
+./actions/crm/get-opportunities-with-includes.ts:15:      assigned_sales_stage: {
+./actions/crm/get-opportunities-with-includes.ts:20:      assigned_to_user: {
+./actions/crm/get-opportunities-with-includes-by-contactId.ts:15:      assigned_account: {
+./actions/crm/get-opportunities-with-includes-by-contactId.ts:20:      assigned_sales_stage: {
+./actions/crm/get-opportunities-with-includes-by-contactId.ts:25:      assigned_to_user: {
+./actions/crm/get-opportunities-with-includes-by-accountId.ts:10:      assigned_account: {
+./actions/crm/get-opportunities-with-includes-by-accountId.ts:15:      assigned_sales_stage: {
+./actions/crm/get-opportunities-with-includes-by-accountId.ts:20:      assigned_to_user: {
+./actions/crm/accounts/update-account.ts:31:  assigned_to?: string;
+./actions/crm/get-leads.ts:8:      // Include assigned user (uses "LeadAssignedTo" relation)
+./actions/crm/get-leads.ts:9:      assigned_to_user: {
+./actions/crm/get-leads.ts:14:      // Include assigned accounts
+./actions/crm/get-leads.ts:15:      assigned_accounts: true,
+./actions/crm/accounts/create-account.ts:30:  assigned_to?: string;
+
+codex
+I found the route at `app/api/upload/presigned-url/route.ts` and the uploader caller. The repo’s AGENTS file references Claude-specific MCP/Skill tools that are not available in this session, so I’m using the closest read-only equivalents and keeping outputs narrow.
+exec
+/usr/bin/bash -lc "sed -n '1,100p' components/ui/minio-uploader.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' .env.example" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' .env.local.example" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' app/api/upload/presigned-url/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import { useCallback, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { cn } from "@/lib/utils";
+import { UploadCloud, Loader2 } from "lucide-react";
+
+interface MinioUploaderProps {
+  folder: "avatars" | "images" | "documents";
+  accept?: Record<string, string[]>;
+  maxSizeMB?: number;
+  onUploadComplete: (url: string, key: string) => void;
+  onUploadError?: (error: string) => void;
+}
+
+export function MinioUploader({
+  folder,
+  accept,
+  maxSizeMB = 64,
+  onUploadComplete,
+  onUploadError,
+}: MinioUploaderProps) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
+
+      setSelectedFileName(file.name);
+      setUploading(true);
+      setProgress("Requesting upload URL...");
+
+      try {
+        // Step 1: Get presigned URL from our server
+        const res = await fetch("/api/upload/presigned-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            folder,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to get upload URL");
+        const { presignedUrl, fileUrl, key } = await res.json();
+
+        setProgress("Uploading...");
+
+        // Step 2: PUT file directly to MinIO
+        const uploadRes = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type },
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload to storage failed");
+
+        setProgress(null);
+        onUploadComplete(fileUrl, key);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        setProgress(null);
+        onUploadError?.(msg);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [folder, onUploadComplete, onUploadError]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxFiles: 1,
+    maxSize: maxSizeMB * 1024 * 1024,
+    accept,
+    disabled: uploading,
+  });
+
+  return (
+    <div
+      {...getRootProps()}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors",
+        isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
+        uploading && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      <input {...getInputProps()} />
+      {uploading ? (
+        <>
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{progress}</p>
+        </>
+      ) : (
+        <>
+          <UploadCloud className="h-8 w-8 text-muted-foreground" />
+
+ succeeded in 0ms:
+# Environment variables declared in this file are automatically made available to Prisma.
+# See the documentation for more detail: https://pris.ly/d/prisma-schema#accessing-environment-variables-from-the-schema
+
+# Prisma supports the native connection string format for PostgreSQL, MySQL, SQLite, SQL Server, and CockroachDB.
+# See the documentation for all the connection string options: https://pris.ly/d/connection-strings
+
+# PostgreSQL connection string (required)
+DATABASE_URL="postgresql://<username>:<password>@<host>:<port>/<database>?schema=public"
+
+# Better Auth
+BETTER_AUTH_SECRET="generate-with-openssl-rand-base64-32"
+BETTER_AUTH_URL="http://localhost:3000"
+
+# Google OAuth
+GOOGLE_ID="your-google-client-id"
+GOOGLE_SECRET="your-google-client-secret"
+
+# Email Service (Resend)
+RESEND_API_KEY="your-resend-api-key"
+
+# AI (OpenAI)
+OPENAI_API_KEY="your-openai-api-key"
+
+# Firecrawl (contact enrichment)
+FIRECRAWL_API_KEY=            # get from https://firecrawl.dev
+
+# Invoice Parsing (Rossum)
+ROSSUM_USERNAME="your-rossum-username"
+ROSSUM_PASSWORD="your-rossum-password"
+
+# MinIO Object Storage
+NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+MINIO_ACCESS_KEY="your-access-key"
+MINIO_SECRET_KEY="your-secret-key"
+
+# SMTP / IMAP (optional, for email client functionality)
+SMTP_HOST="smtp.example.com"
+SMTP_PORT="587"
+SMTP_USER="your-smtp-user"
+SMTP_PASSWORD="your-smtp-password"
+
+# Internal cron job endpoints
+CRON_SECRET=                    # Secret for internal cron job endpoints
+
+# Email feature — generate with: openssl rand -hex 32
+EMAIL_ENCRYPTION_KEY=your_64_hex_char_key_here
+
+# Campaigns — Resend email sending
+RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+
+# Observability - OpenTelemetry + Pino + Loki
+OTEL_SERVICE_NAME=nextcrm-app
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_TRACES_SAMPLER=parentbased_always_on
+LOG_LEVEL=debug
+LOG_FILE_PATH=logs/nextcrm.log
+PINO_PRETTY=false
+
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createLogger } from "@/lib/logger";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const logger = createLogger({ module: "api.upload.presigned-url" });
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = buildPublicFileUrl(key);
+
+    logger.info(
+      {
+        contentType,
+        folder,
+        key,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generated"
+    );
+
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        contentType,
+        folder,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generation failed"
+    );
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+ succeeded in 0ms:
+
+# Database (PostgreSQL with pgvector extension)
+DATABASE_URL=postgresql://user:password@localhost:5432/nextcrm
+
+# Encryption key for email credentials (generate with: openssl rand -hex 32)
+ENCRYPTION_KEY=
+
+# Better Auth (generate with: openssl rand -base64 32)
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=http://localhost:3000
+
+# Google OAuth (optional for local dev — Email OTP works without it)
+GOOGLE_ID=
+GOOGLE_SECRET=
+
+#SMTP
+EMAIL_HOST=smtp.resend.com
+EMAIL_FROM=info@domain.com
+EMAIL_USERNAME=smtp@domain.com
+EMAIL_PASSWORD=SuperSEEcretPaSWord123+
+
+#IMAP
+IMAP_HOST=imap.domain.com
+IMAP_PORT=993
+IMAP_USER=user@domain.com
+IMAP_PASSWORD=SuperSEEcretPaSWord123+
+
+
+#NEXT ENV for Client part of App
+NEXT_PUBLIC_APP_NAME=NextCRM
+NEXT_PUBLIC_APP_V=0.0.3-beta
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_NEXT_VERSION="14.0.4"
+NEXT_PUBLIC_GITHUB_REPO_URL="https://github.com/pdovhomilja/nextcrm-app"
+NEXT_PUBLIC_GITHUB_ISSUES_URL=""
+NEXT_PUBLIC_GITHUB_COMMIT_SHA="main"
+NEXT_PUBLIC_GITHUB_TOKEN=
+
+
+#NEXTCRM (generate with: openssl rand -base64 32)
+NEXTCRM_TOKEN=
+
+#DigitalOcean
+DO_ENDPOINT=
+DO_REGION=
+DO_BUCKET=
+DO_ACCESS_KEY_ID=
+DO_ACCESS_KEY_SECRET=
+
+#OpenAI API
+OPEN_AI_ORGANIZATION_ID=
+OPEN_AI_API_KEY=
+OPENAI_API_KEY=
+NEXT_PUBLIC_OPENAI_API_KEY=
+
+#rossum
+ROSSUM_API_URL=https://elis.rossum.ai/api/v1
+ROSSUM_QUEUE_ID=
+ROSSUM_USER=
+ROSSUM_PASS=
+
+#Discord
+NEXT_PUBLIC_DISCORD_INVITE_URL="https://discord.com/invite/Dd4Aj6S4Dz"
+
+#Resend.com
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=noreply@domain.com
+
+#INNGEST
+INNGEST_ID=nextcrm
+INNGEST_APP_NAME=NextCRM
+INNGEST_BASE_URL=
+INNGEST_EVENT_KEY=
+INNGEST_SIGNING_KEY=
+
+#MINIO
+NEXT_PUBLIC_MINIO_ENDPOINT=
+MINIO_ENDPOINT=
+MINIO_PORT=
+MINIO_BUCKET=
+MINIO_USE_SSL="true"
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+
+
+#Playwright E2E Test Credentials
+# The test user is created automatically when you run: pnpm prisma db seed
+# E2E tests use Email OTP — the test setup intercepts OTP from the database
+TEST_USER_EMAIL=admin@domain.com
+
+# Required for E2B enrichment
+E2B_API_KEY=e2b_***
+E2B_ENRICHMENT_TEMPLATE=nextcrm-enrichment
+
+# Observability - OpenTelemetry + Pino + Loki
+OTEL_SERVICE_NAME=nextcrm-app
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_TRACES_SAMPLER=parentbased_always_on
+LOG_LEVEL=debug
+LOG_FILE_PATH=logs/nextcrm.log
+PINO_PRETTY=false
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' lib/logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,180p' lib/minio.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { S3Client } from "@aws-sdk/client-s3";
+
+if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+
+export const minioClient = new S3Client({
+  endpoint: process.env.MINIO_ENDPOINT,
+  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  },
+  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+});
+
+export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+ succeeded in 0ms:
+import { context, trace } from "@opentelemetry/api";
+import { mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { dirname, resolve } from "node:path";
+import pino from "pino";
+
+const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+
+function getTraceBindings() {
+  const spanContext = trace.getSpan(context.active())?.spanContext();
+
+  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    return {};
+  }
+
+  return {
+    trace_id: spanContext.traceId,
+    span_id: spanContext.spanId,
+    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+  };
+}
+
+function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+  const streams: pino.StreamEntry[] = [];
+  const prettyLogs = process.env.PINO_PRETTY === "true";
+
+  streams.push({
+    level: logLevel as pino.Level,
+    stream: prettyLogs
+      ? pino.transport({
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            ignore: "pid,hostname",
+            translateTime: "SYS:standard",
+          },
+        })
+      : pino.destination({ dest: 1, sync: false }),
+  });
+
+  if (process.env.LOG_FILE_PATH) {
+    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    mkdirSync(dirname(logFilePath), { recursive: true });
+
+    streams.push({
+      level: logLevel as pino.Level,
+      stream: pino.destination({ dest: logFilePath, sync: false }),
+    });
+  }
+
+  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+}
+
+export const logger = pino(
+  {
+    base: {
+      service: serviceName,
+      environment: process.env.NODE_ENV || "development",
+      pid: process.pid,
+      hostname: hostname(),
+    },
+    formatters: {
+      level(label) {
+        return { level: label };
+      },
+    },
+    level: logLevel,
+    messageKey: "message",
+    mixin: getTraceBindings,
+    redact: {
+      censor: "[REDACTED]",
+      paths: [
+        "authorization",
+        "cookie",
+        "password",
+        "secret",
+        "token",
+        "apiKey",
+        "headers.authorization",
+        "headers.cookie",
+        "*.authorization",
+        "*.cookie",
+        "*.password",
+        "*.secret",
+        "*.token",
+        "*.apiKey",
+      ],
+    },
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  },
+  createLogStreams()
+);
+
+export function createLogger(bindings: pino.Bindings) {
+  return logger.child(bindings);
+}
+
+exec
+/usr/bin/bash -lc "rg -n \"MINIO_|NEXT_PUBLIC_MINIO|DO_ENDPOINT|S3|AWS\" -S --glob '"'!node_modules'"' --glob '"'!*.log'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+pnpm-lock.yaml:468:    resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
+pnpm-lock.yaml:643:    resolution: {integrity: sha512-H1onv5SkgPBK2P6JR2MjGgbOnttoNzSPIRoeZTNPZYyaplwGg50zS3amXvXqF0/qfXpWEC9rLWU564QTB9bSog==}
+pnpm-lock.yaml:1531:    resolution: {integrity: sha512-PAwCvFJ4696XP2qZj+LAn1BWjZaJ6RjG6c7/lkMaUJnkyMS34ucuIsfqYvfskVNvUI27R/u4P1HMYFnlVXG/Ww==}
+pnpm-lock.yaml:1605:    resolution: {integrity: sha512-TLKY33fSLVd/lKB2YI1pH69ijyUblO/BQvCj566YvnwuzoTNr648iE0j22vRvVNk2HsPwByPxATg3MleS3gf5A==}
+pnpm-lock.yaml:1833:    resolution: {integrity: sha512-EZOvm1aQWgnI/N/xcWOlnS3RQBk0VtVav5Zo7n4p0A7UKyTDx047k8opDbXgBpHl4CulRqRfbw3QrX2w5UOXMQ==}
+pnpm-lock.yaml:2419:    resolution: {integrity: sha512-YQxSS34tPF/6ZG7r/Ih9xy+kP/WwediEUsqmtf0cuCV5TPPKw/PQHRhueUo6JdeFJaqV3pyjm0GdYjZotbRt/A==}
+pnpm-lock.yaml:2550:    resolution: {integrity: sha512-r51DLcJ8bDRSrBEJF3J4cinoWyGA7rfP2mG6lD90VqIbGNOkbfcLcXalSVjq5Y6brQS3vcjrq4GbyUb1Cb7vkw==}
+pnpm-lock.yaml:2765:    resolution: {integrity: sha512-t2ODlkXBQyn7jkl6TNaw/MtVEVvIGelJDCG41Okq/KwUsJBwQ4XVZsHAVUkK4mBv3ewiAS3PGuUWuY2BoK4ZUw==}
+pnpm-lock.yaml:2831:    resolution: {integrity: sha512-kr0X2+6Yy/vJzLYJUPCZEc8SfQcf+1COFoAqauJm74umQhta9M7lNJHP7QQS3vkvcGLQUbWpMzwrXYwrYztHKA==}
+pnpm-lock.yaml:3548:    resolution: {integrity: sha512-wOPKPEpso+doCZGIlr+e1lVI6+9VAKfL4kZWFgzVgGWY2hZxshNKod4l2LXS3PRC9otH/JRSjtEHqQ/7eLciRA==}
+pnpm-lock.yaml:3604:    resolution: {integrity: sha512-2kAStBlvq+lTXHyAZYfJRb/DfS3rsinLiwb+69SstC9Vb0s9vNWkRwpnj918Pfi85mzi42sOqdV72OLxWAISnw==}
+pnpm-lock.yaml:3616:    resolution: {integrity: sha512-2zdZ9DTHngRtcYxJK1GUDxruNr53kv5W2Lupe0LMU+Imr6ohQg8M2T14MNkj1Y0wS3FFwpgpGQyvuaMF7CiTmQ==}
+pnpm-lock.yaml:3930:    resolution: {integrity: sha512-DMa9g5cH2d/Gx1KXtV7txTxaa6FBqgG8glmfug+N93VMb8sEZR1Yu1az++yAep4SGGq9GWIGZCUS3H6W66et6Q==}
+pnpm-lock.yaml:4292:    resolution: {integrity: sha512-nRcz5Il4ln0kMhfL8S3hLkxI85BXs3o8EYoattsJNdsX4YUU89iOkVn7g0VHSRxFuVMdM4Q1jEpIId1Ihim/Uw==}
+pnpm-lock.yaml:4734:    resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
+pnpm-lock.yaml:4883:    resolution: {integrity: sha512-qiBjkpbMLO/HL68y+lh4q0/O1MZFj2RX6X/KmMa3+gJD3z+WwI1ZzDHysvqHGS3mP6mznPckpXmw1nI9cJjyRg==}
+pnpm-lock.yaml:5177:    resolution: {integrity: sha512-ypdmJU/TbBby2Dxibuv7ZLW3Bs1QEmM7nHjEANfohJLvE0XVujisn1qPJcZxg+qDucsr+bP6fLD1rPS3AhJ7EQ==}
+pnpm-lock.yaml:5335:    resolution: {integrity: sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==}
+pnpm-lock.yaml:5996:    resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
+pnpm-lock.yaml:6404:    resolution: {integrity: sha512-9ev8s3YN6Hsyz9LV75XUwkCVFlwPbaFn6Wp75qnI0wzAINYWY8Fb3+6y59Rwd3QaS3kKXffHXsZMziMavfz/nw==}
+pnpm-lock.yaml:6516:    resolution: {integrity: sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==}
+pnpm-lock.yaml:6617:    resolution: {integrity: sha512-OOCm2//MZJ87CdDK62rZIu+aw9gBv4azMJuA8/KB74wmfS3lnC4yoPHm0uXZ/dvNNHmnZnB8XLAZzObeG0nS1g==}
+pnpm-lock.yaml:6702:    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+pnpm-lock.yaml:6722:    resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
+pnpm-lock.yaml:6975:    resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
+pnpm-lock.yaml:7150:    resolution: {integrity: sha512-VXJjc87FScF88uafS3JllDgvAm+c/Slfz06lorj2uAY34rlUu0Nt+v8wreiImcrgAjjIHp1rXpTDlLOGw29WwQ==}
+pnpm-lock.yaml:7179:    resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
+pnpm-lock.yaml:7217:    resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
+pnpm-lock.yaml:7432:    resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
+pnpm-lock.yaml:7580:    resolution: {integrity: sha512-4I7Ce4KpygXb9bkiPS3hTEk4dSHorfRw8uI0pE8IhxlK2GXsqv5tIA7JUSxtSu7u8APVOTtbUBxTmnHIxVkIJw==}
+pnpm-lock.yaml:7653:    resolution: {integrity: sha512-lGjYV/EoqEjEWPnmiSvH4v5IoIAwQM2W4Z1C0Q/Pw2xD0eVzKPS359BQTUMum+1fa0kH2nrKjuavmTPOGhpLPg==}
+pnpm-lock.yaml:7776:    resolution: {integrity: sha512-UT/q6fwS3c1dHbXv2uFgYJ9BMFHu3fwnd7AYZaEQhXuYQ4hgsxLvsUXzGdKeZrW5xopzDCvuA2N41WJ88I7zIw==}
+pnpm-lock.yaml:8596:    resolution: {integrity: sha512-cxWNPesCnQCcMPeenjKKsOCKQZ/L6Tv19DTRIGuLWe32lyzWhihGVJ/rcckZXJxfdKCFvRLS3fpBIsV/ZGX4zA==}
+pnpm-lock.yaml:8784:    resolution: {integrity: sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==}
+README.md:159:- [UploadThing](https://uploadthing.com/) + S3-compatible storage (DigitalOcean Spaces) – for document file storage
+lib/minio.ts:1:import { S3Client } from "@aws-sdk/client-s3";
+lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+lib/minio.ts:4:if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+lib/minio.ts:5:if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+lib/minio.ts:8:export const minioClient = new S3Client({
+lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+lib/minio.ts:12:    accessKeyId: process.env.MINIO_ACCESS_KEY,
+lib/minio.ts:13:    secretAccessKey: process.env.MINIO_SECRET_KEY,
+lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:17:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+app/api/upload/presigned-url/route.ts:54:    Bucket: MINIO_BUCKET,
+docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:253:| `EXTERNAL_ERROR` | Enrichment API failure, S3 failure | INTERNAL_ERROR |
+lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:162:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:181:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:9:**Tech Stack:** TypeScript, Zod, Prisma ORM, `mcp-handler` + `@modelcontextprotocol/sdk`, AWS S3 (MinIO), Inngest (async jobs)
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+actions/documents/delete-document.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+actions/documents/delete-document.ts:25:        Bucket: MINIO_BUCKET,
+actions/documents/bulk-delete-documents.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+actions/documents/bulk-delete-documents.ts:21:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:9:**Tech Stack:** Next.js 16, React 19, Prisma 7.5, pgvector (1536-dim, text-embedding-3-small), Inngest (step functions), MinIO/S3, OpenAI API, pdf-parse, mammoth, sharp, pdfjs-dist, shadcn/ui, TanStack Table.
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+inngest/functions/documents/generate-thumbnail.ts:4:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+inngest/functions/documents/generate-thumbnail.ts:12:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+inngest/functions/documents/generate-thumbnail.ts:53:        Bucket: MINIO_BUCKET,
+inngest/functions/documents/generate-thumbnail.ts:60:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+inngest/functions/documents/enrich-document.ts:9:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+inngest/functions/documents/enrich-document.ts:20:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+
+codex
+The failure is inside the presign route’s `try` block, after validation and authentication. I’m checking the MinIO environment contract next, because this code has one required variable that is used with a non-null assertion but is not actually validated.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' lib/mcp/tools/crm-documents.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { z } from "zod";
+import { prismadb } from "@/lib/prisma";
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+import {
+  paginationSchema,
+  paginationArgs,
+  listResponse,
+  itemResponse,
+  notFound,
+  validationError,
+  softDeleteData,
+} from "../helpers";
+
+// Map entity types to their Prisma junction table accessor names (camelCase, lowercase first)
+const ENTITY_LINK_MAP: Record<string, string> = {
+  account: "documentsToAccounts",
+  contact: "documentsToContacts",
+  lead: "documentsToLeads",
+  opportunity: "documentsToOpportunities",
+  task: "documentsToTasks",
+};
+
+const ENTITY_FK_MAP: Record<string, string> = {
+  account: "account_id",
+  contact: "contact_id",
+  lead: "lead_id",
+  opportunity: "opportunity_id",
+  task: "task_id",
+};
+
+export const crmDocumentTools = [
+  {
+    name: "crm_list_documents",
+    description: "List documents, optionally filtered by linked entity type and ID",
+    schema: z.object({
+      entityType: z
+        .enum(["account", "contact", "lead", "opportunity", "task"])
+        .optional(),
+      entityId: z.string().uuid().optional(),
+      ...paginationSchema,
+    }),
+    async handler(
+      args: {
+        entityType?: string;
+        entityId?: string;
+        limit: number;
+        offset: number;
+      },
+      userId: string
+    ) {
+      const where: any = {
+        created_by_user: userId,
+        deletedAt: null,
+      };
+      if (args.entityType && args.entityId) {
+        const relation =
+          args.entityType === "account"
+            ? "accounts"
+            : args.entityType === "contact"
+            ? "contacts"
+            : args.entityType === "lead"
+            ? "leads"
+            : args.entityType === "opportunity"
+            ? "opportunities"
+            : "tasks";
+        where[relation] = {
+          some: { [ENTITY_FK_MAP[args.entityType]]: args.entityId },
+        };
+      }
+      const [data, total] = await Promise.all([
+        prismadb.documents.findMany({
+          where,
+          ...paginationArgs(args),
+          orderBy: { createdAt: "desc" },
+        }),
+        prismadb.documents.count({ where }),
+      ]);
+      return listResponse(data, total, args.offset);
+    },
+  },
+  {
+    name: "crm_get_document",
+    description: "Get a single document by ID",
+    schema: z.object({ id: z.string().uuid() }),
+    async handler(args: { id: string }, userId: string) {
+      const doc = await prismadb.documents.findFirst({
+        where: { id: args.id, created_by_user: userId, deletedAt: null },
+        include: {
+          accounts: true,
+          contacts: true,
+          leads: true,
+          opportunities: true,
+          tasks: true,
+        },
+      });
+      if (!doc) notFound("Document");
+      return itemResponse(doc);
+    },
+  },
+  {
+    name: "crm_create_document",
+    description: "Create a document record and get a presigned upload URL",
+    schema: z.object({
+      document_name: z.string().min(1),
+      contentType: z.string().min(1),
+      description: z.string().optional(),
+      visibility: z.string().optional(),
+    }),
+    async handler(
+      args: {
+        document_name: string;
+        contentType: string;
+        description?: string;
+        visibility?: string;
+      },
+      userId: string
+    ) {
+      const ext = args.document_name.includes(".")
+        ? args.document_name.split(".").pop()?.trim() || "bin"
+        : "bin";
+      const key = `documents/${randomUUID()}.${ext}`;
+      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+
+      const doc = await prismadb.documents.create({
+        data: {
+          document_name: args.document_name,
+          document_file_mimeType: args.contentType,
+          document_file_url: fileUrl,
+          key,
+          description: args.description,
+          visibility: args.visibility,
+          created_by_user: userId,
+          createdBy: userId,
+          processing_status: "PENDING",
+        },
+      });
+
+      const command = new PutObjectCommand({
+        Bucket: MINIO_BUCKET,
+        Key: key,
+        ContentType: args.contentType,
+      });
+      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+    },
+  },
+  {
+    name: "crm_get_upload_url",
+    description: "Get a presigned upload URL for an existing document",
+    schema: z.object({ id: z.string().uuid() }),
+    async handler(args: { id: string }, userId: string) {
+      const doc = await prismadb.documents.findFirst({
+        where: { id: args.id, created_by_user: userId },
+      });
+      if (!doc) notFound("Document");
+      if (!doc.key) validationError("Document has no storage key");
+      const command = new PutObjectCommand({
+        Bucket: MINIO_BUCKET,
+        Key: doc.key!,
+        ContentType: doc.document_file_mimeType,
+      });
+      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+    },
+  },
+  {
+    name: "crm_get_download_url",
+    description: "Get a presigned download URL for a document",
+    schema: z.object({ id: z.string().uuid() }),
+    async handler(args: { id: string }, userId: string) {
+      const doc = await prismadb.documents.findFirst({
+        where: { id: args.id, created_by_user: userId },
+      });
+      if (!doc) notFound("Document");
+      if (!doc.key) validationError("Document has no storage key");
+      const command = new GetObjectCommand({
+        Bucket: MINIO_BUCKET,
+        Key: doc.key!,
+      });
+      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+    },
+  },
+  {
+    name: "crm_link_document",
+    description:
+      "Link a document to an entity (account, contact, lead, opportunity, or task)",
+    schema: z.object({
+      document_id: z.string().uuid(),
+      entityType: z.enum(["account", "contact", "lead", "opportunity", "task"]),
+      entityId: z.string().uuid(),
+    }),
+    async handler(
+      args: { document_id: string; entityType: string; entityId: string },
+      userId: string
+    ) {
+      const doc = await prismadb.documents.findFirst({
+        where: { id: args.document_id, created_by_user: userId },
+      });
+      if (!doc) notFound("Document");
+
+      const table = ENTITY_LINK_MAP[args.entityType];
+      const fk = ENTITY_FK_MAP[args.entityType];
+      if (!table || !fk) validationError(`Invalid entity type: ${args.entityType}`);
+
+      await (prismadb as any)[table].create({
+        data: { document_id: args.document_id, [fk]: args.entityId },
+      });
+
+      return itemResponse({
+        document_id: args.document_id,
+        entityType: args.entityType,
+        entityId: args.entityId,
+      });
+    },
+  },
+
+exec
+/usr/bin/bash -lc "awk -F= '/"'^(NEXT_PUBLIC_MINIO_ENDPOINT|MINIO_ENDPOINT|MINIO_PORT|MINIO_BUCKET|MINIO_USE_SSL|MINIO_ACCESS_KEY|MINIO_SECRET_KEY)=/ { v=$0; sub(/''^[''^=]*=/,"",v); gsub(/''^"|"$/,"",v); status=(length(v)==0?"EMPTY":"SET"); printf "%s:%s=%s'"\\n\", FILENAME, "'$1, status }'"' .env .env.local .env.example .env.local.example" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env:NEXT_PUBLIC_MINIO_ENDPOINT=EMPTY
+.env:MINIO_ENDPOINT=SET
+.env:MINIO_PORT=SET
+.env:MINIO_BUCKET=SET
+.env:MINIO_USE_SSL=SET
+.env:MINIO_ACCESS_KEY=SET
+.env:MINIO_SECRET_KEY=SET
+.env.local:NEXT_PUBLIC_MINIO_ENDPOINT=EMPTY
+.env.local:MINIO_ENDPOINT=SET
+.env.local:MINIO_PORT=SET
+.env.local:MINIO_BUCKET=SET
+.env.local:MINIO_USE_SSL=SET
+.env.local:MINIO_ACCESS_KEY=SET
+.env.local:MINIO_SECRET_KEY=SET
+.env.example:NEXT_PUBLIC_MINIO_ENDPOINT=SET
+.env.example:MINIO_ENDPOINT=SET
+.env.example:MINIO_PORT=SET
+.env.example:MINIO_BUCKET=SET
+.env.example:MINIO_USE_SSL=SET
+.env.example:MINIO_ACCESS_KEY=SET
+.env.example:MINIO_SECRET_KEY=SET
+.env.local.example:NEXT_PUBLIC_MINIO_ENDPOINT=EMPTY
+.env.local.example:MINIO_ENDPOINT=EMPTY
+.env.local.example:MINIO_PORT=EMPTY
+.env.local.example:MINIO_BUCKET=EMPTY
+.env.local.example:MINIO_USE_SSL=SET
+.env.local.example:MINIO_ACCESS_KEY=EMPTY
+.env.local.example:MINIO_SECRET_KEY=EMPTY
+
+exec
+/usr/bin/bash -lc "rg -n \"new URL\\(|MINIO_PUBLIC_URL"'!|NEXT_PUBLIC_MINIO_ENDPOINT|Presigned upload URL generation failed|logger'"\\.error\" app lib components actions inngest -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+actions/user/update-profile.ts:35:    logger.error({ err: error }, "UPDATE_PROFILE");
+lib/sendmail.ts:36:    logger.error(
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:25:      logger.error(
+actions/user/set-language.ts:35:    logger.error({ err: error }, "SET_LANGUAGE");
+lib/audit-log.ts:81:    logger.error(
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+actions/system/get-next-version.ts:17:      logger.error({ err: error }, "Error parsing package.json");
+actions/system/get-next-version.ts:21:    logger.error({ err: error }, "Error reading package.json");
+app/api/client-logs/route.ts:61:      logger.error(payload, message);
+actions/projects/watch-project.ts:27:    logger.error({ err: error }, "WATCH_PROJECT");
+actions/projects/watch-project.ts:52:    logger.error({ err: error }, "UNWATCH_PROJECT");
+actions/projects/update-task.ts:95:        logger.error({ err: emailError }, "UPDATE_TASK_EMAIL");
+actions/projects/update-task.ts:102:    logger.error({ err: error }, "UPDATE_TASK");
+actions/projects/update-section-title.ts:28:    logger.error({ err: error }, "UPDATE_SECTION_TITLE");
+inngest/functions/documents/generate-thumbnail.ts:60:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+actions/projects/update-project.ts:37:    logger.error({ err: error }, "UPDATE_PROJECT");
+actions/projects/update-kanban-position.ts:58:    logger.error({ err: error }, "UPDATE_KANBAN_POSITION");
+actions/projects/mark-task-done.ts:27:    logger.error({ err: error }, "MARK_TASK_DONE");
+actions/projects/delete-task.ts:52:    logger.error({ err: error }, "DELETE_TASK");
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:78:    logger.error(
+app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+actions/projects/delete-section.ts:27:    logger.error({ err: error }, "DELETE_SECTION");
+actions/projects/delete-project.ts:24:    logger.error({ err: error }, "DELETE_PROJECT");
+actions/projects/create-task.ts:105:        logger.error({ err: emailError }, "CREATE_TASK_EMAIL");
+actions/projects/create-task.ts:112:    logger.error({ err: error }, "CREATE_TASK");
+actions/projects/create-task-in-board.ts:57:      logger.error({ err: error }, "CREATE_TASK_IN_BOARD_QUICK");
+actions/projects/create-task-in-board.ts:133:        logger.error({ err: emailError }, "CREATE_TASK_IN_BOARD_EMAIL");
+actions/projects/create-task-in-board.ts:140:    logger.error({ err: error }, "CREATE_TASK_IN_BOARD");
+actions/projects/create-section.ts:37:    logger.error({ err: error }, "CREATE_SECTION");
+actions/projects/create-project.ts:49:    logger.error({ err: error }, "CREATE_PROJECT");
+actions/projects/assign-document-to-task.ts:42:    logger.error({ err: error }, "ASSIGN_DOCUMENT_TO_TASK");
+actions/projects/assign-document-to-task.ts:82:    logger.error({ err: error }, "DISCONNECT_DOCUMENT_FROM_TASK");
+actions/projects/add-comment-to-task.ts:109:        logger.error({ err: emailError }, "ADD_COMMENT_EMAIL");
+actions/projects/add-comment-to-task.ts:129:    logger.error({ err: error }, "ADD_COMMENT_TO_TASK");
+actions/github/get-repo-stars.ts:23:    logger.error({ err: error }, "Error fetching commits");
+app/api/og/route.tsx:18:      new URL("../../../public/Inter-Bold.ttf", import.meta.url)
+app/api/og/route.tsx:20:    const { searchParams } = new URL(request.url);
+actions/github/get-repo-commits.ts:45:    logger.error({ err: error }, "Error fetching commits");
+lib/enrichment/strategies/enrichment-strategy.ts:292:                  const domain = new URL(result.url).hostname.toLowerCase();
+lib/enrichment/strategies/enrichment-strategy.ts:327:                  const domain = new URL(result.url).hostname.toLowerCase();
+actions/fulltext/unified-search.ts:384:    logger.error({ err: error }, "UNIFIED_SEARCH");
+lib/enrichment/services/openai.ts:536:                const url = new URL(e.source_url);
+app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+lib/enrichment/e2b/apply-result.ts:29:      return new URL(ctx.companyWebsite).hostname.replace(/^www\./, '');
+app/api/crm/targets/enrich/route.ts:140:  const sessionId = new URL(request.url).searchParams.get("sessionId");
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:83:                domain: new URL(result.url).hostname,
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:141:  const domain = new URL(result.url).hostname.toLowerCase();
+app/api/crm/contacts/enrich/route.ts:127:  const sessionId = new URL(request.url).searchParams.get("sessionId");
+app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+lib/enrichment/agent-architecture/orchestrator.ts:55:        const overrideDomain = new URL(identityOverride.companyWebsite).hostname.replace(/^www\./, '');
+lib/enrichment/agent-architecture/orchestrator.ts:85:              const hostname = new URL(result.url).hostname.replace(/^www\./, '');
+lib/enrichment/agent-architecture/orchestrator.ts:154:                const domain = new URL(wsValue).hostname.replace(/^www\./, '');
+lib/enrichment/agent-architecture/orchestrator.ts:368:        domain = new URL(companyWebsite).hostname.replace(/^www\./, '');
+lib/enrichment/agent-architecture/orchestrator.ts:779:            const domain = new URL(r.url).hostname.toLowerCase();
+lib/enrichment/agent-architecture/orchestrator.ts:936:            const domain = new URL(r.url).hostname.toLowerCase();
+lib/enrichment/agent-architecture/orchestrator.ts:1091:            const domain = new URL(r.url).hostname.toLowerCase();
+lib/enrichment/agent-architecture/orchestrator.ts:1223:          const url = new URL(result.url);
+lib/enrichment/agent-architecture/orchestrator.ts:1351:            const domain = new URL(r.url).hostname.toLowerCase();
+lib/enrichment/agent-architecture/orchestrator.ts:1562:            const domain = new URL(r.url).hostname.toLowerCase();
+app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+actions/ai/projects/boards/getAiReport.tsx:83:    logger.error("Error from OpenAI API");
+actions/ai/projects/boards/getAiReport.tsx:100:      logger.error({ err: error }, "Error from get-user-ai-tasks");
+app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+actions/crm/contacts/update-contact.ts:82:    logger.error({ err: error }, "UPDATE_CONTACT");
+actions/crm/tasks/delete-task.ts:27:    logger.error({ err: error }, "DELETE_TASK");
+actions/crm/contacts/delete-contact.ts:31:    logger.error({ err: error }, "DELETE_CONTACT");
+actions/crm/contacts/unlink-opportunity.ts:33:    logger.error({ err: error }, "UNLINK_OPPORTUNITY");
+actions/crm/tasks/add-comment.ts:40:    logger.error({ err: error }, "ADD_COMMENT");
+actions/crm/activities/update-activity.ts:102:    logger.error({ err: error }, "updateActivity error");
+actions/admin/users/set-role.ts:42:    logger.error({ err: error }, "SET_USER_ROLE");
+actions/crm/contacts/create-contact.ts:99:    logger.error({ err: error }, "CREATE_CONTACT");
+actions/crm/contacts/restore-contact.ts:32:    logger.error({ err: error }, "RESTORE_CONTACT");
+actions/crm/activities/get-activities-by-entity.ts:77:    logger.error({ err: error }, "getActivitiesByEntity error");
+actions/admin/users/invite-user.ts:81:    logger.error({ err: error }, "INVITE_USER");
+actions/crm/activities/delete-activity.ts:42:    logger.error({ err: error }, "deleteActivity error");
+actions/admin/users/delete-user.ts:37:    logger.error({ err: error }, "DELETE_USER");
+actions/crm/activities/create-activity.ts:77:    logger.error({ err: error }, "createActivity error");
+actions/admin/users/deactivate-user.ts:23:    logger.error({ err: error }, "DEACTIVATE_USER");
+actions/admin/users/activate-user.ts:45:    logger.error({ err: error }, "ACTIVATE_USER");
+actions/crm/targets/suggest-mapping.ts:137:      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+actions/crm/targets/convert-target.ts:86:    logger.error({ err: error }, "[convertTarget] Error");
+actions/admin/send-mail-to-all/index.ts:100:    logger.error({ err: error }, "Send mail to all users failed");
+actions/crm/accounts/watch-account.ts:24:    logger.error({ err: error }, "WATCH_ACCOUNT");
+actions/crm/contracts/delete-contract/index.ts:56:    logger.error({ err: error, contractId: id }, "Delete contract failed");
+actions/crm/contracts/update-contract/index.ts:104:    logger.error({ err: error, contractId: id }, "Update contract failed");
+actions/crm/accounts/update-account.ts:68:    logger.error({ err: error }, "UPDATE_ACCOUNT");
+actions/crm/accounts/unwatch-account.ts:27:    logger.error({ err: error }, "UNWATCH_ACCOUNT");
+actions/crm/leads/update-lead.ts:110:    logger.error({ err: error }, "UPDATE_LEAD");
+actions/crm/accounts/restore-account.ts:32:    logger.error({ err: error }, "RESTORE_ACCOUNT");
+actions/crm/accounts/delete-account.ts:30:    logger.error({ err: error }, "DELETE_ACCOUNT");
+actions/crm/contracts/restore-contract/index.ts:32:    logger.error({ err: error }, "RESTORE_CONTRACT");
+actions/crm/contracts/create-new-contract/index.ts:87:    logger.error({ err: error }, "Create contract failed");
+actions/crm/accounts/create-task.ts:79:        logger.error({ err: error, taskId: task.id, userId: user }, "Task assignee notification failed");
+actions/crm/accounts/create-task.ts:115:      logger.error({ err: error, accountId: account, taskId: task.id }, "Task watcher notification failed");
+actions/crm/accounts/create-task.ts:121:    logger.error({ err: error }, "CREATE_TASK");
+actions/crm/accounts/create-account.ts:63:    logger.error({ err: error }, "CREATE_ACCOUNT");
+actions/crm/similarity/get-similar-opportunities.ts:44:    logger.error({ err: error }, "GET_SIMILAR_OPPORTUNITIES");
+actions/crm/leads/create-lead.ts:104:    logger.error({ err: error }, "CREATE_LEAD");
+actions/crm/similarity/get-similar-leads.ts:43:    logger.error({ err: error }, "GET_SIMILAR_LEADS");
+actions/crm/leads/delete-lead.ts:31:    logger.error({ err: error }, "DELETE_LEAD");
+actions/crm/leads/restore-lead.ts:32:    logger.error({ err: error }, "RESTORE_LEAD");
+actions/crm/contract-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_CONTRACT_LINE_ITEM");
+actions/crm/similarity/get-similar-contacts.ts:43:    logger.error({ err: error }, "GET_SIMILAR_CONTACTS");
+actions/crm/similarity/get-similar-accounts.ts:55:    logger.error({ err: error }, "GET_SIMILAR_ACCOUNTS");
+actions/crm/opportunities/update-opportunity.ts:91:    logger.error({ err: error }, "UPDATE_OPPORTUNITY");
+actions/crm/account-products/update-assignment/index.ts:57:    logger.error({ err: error }, "UPDATE_ASSIGNMENT");
+actions/crm/opportunities/restore-opportunity.ts:32:    logger.error({ err: error }, "RESTORE_OPPORTUNITY");
+actions/crm/opportunity/dashboard/set-inactive.ts:54:    logger.error({ err: error, opportunityId: id }, "Set opportunity inactive failed");
+actions/crm/opportunities/delete-opportunity.ts:31:    logger.error({ err: error }, "DELETE_OPPORTUNITY");
+actions/crm/contract-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_CONTRACT_LINE_ITEMS");
+app/[locale]/(routes)/layout.tsx:18:  metadataBase: new URL(
+actions/crm/opportunities/create-opportunity.ts:108:    logger.error({ err: error }, "CREATE_OPPORTUNITY");
+actions/crm/account-products/remove-assignment/index.ts:32:    logger.error({ err: error }, "REMOVE_ASSIGNMENT");
+actions/crm/contract-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_CONTRACT_LINE_ITEM");
+actions/crm/opportunity-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_OPPORTUNITY_LINE_ITEM");
+actions/crm/opportunity-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_OPPORTUNITY_LINE_ITEM");
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+actions/crm/account-products/assign-product/index.ts:71:    logger.error({ err: error }, "ASSIGN_PRODUCT");
+actions/crm/contract-line-items/copy-from-opportunity/index.ts:94:    logger.error({ err: error }, "COPY_LINE_ITEMS_FROM_OPPORTUNITY");
+actions/crm/opportunity-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_OPPORTUNITY_LINE_ITEM");
+actions/crm/opportunity-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_OPPORTUNITY_LINE_ITEMS");
+actions/crm/contract-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_CONTRACT_LINE_ITEM");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+actions/crm/products/update-product/index.ts:74:    logger.error({ err: error }, "UPDATE_PRODUCT");
+actions/crm/products/delete-product/index.ts:36:    logger.error({ err: error }, "DELETE_PRODUCT");
+actions/crm/products/create-product/index.ts:68:    logger.error({ err: error }, "CREATE_PRODUCT");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '57,88p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '12,20p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '1,22p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    12	const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+    13	type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+    14	
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+    19	}
+    20	
+
+ succeeded in 0ms:
+     1	import { S3Client } from "@aws-sdk/client-s3";
+     2	
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc "node -e 'try { new URL(\"\") } catch (e) { console.log(e.name + \": \" + e.message) }'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+TypeError: Invalid URL
+
+codex
+The local env files have MinIO credentials/bucket set but `NEXT_PUBLIC_MINIO_ENDPOINT` empty. That lines up with the exact route path: the presigned URL can be generated, then constructing the returned public file URL throws `TypeError: Invalid URL`, which is caught and logged under the same “generation failed” message.
+exec
+/usr/bin/bash -lc 'rg -n "NEXT_PUBLIC_MINIO_ENDPOINT=|MINIO_ENDPOINT=|MINIO_BUCKET=" .env .env.local .env.example .env.local.example' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local.example:78:MINIO_ENDPOINT=
+.env.local.example:80:MINIO_BUCKET=
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env.example:33:MINIO_ENDPOINT="https://your-minio-host"
+.env.example:35:MINIO_BUCKET="your-bucket-name"
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env:33:MINIO_ENDPOINT="https://your-minio-host"
+.env:35:MINIO_BUCKET="your-bucket-name"
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:78:MINIO_ENDPOINT="https://your-minio-host"
+.env.local:80:MINIO_BUCKET="your-bucket-name"
+
+exec
+/usr/bin/bash -lc "rg -n \"dd675312fb402fed6a9ff838a3d9a064|Presigned upload URL generation failed|Invalid URL|api.upload.presigned-url\" logs app.log nextcrm.log . --glob '*.log' --glob '"'!node_modules'"' -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: app.log: No such file or directory (os error 2)
+rg: nextcrm.log: No such file or directory (os error 2)
+logs/nextcrm.log:11:{"level":"error","time":"2026-05-04T18:44:22.247Z","service":"nextcrm-app","environment":"development","pid":89724,"hostname":"localhost","module":"api.upload.presigned-url","trace_id":"dd675312fb402fed6a9ff838a3d9a064","span_id":"8f0a9636dd20584e","trace_flags":"01","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:819:25)\n    at buildPublicFileUrl (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:817:27)\n    at POST (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:872:25)\n    at async AppRouteRouteModule.do (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40115)\n    at async AppRouteRouteModule.handle (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47321)\n    at async responseGenerator (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17690:38)\n    at async AppRouteRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:227216)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17753:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17804:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)","code":"ERR_INVALID_URL","input":""},"contentType":"application/pdf","folder":"documents","userId":"8c28cd6d-deca-4202-b776-ff7ca2b9b158","message":"Presigned upload URL generation failed"}
+./logs/nextcrm.log:11:{"level":"error","time":"2026-05-04T18:44:22.247Z","service":"nextcrm-app","environment":"development","pid":89724,"hostname":"localhost","module":"api.upload.presigned-url","trace_id":"dd675312fb402fed6a9ff838a3d9a064","span_id":"8f0a9636dd20584e","trace_flags":"01","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:819:25)\n    at buildPublicFileUrl (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:817:27)\n    at POST (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:872:25)\n    at async AppRouteRouteModule.do (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40115)\n    at async AppRouteRouteModule.handle (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47321)\n    at async responseGenerator (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17690:38)\n    at async AppRouteRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:227216)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17753:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17804:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)","code":"ERR_INVALID_URL","input":""},"contentType":"application/pdf","folder":"documents","userId":"8c28cd6d-deca-4202-b776-ff7ca2b9b158","message":"Presigned upload URL generation failed"}
+
+codex
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` was empty in the development environment.
+
+The failing path is `/api/upload/presigned-url`. The route successfully reaches the presigned upload flow, but after calling `getSignedUrl(...)`, it builds the public file URL here:
+
+`app/api/upload/presigned-url/route.ts:15-18`
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+`MINIO_PUBLIC_URL` comes from:
+
+`lib/minio.ts:19`
+
+```ts
+process.env.NEXT_PUBLIC_MINIO_ENDPOINT
+```
+
+Local evidence shows `.env` and `.env.local` both have `NEXT_PUBLIC_MINIO_ENDPOINT` present but empty. That makes `new URL("")` throw:
+
+```text
+TypeError: Invalid URL
+code: ERR_INVALID_URL
+input: ""
+```
+
+The local log confirms the same trace ID as the incident:
+
+```text
+trace_id=dd675312fb402fed6a9ff838a3d9a064
+module=api.upload.presigned-url
+err.type=TypeError
+err.message=Invalid URL
+err.code=ERR_INVALID_URL
+err.input=""
+contentType=application/pdf
+folder=documents
+```
+
+The incident message says “Presigned upload URL generation failed,” but the actual failure is more specifically public URL construction after or around presigned URL generation. The catch block wraps both operations, so the log message is slightly misleading.
+
+Secondary observability issue: the source log stores the serialized exception under `err`, while the incident JSON shows `error.name/message/stack` as null. The observability pipeline likely maps `error.*` but not Pino’s `err.*`, causing the useful exception details to be dropped.
+
+Recommended immediate fix: set `NEXT_PUBLIC_MINIO_ENDPOINT` to a valid absolute browser-accessible MinIO/S3 endpoint in the active environment and restart the dev server. No code changes were made.
+tokens used
+56,666
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` was empty in the development environment.
+
+The failing path is `/api/upload/presigned-url`. The route successfully reaches the presigned upload flow, but after calling `getSignedUrl(...)`, it builds the public file URL here:
+
+`app/api/upload/presigned-url/route.ts:15-18`
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+`MINIO_PUBLIC_URL` comes from:
+
+`lib/minio.ts:19`
+
+```ts
+process.env.NEXT_PUBLIC_MINIO_ENDPOINT
+```
+
+Local evidence shows `.env` and `.env.local` both have `NEXT_PUBLIC_MINIO_ENDPOINT` present but empty. That makes `new URL("")` throw:
+
+```text
+TypeError: Invalid URL
+code: ERR_INVALID_URL
+input: ""
+```
+
+The local log confirms the same trace ID as the incident:
+
+```text
+trace_id=dd675312fb402fed6a9ff838a3d9a064
+module=api.upload.presigned-url
+err.type=TypeError
+err.message=Invalid URL
+err.code=ERR_INVALID_URL
+err.input=""
+contentType=application/pdf
+folder=documents
+```
+
+The incident message says “Presigned upload URL generation failed,” but the actual failure is more specifically public URL construction after or around presigned URL generation. The catch block wraps both operations, so the log message is slightly misleading.
+
+Secondary observability issue: the source log stores the serialized exception under `err`, while the incident JSON shows `error.name/message/stack` as null. The observability pipeline likely maps `error.*` but not Pino’s `err.*`, causing the useful exception details to be dropped.
+
+Recommended immediate fix: set `NEXT_PUBLIC_MINIO_ENDPOINT` to a valid absolute browser-accessible MinIO/S3 endpoint in the active environment and restart the dev server. No code changes were made.

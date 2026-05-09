@@ -1,0 +1,933 @@
+run_name: feature-task-5-D
+case_name: feature-task-5
+variant: D
+target_branch: feature/task-5
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:39:43Z
+elapsed_seconds: 72
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-5/D/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `importTargets` now unconditionally parses `row.employees` as JSON, but imported CSV employee values are nullable/free-form strings.
+
+Evidence:
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11) added `parseEmployeesValue()`, which does `JSON.parse(normalizeCellValue(value) || "null")` and then immediately reads `parsed.min` / `parsed.max`.
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59) calls this for every parsed row before validating the row.
+- `employees` is optional in the modal mapping and Prisma schema, so blank/unmapped values are valid inputs.
+- For blank or missing employees, `JSON.parse("null")` returns `null`, then `parsed.min` throws.
+- For common CSV values like `11-50`, `100`, or `1,000+`, the parser throws or produces a non-object value.
+- The modal’s AI mapping can map headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`, making free-form employee count columns likely to hit this path.
+
+Why this matches the incident:
+- The changed commit is specifically “Handle legacy employee range imports.”
+- The incident is an “Unhandled request error” from the generic Next.js `onRequestError` instrumentation, with no route/module metadata.
+- A server action exception inside `importTargets(formData)` would surface exactly as a generic request error while the client import flow catches only the returned action failure.
+
+Likely failing request path: importing targets from CSV where `employees` was empty, omitted, or contained a non-JSON legacy/free-form range.
+
+Confidence: high. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0988-3ad4-77c1-ba09-311753dba179
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:b7fc50998917f6d53bb5de0ae8776eb5",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T19:04:06.332Z",
+      "lastSeen": "2026-05-04T19:04:06.332Z",
+      "events": [
+        {
+          "time": "2026-05-04T19:04:06.332Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": null,
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Unhandled request error",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": "b7fc50998917f6d53bb5de0ae8776eb5",
+            "spanId": "af6b25b5543af455",
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-5",
+    "commit": "9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2",
+    "changedFiles": [
+      "actions/crm/targets/import-targets.ts",
+      "components/modals/ImportTargetsModal.tsx"
+    ],
+    "diffStat": "actions/crm/targets/import-targets.ts    | 28 ++++++++++++++++++++++------\n components/modals/ImportTargetsModal.tsx |  9 +++++++++\n 2 files changed, 31 insertions(+), 6 deletions(-)"
+  }
+}
+```
+
+codex
+I’ll inspect the incident-related files and recent commit context only, without editing anything.
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --no-renames 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c Handle legacy employee range imports
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+exec
+/usr/bin/bash -lc 'rg -n "Unhandled request error|importTargets|ImportTargets|target" actions/crm/targets components/modals -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+components/modals/ImportTargetsModal.tsx:6:import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+components/modals/ImportTargetsModal.tsx:62:const ImportTargetsModal = () => {
+components/modals/ImportTargetsModal.tsx:74:  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+components/modals/ImportTargetsModal.tsx:95:    const file = e.target.files?.[0];
+components/modals/ImportTargetsModal.tsx:117:      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+components/modals/ImportTargetsModal.tsx:122:      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+components/modals/ImportTargetsModal.tsx:123:        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+components/modals/ImportTargetsModal.tsx:124:          newMapping[targetField] = csvHeader;
+components/modals/ImportTargetsModal.tsx:170:    // Build mapping as { csvHeader -> targetField } for the API
+components/modals/ImportTargetsModal.tsx:172:    for (const [targetField, csvCol] of Object.entries(mapping)) {
+components/modals/ImportTargetsModal.tsx:174:        apiMapping[csvCol] = targetField;
+components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+components/modals/ImportTargetsModal.tsx:214:            {step === "upload" && "Select a CSV file to import targets."}
+components/modals/ImportTargetsModal.tsx:215:            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+components/modals/ImportTargetsModal.tsx:389:export default ImportTargetsModal;
+actions/crm/targets/import-targets.ts:20:export async function importTargets(
+actions/crm/targets/import-targets.ts:44:      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+actions/crm/targets/import-targets.ts:45:        if (targetField && rawRow[csvCol] !== undefined) {
+actions/crm/targets/import-targets.ts:46:          row[targetField] = rawRow[csvCol];
+actions/crm/targets/suggest-mapping.ts:7:const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+components/modals/CreateTargetListModal.tsx:5:import { createTargetList } from "@/actions/crm/target-lists/create-target-list";
+components/modals/CreateTargetListModal.tsx:57:            Create a new list to group your targets for campaigns or outreach.
+components/modals/CreateTargetListModal.tsx:67:              onChange={(e) => setName(e.target.value)}
+components/modals/CreateTargetListModal.tsx:75:              placeholder="A list of targets for Q1 outreach campaign"
+components/modals/CreateTargetListModal.tsx:77:              onChange={(e) => setDescription(e.target.value)}
+components/modals/AddTargetToListModal.tsx:6:import { getTargets } from "@/actions/crm/get-targets";
+components/modals/AddTargetToListModal.tsx:7:import { addTargetsToList } from "@/actions/crm/target-lists/add-targets-to-list";
+components/modals/AddTargetToListModal.tsx:30:  targetListId: string;
+components/modals/AddTargetToListModal.tsx:37:  targetListId,
+components/modals/AddTargetToListModal.tsx:43:  const [targets, setTargets] = useState<Target[]>([]);
+components/modals/AddTargetToListModal.tsx:57:        toast.error("Failed to load targets");
+components/modals/AddTargetToListModal.tsx:62:  const filtered = targets.filter((t) => {
+components/modals/AddTargetToListModal.tsx:94:    const result = await addTargetsToList(targetListId, selected);
+components/modals/AddTargetToListModal.tsx:100:    toast.success(`Added ${selected.length} target(s) to the list`);
+components/modals/AddTargetToListModal.tsx:113:            Select targets to add to this list. Already-added targets are not shown.
+components/modals/AddTargetToListModal.tsx:120:            onChange={(e) => setSearch(e.target.value)}
+components/modals/AddTargetToListModal.tsx:137:              <p className="text-sm text-muted-foreground p-2">Loading targets...</p>
+components/modals/AddTargetToListModal.tsx:139:              <p className="text-sm text-muted-foreground p-2">No targets available.</p>
+components/modals/AddTargetToListModal.tsx:169:            <p className="text-xs text-muted-foreground">{selected.length} target(s) selected</p>
+actions/crm/targets/convert-target.ts:8:const logger = createLogger({ module: "actions.crm.targets.convert-target" });
+actions/crm/targets/convert-target.ts:10:  targetId: string
+actions/crm/targets/convert-target.ts:15:  const target = await prismadb.crm_Targets.findFirst({ where: { id: targetId, deletedAt: null } });
+actions/crm/targets/convert-target.ts:16:  if (!target) return { error: "Target not found" };
+actions/crm/targets/convert-target.ts:19:  if (!target.company && !target.last_name) {
+actions/crm/targets/convert-target.ts:24:  if (target.converted_at && target.converted_account_id && target.converted_contact_id) {
+actions/crm/targets/convert-target.ts:26:      accountId: target.converted_account_id,
+actions/crm/targets/convert-target.ts:27:      contactId: target.converted_contact_id,
+actions/crm/targets/convert-target.ts:36:          name: (target.company || target.last_name) as string,
+actions/crm/targets/convert-target.ts:37:          email: target.company_email ?? undefined,
+actions/crm/targets/convert-target.ts:38:          office_phone: target.company_phone ?? undefined,
+actions/crm/targets/convert-target.ts:39:          website: target.company_website ?? undefined,
+actions/crm/targets/convert-target.ts:40:          billing_city: target.city ?? undefined,
+actions/crm/targets/convert-target.ts:41:          billing_country: target.country ?? undefined,
+actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+actions/crm/targets/convert-target.ts:43:          description: target.description ?? undefined,
+actions/crm/targets/convert-target.ts:52:          first_name: target.first_name ?? undefined,
+actions/crm/targets/convert-target.ts:53:          last_name: target.last_name ?? target.company ?? "Unknown",
+actions/crm/targets/convert-target.ts:54:          email: target.email ?? undefined,
+actions/crm/targets/convert-target.ts:55:          personal_email: target.personal_email ?? undefined,
+actions/crm/targets/convert-target.ts:56:          mobile_phone: target.mobile_phone ?? undefined,
+actions/crm/targets/convert-target.ts:57:          office_phone: target.office_phone ?? undefined,
+actions/crm/targets/convert-target.ts:58:          position: target.position ?? undefined,
+actions/crm/targets/convert-target.ts:59:          social_linkedin: target.social_linkedin ?? undefined,
+actions/crm/targets/convert-target.ts:60:          social_twitter: target.social_x ?? undefined,
+actions/crm/targets/convert-target.ts:61:          social_instagram: target.social_instagram ?? undefined,
+actions/crm/targets/convert-target.ts:62:          social_facebook: target.social_facebook ?? undefined,
+actions/crm/targets/convert-target.ts:69:        where: { id: targetId },
+actions/crm/targets/convert-target.ts:81:    revalidatePath("/[locale]/(routes)/campaigns/targets", "page");
+actions/crm/targets/convert-target.ts:87:    return { error: "Failed to convert target" };
+actions/crm/targets/create-target.ts:29:    const target = await prismadb.crm_Targets.create({
+actions/crm/targets/create-target.ts:32:    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+actions/crm/targets/create-target.ts:33:    return { data: target };
+actions/crm/targets/create-target.ts:35:    return { error: "Failed to create target" };
+actions/crm/targets/update-target.ts:38:    const target = await prismadb.crm_Targets.update({
+actions/crm/targets/update-target.ts:42:    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+actions/crm/targets/update-target.ts:43:    return { data: target };
+actions/crm/targets/update-target.ts:45:    return { error: "Failed to update target" };
+actions/crm/targets/delete-target.ts:6:export const deleteTarget = async (targetId: string) => {
+actions/crm/targets/delete-target.ts:10:  if (!targetId) return { error: "targetId is required" };
+actions/crm/targets/delete-target.ts:14:      where: { id: targetId },
+actions/crm/targets/delete-target.ts:17:    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+actions/crm/targets/delete-target.ts:20:    return { error: "Failed to delete target" };
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+codex
+The changed commit is the import path for targets. I’m narrowing on the server action and modal payload shape, since the logged error is an unhandled request error with no route/module metadata.
+exec
+/usr/bin/bash -lc "sed -n '150,205p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' actions/crm/targets/import-targets.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+exec
+/usr/bin/bash -lc 'git diff 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2''^ 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2 -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -8,6 +8,15 @@ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+@@ -44,9 +53,10 @@ export async function importTargets(
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+@@ -73,7 +83,7 @@ export async function importTargets(
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+
+exec
+/usr/bin/bash -lc "sed -n '1,90p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+
+exec
+/usr/bin/bash -lc 'git diff 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2''^ 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2 -- components/modals/ImportTargetsModal.tsx' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -293,6 +293,9 @@ const ImportTargetsModal = () => {
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+
+exec
+/usr/bin/bash -lc 'rg -n "employees" prisma actions components lib -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+prisma/schema.prisma:29:  employees            String?
+prisma/schema.prisma:688:model Employees {
+prisma/schema.prisma:1236:  employees        String?
+actions/reports/accounts.ts:45:    select: { employees: true },
+actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+actions/get-empoloyees.ts:3:export const getEmployees = async () => {
+actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+prisma/migrations/0_init/migration.sql:242:CREATE TABLE "Employees" (
+prisma/migrations/0_init/migration.sql:251:    CONSTRAINT "Employees_pkey" PRIMARY KEY ("id")
+lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+actions/crm/targets/suggest-mapping.ts:28:  "employees",
+actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+actions/crm/targets/suggest-mapping.ts:87:    numemployees: "employees",
+actions/crm/targets/suggest-mapping.ts:88:    teamsize: "employees",
+actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+actions/crm/targets/update-target.ts:27:  employees?: string;
+
+exec
+/usr/bin/bash -lc "sed -n '120,170p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '90,150p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+
+ succeeded in 0ms:
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+
+exec
+/usr/bin/bash -lc 'rg -n "Unhandled request error" . -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./instrumentation.ts:44:    "Unhandled request error"
+
+exec
+/usr/bin/bash -lc "sed -n '20,42p' prisma/schema.prisma" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,80p' instrumentation.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1228,1242p' prisma/schema.prisma" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+  assigned_to          String?   @db.Uuid
+  billing_city         String?
+  billing_country      String?
+  billing_postal_code  String?
+  billing_state        String?
+  billing_street       String?
+  company_id           String?
+  description          String?
+  email                String?
+  employees            String?
+  fax                  String?
+  industry             String?   @db.Uuid
+  member_of            String?
+  name                 String
+  office_phone         String?
+  shipping_city        String?
+  shipping_country     String?
+  shipping_postal_code String?
+  shipping_state       String?
+  shipping_street      String?
+  status               String?   @default("Inactive")
+  type                 String?   @default("Customer")
+  vat                  String?
+
+ succeeded in 0ms:
+import { registerOTel } from "@vercel/otel";
+import type { Instrumentation } from "next";
+
+const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+
+export function register() {
+  registerOTel({
+    serviceName,
+  });
+
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    void import("@/lib/logger").then(({ logger }) => {
+      logger.info({ serviceName }, "OpenTelemetry instrumentation registered");
+    });
+  }
+}
+
+export const onRequestError: Instrumentation.onRequestError = async (
+  error,
+  request,
+  context
+) => {
+  if (process.env.NEXT_RUNTIME !== "nodejs") {
+    return;
+  }
+
+  const { logger } = await import("@/lib/logger");
+
+  logger.error(
+    {
+      err: error,
+      request: {
+        method: request.method,
+        path: request.path,
+      },
+      route: {
+        path: context.routePath,
+        routerKind: context.routerKind,
+        routeType: context.routeType,
+        renderSource: context.renderSource,
+        revalidateReason: context.revalidateReason,
+      },
+    },
+    "Unhandled request error"
+  );
+};
+
+ succeeded in 0ms:
+
+  // Extended contact fields
+  personal_email   String?
+  company_email    String?
+  company_phone    String?
+  city             String?
+  country          String?
+  industry         String?
+  employees        String?
+  description      String?
+
+  // Conversion tracking
+  converted_at         DateTime?
+  converted_account_id String?   @db.Uuid
+  converted_contact_id String?   @db.Uuid
+
+codex
+The schema stores `employees` as a nullable string, so the failure is not a database type mismatch. The risky part is the new parser: it assumes every imported employee value is JSON with `min` and `max`, and it runs before row validation.
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '53,63p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '170,185p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '7,18p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+
+ succeeded in 0ms:
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+   171	    const apiMapping: Record<string, string> = {};
+   172	    for (const [targetField, csvCol] of Object.entries(mapping)) {
+   173	      if (csvCol && csvCol !== SKIP_VALUE) {
+   174	        apiMapping[csvCol] = targetField;
+   175	      }
+   176	    }
+   177	
+   178	    const formData = new FormData();
+   179	    formData.append("file", selectedFile);
+   180	    formData.append("mapping", JSON.stringify(apiMapping));
+   181	
+   182	    try {
+   183	      const { imported, skipped, errors } = await importTargets(formData);
+   184	      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+   185	      setOpen(false);
+
+ succeeded in 0ms:
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+
+exec
+/usr/bin/bash -lc "nl -ba instrumentation.ts | sed -n '20,46p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '52,58p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/suggest-mapping.ts | sed -n '82,90p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    20	  request,
+    21	  context
+    22	) => {
+    23	  if (process.env.NEXT_RUNTIME !== "nodejs") {
+    24	    return;
+    25	  }
+    26	
+    27	  const { logger } = await import("@/lib/logger");
+    28	
+    29	  logger.error(
+    30	    {
+    31	      err: error,
+    32	      request: {
+    33	        method: request.method,
+    34	        path: request.path,
+    35	      },
+    36	      route: {
+    37	        path: context.routePath,
+    38	        routerKind: context.routerKind,
+    39	        routeType: context.routeType,
+    40	        renderSource: context.renderSource,
+    41	        revalidateReason: context.revalidateReason,
+    42	      },
+    43	    },
+    44	    "Unhandled request error"
+    45	  );
+    46	};
+
+ succeeded in 0ms:
+    82	    nation: "country",
+    83	    sector: "industry",
+    84	    vertical: "industry",
+    85	    businesstype: "industry",
+    86	    headcount: "employees",
+    87	    numemployees: "employees",
+    88	    teamsize: "employees",
+    89	    companysize: "employees",
+    90	    about: "description",
+
+ succeeded in 0ms:
+    52	  { key: "company_phone",  label: "Company Phone",  required: false },
+    53	  { key: "city",           label: "City",           required: false },
+    54	  { key: "country",        label: "Country",        required: false },
+    55	  { key: "industry",       label: "Industry",       required: false },
+    56	  { key: "employees",      label: "Employees",      required: false },
+    57	  { key: "description",    label: "Description",    required: false },
+    58	];
+
+codex
+**Incident Report**
+
+Most likely root cause: `importTargets` now unconditionally parses `row.employees` as JSON, but imported CSV employee values are nullable/free-form strings.
+
+Evidence:
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11) added `parseEmployeesValue()`, which does `JSON.parse(normalizeCellValue(value) || "null")` and then immediately reads `parsed.min` / `parsed.max`.
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59) calls this for every parsed row before validating the row.
+- `employees` is optional in the modal mapping and Prisma schema, so blank/unmapped values are valid inputs.
+- For blank or missing employees, `JSON.parse("null")` returns `null`, then `parsed.min` throws.
+- For common CSV values like `11-50`, `100`, or `1,000+`, the parser throws or produces a non-object value.
+- The modal’s AI mapping can map headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`, making free-form employee count columns likely to hit this path.
+
+Why this matches the incident:
+- The changed commit is specifically “Handle legacy employee range imports.”
+- The incident is an “Unhandled request error” from the generic Next.js `onRequestError` instrumentation, with no route/module metadata.
+- A server action exception inside `importTargets(formData)` would surface exactly as a generic request error while the client import flow catches only the returned action failure.
+
+Likely failing request path: importing targets from CSV where `employees` was empty, omitted, or contained a non-JSON legacy/free-form range.
+
+Confidence: high. No code changes were made.
+tokens used
+31,257
+**Incident Report**
+
+Most likely root cause: `importTargets` now unconditionally parses `row.employees` as JSON, but imported CSV employee values are nullable/free-form strings.
+
+Evidence:
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11) added `parseEmployeesValue()`, which does `JSON.parse(normalizeCellValue(value) || "null")` and then immediately reads `parsed.min` / `parsed.max`.
+- [actions/crm/targets/import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59) calls this for every parsed row before validating the row.
+- `employees` is optional in the modal mapping and Prisma schema, so blank/unmapped values are valid inputs.
+- For blank or missing employees, `JSON.parse("null")` returns `null`, then `parsed.min` throws.
+- For common CSV values like `11-50`, `100`, or `1,000+`, the parser throws or produces a non-object value.
+- The modal’s AI mapping can map headers like `headcount`, `numemployees`, `teamsize`, and `companysize` to `employees`, making free-form employee count columns likely to hit this path.
+
+Why this matches the incident:
+- The changed commit is specifically “Handle legacy employee range imports.”
+- The incident is an “Unhandled request error” from the generic Next.js `onRequestError` instrumentation, with no route/module metadata.
+- A server action exception inside `importTargets(formData)` would surface exactly as a generic request error while the client import flow catches only the returned action failure.
+
+Likely failing request path: importing targets from CSV where `employees` was empty, omitted, or contained a non-JSON legacy/free-form range.
+
+Confidence: high. No code changes were made.

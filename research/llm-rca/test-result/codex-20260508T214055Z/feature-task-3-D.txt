@@ -1,0 +1,1462 @@
+run_name: feature-task-3-D
+case_name: feature-task-3
+variant: D
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T22:02:00Z
+elapsed_seconds: 64
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/D/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment, and the latest upload route now passes it into `new URL(...)`.
+
+Evidence:
+- `lib/minio.ts` exports `MINIO_PUBLIC_URL` from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`, but only validates `MINIO_ENDPOINT`, credentials, and bucket.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` with no value.
+- The changed route added `buildPublicFileUrl()` at `app/api/upload/presigned-url/route.ts:15`, which does:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- At runtime, `new URL("")` throws `TypeError: Invalid URL`.
+- That call happens inside the `try` block after `getSignedUrl(...)`, so it matches the observed server log: `Presigned upload URL generation failed`.
+
+The triggering commit changed public URL generation from string concatenation:
+
+```ts
+`${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`
+```
+
+to strict URL parsing via `new URL(MINIO_PUBLIC_URL!)`. With an empty env var, the old code produced a malformed-but-non-throwing string, while the new code throws and returns HTTP 500.
+
+The client-side uploader change is unlikely to be causal; it only stores and displays the selected filename.
+
+Confidence: high. The incident environment is `development`, the repo’s development env has an empty `NEXT_PUBLIC_MINIO_ENDPOINT`, and the failing code path was introduced in the reported commit.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e099c-a1c4-70a2-9155-6ed3dc92df41
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:dd675312fb402fed6a9ff838a3d9a064",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:44:22.320Z",
+      "lastSeen": "2026-05-04T18:44:22.320Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:44:22.320Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "api.upload.presigned-url",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Presigned upload URL generation failed",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+            "spanId": "8f0a9636dd20584e",
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-3",
+    "commit": "de800af1ce610b7f0c14d599695020f29d4ef0ae",
+    "changedFiles": [
+      "app/api/upload/presigned-url/route.ts",
+      "components/ui/minio-uploader.tsx"
+    ],
+    "diffStat": "app/api/upload/presigned-url/route.ts | 11 +++++++++--\n components/ui/minio-uploader.tsx      |  5 +++++\n 2 files changed, 14 insertions(+), 2 deletions(-)"
+  }
+}
+```
+
+codex
+I’ll inspect the changed upload endpoint and uploader component plus nearby config usage to identify the likely failure path. Since the request is report-only, I’ll keep the workspace read-only.
+exec
+/usr/bin/bash -lc 'git show --stat --oneline HEAD' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' app/api/upload/presigned-url/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+de800af Tighten upload URL handling
+ app/api/upload/presigned-url/route.ts | 11 +++++++++--
+ components/ui/minio-uploader.tsx      |  5 +++++
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createLogger } from "@/lib/logger";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const logger = createLogger({ module: "api.upload.presigned-url" });
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = buildPublicFileUrl(key);
+
+    logger.info(
+      {
+        contentType,
+        folder,
+        key,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generated"
+    );
+
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        contentType,
+        folder,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generation failed"
+    );
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,260p' components/ui/minio-uploader.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import { useCallback, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { cn } from "@/lib/utils";
+import { UploadCloud, Loader2 } from "lucide-react";
+
+interface MinioUploaderProps {
+  folder: "avatars" | "images" | "documents";
+  accept?: Record<string, string[]>;
+  maxSizeMB?: number;
+  onUploadComplete: (url: string, key: string) => void;
+  onUploadError?: (error: string) => void;
+}
+
+export function MinioUploader({
+  folder,
+  accept,
+  maxSizeMB = 64,
+  onUploadComplete,
+  onUploadError,
+}: MinioUploaderProps) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
+
+      setSelectedFileName(file.name);
+      setUploading(true);
+      setProgress("Requesting upload URL...");
+
+      try {
+        // Step 1: Get presigned URL from our server
+        const res = await fetch("/api/upload/presigned-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            folder,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to get upload URL");
+        const { presignedUrl, fileUrl, key } = await res.json();
+
+        setProgress("Uploading...");
+
+        // Step 2: PUT file directly to MinIO
+        const uploadRes = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type },
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload to storage failed");
+
+        setProgress(null);
+        onUploadComplete(fileUrl, key);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        setProgress(null);
+        onUploadError?.(msg);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [folder, onUploadComplete, onUploadError]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxFiles: 1,
+    maxSize: maxSizeMB * 1024 * 1024,
+    accept,
+    disabled: uploading,
+  });
+
+  return (
+    <div
+      {...getRootProps()}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors",
+        isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
+        uploading && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      <input {...getInputProps()} />
+      {uploading ? (
+        <>
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{progress}</p>
+        </>
+      ) : (
+        <>
+          <UploadCloud className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            {isDragActive ? "Drop file here" : "Drag & drop or click to upload"}
+          </p>
+          {selectedFileName && (
+            <p className="text-xs text-muted-foreground/60">{selectedFileName}</p>
+          )}
+          <p className="text-xs text-muted-foreground/60">Max {maxSizeMB}MB</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+codex
+The changed endpoint catches only `getSignedUrl` and later public URL construction. The incident’s logged error has no name/message/stack, so I’m checking whether the thrown value is a non-`Error` value or an SDK/config object that the logger does not serialize usefully.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' lib/minio.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' lib/logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git diff HEAD''^ HEAD -- app/api/upload/presigned-url/route.ts components/ui/minio-uploader.tsx' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { S3Client } from "@aws-sdk/client-s3";
+
+if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+
+export const minioClient = new S3Client({
+  endpoint: process.env.MINIO_ENDPOINT,
+  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  },
+  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+});
+
+export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+ succeeded in 0ms:
+diff --git a/app/api/upload/presigned-url/route.ts b/app/api/upload/presigned-url/route.ts
+index e32a201..8fd8af4 100644
+--- a/app/api/upload/presigned-url/route.ts
++++ b/app/api/upload/presigned-url/route.ts
+@@ -12,6 +12,12 @@ const logger = createLogger({ module: "api.upload.presigned-url" });
+ const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+ type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+ 
++function buildPublicFileUrl(key: string) {
++  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
++  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
++  return publicBaseUrl.toString();
++}
++
+ export async function POST(req: NextRequest) {
+   const session = await getSession();
+   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+@@ -42,6 +48,7 @@ export async function POST(req: NextRequest) {
+   // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+   const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+   const key = `${folder}/${randomUUID()}.${ext}`;
++  const originalFilename = filename;
+ 
+   const command = new PutObjectCommand({
+     Bucket: MINIO_BUCKET,
+@@ -54,7 +61,7 @@ export async function POST(req: NextRequest) {
+     const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+ 
+     // The public URL where the file will be accessible after upload
+-    const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
++    const fileUrl = buildPublicFileUrl(key);
+ 
+     logger.info(
+       {
+@@ -66,7 +73,7 @@ export async function POST(req: NextRequest) {
+       "Presigned upload URL generated"
+     );
+ 
+-    return NextResponse.json({ presignedUrl, fileUrl, key });
++    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+   } catch (err) {
+     logger.error(
+       {
+diff --git a/components/ui/minio-uploader.tsx b/components/ui/minio-uploader.tsx
+index e710f4b..c3ddc47 100644
+--- a/components/ui/minio-uploader.tsx
++++ b/components/ui/minio-uploader.tsx
+@@ -22,12 +22,14 @@ export function MinioUploader({
+ }: MinioUploaderProps) {
+   const [uploading, setUploading] = useState(false);
+   const [progress, setProgress] = useState<string | null>(null);
++  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+ 
+   const onDrop = useCallback(
+     async (acceptedFiles: File[]) => {
+       const file = acceptedFiles[0];
+       if (!file) return;
+ 
++      setSelectedFileName(file.name);
+       setUploading(true);
+       setProgress("Requesting upload URL...");
+ 
+@@ -99,6 +101,9 @@ export function MinioUploader({
+           <p className="text-sm text-muted-foreground">
+             {isDragActive ? "Drop file here" : "Drag & drop or click to upload"}
+           </p>
++          {selectedFileName && (
++            <p className="text-xs text-muted-foreground/60">{selectedFileName}</p>
++          )}
+           <p className="text-xs text-muted-foreground/60">Max {maxSizeMB}MB</p>
+         </>
+       )}
+
+ succeeded in 0ms:
+import { context, trace } from "@opentelemetry/api";
+import { mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { dirname, resolve } from "node:path";
+import pino from "pino";
+
+const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+
+function getTraceBindings() {
+  const spanContext = trace.getSpan(context.active())?.spanContext();
+
+  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    return {};
+  }
+
+  return {
+    trace_id: spanContext.traceId,
+    span_id: spanContext.spanId,
+    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+  };
+}
+
+function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+  const streams: pino.StreamEntry[] = [];
+  const prettyLogs = process.env.PINO_PRETTY === "true";
+
+  streams.push({
+    level: logLevel as pino.Level,
+    stream: prettyLogs
+      ? pino.transport({
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            ignore: "pid,hostname",
+            translateTime: "SYS:standard",
+          },
+        })
+      : pino.destination({ dest: 1, sync: false }),
+  });
+
+  if (process.env.LOG_FILE_PATH) {
+    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    mkdirSync(dirname(logFilePath), { recursive: true });
+
+    streams.push({
+      level: logLevel as pino.Level,
+      stream: pino.destination({ dest: logFilePath, sync: false }),
+    });
+  }
+
+  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+}
+
+export const logger = pino(
+  {
+    base: {
+      service: serviceName,
+      environment: process.env.NODE_ENV || "development",
+      pid: process.pid,
+      hostname: hostname(),
+    },
+    formatters: {
+      level(label) {
+        return { level: label };
+      },
+    },
+    level: logLevel,
+    messageKey: "message",
+    mixin: getTraceBindings,
+    redact: {
+      censor: "[REDACTED]",
+      paths: [
+        "authorization",
+        "cookie",
+        "password",
+        "secret",
+        "token",
+        "apiKey",
+        "headers.authorization",
+        "headers.cookie",
+        "*.authorization",
+        "*.cookie",
+        "*.password",
+        "*.secret",
+        "*.token",
+        "*.apiKey",
+      ],
+    },
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  },
+  createLogStreams()
+);
+
+export function createLogger(bindings: pino.Bindings) {
+  return logger.child(bindings);
+}
+
+exec
+/usr/bin/bash -lc 'rg -n "MINIO_|minioClient|presigned-url|MinioUploader|buildPublicFileUrl" .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./inngest/functions/documents/generate-thumbnail.ts:4:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./inngest/functions/documents/generate-thumbnail.ts:11:  const response = await minioClient.send(
+./inngest/functions/documents/generate-thumbnail.ts:12:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./inngest/functions/documents/generate-thumbnail.ts:51:    await minioClient.send(
+./inngest/functions/documents/generate-thumbnail.ts:53:        Bucket: MINIO_BUCKET,
+./inngest/functions/documents/generate-thumbnail.ts:60:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+./inngest/functions/documents/enrich-document.ts:9:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./inngest/functions/documents/enrich-document.ts:19:  const response = await minioClient.send(
+./inngest/functions/documents/enrich-document.ts:20:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./components/ui/minio-uploader.tsx:8:interface MinioUploaderProps {
+./components/ui/minio-uploader.tsx:16:export function MinioUploader({
+./components/ui/minio-uploader.tsx:22:}: MinioUploaderProps) {
+./components/ui/minio-uploader.tsx:38:        const res = await fetch("/api/upload/presigned-url", {
+./lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+./lib/minio.ts:4:if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+./lib/minio.ts:5:if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+./lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+./lib/minio.ts:8:export const minioClient = new S3Client({
+./lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+./lib/minio.ts:12:    accessKeyId: process.env.MINIO_ACCESS_KEY,
+./lib/minio.ts:13:    secretAccessKey: process.env.MINIO_SECRET_KEY,
+./lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+./lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+./components/ui/file-uploader-dropzone.tsx:2:import { MinioUploader } from "@/components/ui/minio-uploader";
+./components/ui/file-uploader-dropzone.tsx:36:    <MinioUploader
+./app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:15:function buildPublicFileUrl(key: string) {
+./app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+./app/api/upload/presigned-url/route.ts:17:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+./app/api/upload/presigned-url/route.ts:54:    Bucket: MINIO_BUCKET,
+./app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./app/api/upload/presigned-url/route.ts:64:    const fileUrl = buildPublicFileUrl(key);
+./lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+./lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+./lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:162:        Bucket: MINIO_BUCKET,
+./lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:181:        Bucket: MINIO_BUCKET,
+./lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:76:4. Request presigned URL from existing `/api/upload/presigned-url`
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:222:| POST | `/api/upload/presigned-url` | Accept all supported MIME types in a single upload flow |
+./actions/documents/delete-document.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./actions/documents/delete-document.ts:23:    await minioClient.send(
+./actions/documents/delete-document.ts:25:        Bucket: MINIO_BUCKET,
+./actions/documents/bulk-delete-documents.ts:6:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./actions/documents/bulk-delete-documents.ts:21:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:44:| `app/api/upload/presigned-url/route.ts` | Accept all MIME types in unified flow |
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:767:  const response = await minioClient.send(
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1017:  const response = await minioClient.send(
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1058:    await minioClient.send(
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1657:      const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2473:- Modify: `app/api/upload/presigned-url/route.ts`
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2495:git add app/api/upload/presigned-url/route.ts
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1147:- Modify: `app/api/upload/presigned-url/route.ts`
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+
+codex
+The only behavioral change in the failing server route is URL construction: it changed from string concatenation to `new URL(...)` using `NEXT_PUBLIC_MINIO_ENDPOINT`. I’m checking the log normalization next because the null error fields are likely an artifact of how this logger serializes or how the pipeline extracts the error.
+exec
+/usr/bin/bash -lc "sed -n '1,180p' app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: syntax error near unexpected token `('
+/usr/bin/bash: -c: line 1: `sed -n '1,180p' app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx'
+
+exec
+/usr/bin/bash -lc "sed -n '1,100p' components/ui/file-uploader-dropzone.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { toast } from "sonner";
+import { MinioUploader } from "@/components/ui/minio-uploader";
+
+type UploaderEndpoint =
+  | "pdfUploader"
+  | "imageUploader"
+  | "docUploader"
+  | "profilePhotoUploader";
+
+interface Props {
+  uploader: UploaderEndpoint;
+  onUploadSuccess?: (url: string, key: string) => void;
+}
+
+const UPLOADER_CONFIG: Record<
+  UploaderEndpoint,
+  { folder: "avatars" | "images" | "documents"; accept: Record<string, string[]>; maxSizeMB: number }
+> = {
+  profilePhotoUploader: { folder: "avatars", accept: { "image/*": [] }, maxSizeMB: 4 },
+  imageUploader: { folder: "images", accept: { "image/*": [] }, maxSizeMB: 4 },
+  pdfUploader: { folder: "documents", accept: { "application/pdf": [".pdf"] }, maxSizeMB: 64 },
+  docUploader: {
+    folder: "documents",
+    accept: {
+      "application/msword": [".doc"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+      "text/plain": [".txt"],
+    },
+    maxSizeMB: 64,
+  },
+};
+
+export const FileUploaderDropzone = ({ uploader, onUploadSuccess }: Props) => {
+  const config = UPLOADER_CONFIG[uploader];
+  return (
+    <MinioUploader
+      folder={config.folder}
+      accept={config.accept}
+      maxSizeMB={config.maxSizeMB}
+      onUploadComplete={(url, key) => onUploadSuccess?.(url, key)}
+      onUploadError={(err) => toast.error(`Upload error: ${err}`)}
+    />
+  );
+};
+
+exec
+/usr/bin/bash -lc "find . -maxdepth 3 -type f \\( -name '.env*' -o -name 'docker-compose*' -o -name '*.env' \\) -print" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./.env.example
+./.env.local.example
+./docker-compose.yml
+./.env
+./.env.local
+
+exec
+/usr/bin/bash -lc "rg -n \"stdSerializers|error\\.name|error\\.message|stack|err\\b|trace_id|Presigned upload URL generation failed|observability|logger\\.error\" lib app components instrumentation* next.config.* package.json" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+package.json:62:    "@tanstack/react-table": "^8.21.3",
+instrumentation.ts:29:  logger.error(
+instrumentation.ts:31:      err: error,
+app/client-logger.ts:26:      stack: value.stack ? truncate(value.stack) : undefined,
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:13:          err: event.error ?? {
+app/client-error-listener.tsx:25:      logger.error(
+app/client-error-listener.tsx:27:          err: event.reason,
+lib/sendmail.ts:36:    logger.error(
+lib/sendmail.ts:38:        err: error,
+lib/logger.ts:18:    trace_id: spanContext.traceId,
+lib/logger.ts:91:      err: pino.stdSerializers.err,
+lib/logger.ts:92:      error: pino.stdSerializers.err,
+app/api/client-logs/route.ts:61:      logger.error(payload, message);
+lib/audit-log.ts:80:  } catch (err) {
+lib/audit-log.ts:81:    logger.error(
+lib/audit-log.ts:83:        err,
+components/ui/minio-uploader.tsx:64:      } catch (err) {
+components/ui/minio-uploader.tsx:65:        const msg = err instanceof Error ? err.message : "Upload failed";
+app/api/upload/presigned-url/route.ts:77:  } catch (err) {
+app/api/upload/presigned-url/route.ts:78:    logger.error(
+app/api/upload/presigned-url/route.ts:80:        err,
+app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+app/api/og/route.tsx:31:      : "NextCRM is an open source CRM build on top of NextJS. Technology stack: NextJS with Typescrtipt, MongoDB, TailwindCSS, React, Prisma, shadCN, resend.com, react.email and more. ";
+app/api/mcp/[transport]/route.ts:15:        } catch (err: any) {
+app/api/mcp/[transport]/route.ts:16:          const msg: string = err.message ?? "Unknown error";
+app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+components/ui/file-uploader-dropzone.tsx:41:      onUploadError={(err) => toast.error(`Upload error: ${err}`)}
+app/api/crm/targets/enrich/route.ts:116:      } catch (err) {
+app/api/crm/targets/enrich/route.ts:117:        const message = err instanceof Error ? err.message : "Unknown error";
+components/ui/data-table.tsx:16:} from "@tanstack/react-table";
+app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+app/api/crm/contacts/enrich/route.ts:101:      } catch (err) {
+app/api/crm/contacts/enrich/route.ts:102:        const message = err instanceof Error ? err.message : "Unknown error";
+lib/enrichment/strategies/agent-enrichment-strategy.ts:92:        error: error instanceof Error ? error.message : 'Unknown error',
+app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+lib/enrichment/services/specialized-agents.ts:155:    2. Technology stacks and platforms
+lib/enrichment/services/specialized-agents.ts:160:    - Look for product pages, technical blogs, job postings (for tech stack)
+lib/enrichment/services/openai.ts:700:            // Additional validation for tech stack fields
+lib/enrichment/services/openai.ts:701:            if (field.name.toLowerCase().includes('tech') || field.name.toLowerCase().includes('stack')) {
+lib/enrichment/services/openai.ts:718:              // Validate tech stack values
+lib/enrichment/e2b/agent-script.ts:67:    return e.stdout || e.stderr || 'error: ' + e.message;
+lib/enrichment/e2b/agent-script.ts:165:      process.stderr.write('No JSON in agent response\\n');
+lib/enrichment/e2b/agent-script.ts:184:  process.stderr.write('Max iterations reached\\n');
+lib/enrichment/e2b/agent-script.ts:188:main().catch(e => { process.stderr.write(e.message + '\\n'); process.exit(1); });
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:88:          onProgress(`Failed to scrape ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'warning');
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:92:          error: error instanceof Error ? error.message : 'Unknown error',
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:90:          console.error(`Search failed for query: ${query}`, error instanceof Error ? error.message : String(error));
+lib/enrichment/agent-architecture/core/agent-base.ts:134:        console.error('Failed to parse agent output:', error instanceof Error ? error.message : String(error));
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:33:  name = 'tech-stack-agent';
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:34:  description = 'Discovers technology stack, programming languages, and frameworks used by the company';
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:58:      console.log('[AGENT-TECH-STACK] No company name or domain available, skipping tech stack phase');
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:75:      // Also search for tech stack information on their website
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:89:          console.log(`[AGENT-TECH-STACK] Website scrape failed: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:93:      // Search for tech stack mentions
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:94:      const techSearchQuery = `"${companyName || companyDomain}" "tech stack" "built with" "powered by" "technologies" "programming languages" framework`;
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:95:      console.log(`[AGENT-TECH-STACK] Tech stack search query: ${techSearchQuery}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:98:      console.log(`[AGENT-TECH-STACK] Found ${techResults.length} tech stack results`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:114:          instruction: 'Focus on extracting technology stack, programming languages, frameworks, and tools used by the company. Look for GitHub repositories, technology mentions, and development tools.'
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:144:      console.log(`[AGENT-TECH-STACK] Extracted ${Object.keys(results).length} tech stack fields`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:147:      console.error('[AGENT-TECH-STACK] Error during tech stack discovery:', error);
+lib/enrichment/agent-architecture/orchestrator.ts:111:      if (fieldCategories.techStack.length > 0) agentsToUse.push('tech-stack-agent');
+lib/enrichment/agent-architecture/orchestrator.ts:339:        error: error instanceof Error ? error.message : 'Unknown error',
+lib/enrichment/agent-architecture/orchestrator.ts:418:      } else if (name.includes('tech') && name.includes('stack') || 
+lib/enrichment/agent-architecture/orchestrator.ts:423:                 desc.includes('tech stack') ||
+lib/enrichment/agent-architecture/orchestrator.ts:530:        const errorMessage = error instanceof Error ? error.message : String(error);
+lib/enrichment/agent-architecture/orchestrator.ts:1196:      console.log('[AGENT-TECH-STACK] No company name or domain available, skipping tech stack phase');
+lib/enrichment/agent-architecture/orchestrator.ts:1239:    // Analyze HTML from company website for tech stack detection
+lib/enrichment/agent-architecture/orchestrator.ts:1260:    // Search for tech stack mentions
+lib/enrichment/agent-architecture/orchestrator.ts:1261:    const techSearchQuery = `"${companyName || companyDomain}" "tech stack" "built with" "powered by" technologies framework`;
+lib/enrichment/agent-architecture/orchestrator.ts:1262:    console.log(`[AGENT-TECH-STACK] Tech stack search query: ${techSearchQuery}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1265:      onAgentProgress(`Searching for technology stack information...`, 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:1272:    console.log(`[AGENT-TECH-STACK] Found ${techResults.length} tech stack results`);
+lib/enrichment/agent-architecture/orchestrator.ts:1275:      onAgentProgress(`Found ${techResults.length} sources with tech stack data`, techResults.length > 0 ? 'success' : 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:1282:    let combinedContent = this.trimSearchResultsContent(allSearchResults, 200000); // Smaller limit for tech stack
+lib/enrichment/agent-architecture/orchestrator.ts:1298:      console.log('[AGENT-TECH-STACK] No valid tech stack information found, returning empty results');
+lib/enrichment/agent-architecture/orchestrator.ts:1314:      For tech stack fields:
+lib/enrichment/agent-architecture/orchestrator.ts:1318:      - If no tech stack information is found, return null
+lib/enrichment/agent-architecture/orchestrator.ts:1380:        // Additional validation for tech stack values
+lib/enrichment/agent-architecture/agents/general-agent.ts:84:          console.log(`[AGENT-GENERAL] Search failed for query "${query}": ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:113:              console.log(`[AGENT-GENERAL] Failed to scrape ${url}: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:117:          console.log(`[AGENT-GENERAL] Failed to scrape contact pages: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:144:              console.log(`[AGENT-GENERAL] Failed to scrape ${url}: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:148:          console.log(`[AGENT-GENERAL] Failed to scrape company website: ${error instanceof Error ? error.message : String(error)}`);
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:69:    } catch (err) {
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:70:      setError(err instanceof Error ? err.message : "Send failed");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:59:        toast.error(error.message || "Failed to send verification code.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:83:        toast.error(error.message || "Invalid or expired code.");
+app/[locale]/(routes)/admin/users/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:3:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/modal-dropzone.tsx:44:    } catch (err) {
+app/[locale]/(routes)/admin/users/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/documents/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table.tsx:32:import { Table as TanstackTable } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table.tsx:87:      <BatchActionsBar table={table as unknown as TanstackTable<DocumentRow>} accounts={accounts ?? []} />
+app/[locale]/(routes)/admin/users/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:5:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:119:    } catch (err) {
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:122:        error: err instanceof Error ? err.message : "Upload failed",
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:63:    } catch (err) {
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:64:      setError(err instanceof Error ? err.message : "AI generation failed");
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:100:    } catch (err) {
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:101:      setError(err instanceof Error ? err.message : "Failed to save template");
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx:29:    } catch (err: any) {
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx:30:      toast.error(err.message ?? "Failed to update");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:32:    } catch (err: any) {
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:33:      toast.error(err.message ?? "Failed to delete");
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:21:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx:29:    } catch (err: any) {
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx:30:      toast.error(err.message ?? "Failed to add");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:21:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx:36:        const err = await res.json();
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx:37:        toast.error(err.error ?? "Failed to retry");
+app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:40:        const err = await res.json();
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:41:        if (res.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:44:          toast.error(err.error ?? "Failed to start bulk enrichment");
+app/[locale]/(routes)/crm/products/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:61:    } catch (err) {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:62:      toast.error(err instanceof Error ? err.message : "Failed to add contact");
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:124:    } catch (err: unknown) {
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:125:      const message = err instanceof Error ? err.message : "Import failed";
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:233:                    {result.errors.map((err, i) => (
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:235:                        {err}
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:106:      const err = await response.json();
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:107:      if (response.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:112:      toast.error(err.error ?? "Failed to start enrichment");
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:177:      const err = await res.json();
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:178:      toast.error(err.error ?? "Failed to apply enrichment");
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:360:      } catch (err) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:382:    } catch (err) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:399:    } catch (err) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:425:      } catch (err) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:426:        alert(err);
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+app/[locale]/(routes)/projects/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:65:      } catch (err) {
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/[locale]/(routes)/crm/contacts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:4:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:38:        const err = await res.json();
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:39:        if (res.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:42:          toast.error(err.error ?? "Failed to start bulk enrichment");
+app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx:27:        const err = await res.json();
+app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx:28:        toast.error(err.error ?? "Failed to retry");
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:4:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:87:      const err = await response.json();
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:88:      if (response.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:93:      toast.error(err.error ?? "Failed to start enrichment");
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:159:      const err = await res.json();
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:160:      toast.error(err.error ?? "Failed to apply enrichment");
+app/[locale]/(routes)/crm/leads/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:6:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' 'app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useDropzone } from "react-dropzone";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { createDocument } from "@/actions/documents/create-document";
+import { checkDuplicate } from "@/actions/documents/check-duplicate";
+import { Plus } from "lucide-react";
+
+const ACCEPTED_TYPES: Record<string, string[]> = {
+  "application/pdf": [".pdf"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/png": [".png"],
+  "image/gif": [".gif"],
+  "image/webp": [".webp"],
+  "application/msword": [".doc"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+  "text/plain": [".txt"],
+};
+
+type FileStatus = "queued" | "checking" | "uploading" | "uploaded" | "duplicate" | "skipped" | "error";
+
+interface QueuedFile {
+  file: File;
+  status: FileStatus;
+  progress: number;
+  hash?: string;
+  duplicateInfo?: { name: string; createdAt: Date | null };
+  error?: string;
+}
+
+async function computeHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+interface BulkUploadModalProps {
+  accountId?: string;
+}
+
+export function BulkUploadModal({ accountId }: BulkUploadModalProps) {
+  const [open, setOpen] = useState(false);
+  const [queue, setQueue] = useState<QueuedFile[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const router = useRouter();
+
+  const updateFile = (index: number, updates: Partial<QueuedFile>) => {
+    setQueue((prev) => prev.map((f, i) => (i === index ? { ...f, ...updates } : f)));
+  };
+
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const newFiles: QueuedFile[] = acceptedFiles.map((file) => ({
+      file,
+      status: "queued",
+      progress: 0,
+    }));
+    setQueue((prev) => [...prev, ...newFiles]);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: ACCEPTED_TYPES,
+    maxSize: 64 * 1024 * 1024,
+    multiple: true,
+  });
+
+  const uploadFile = async (index: number) => {
+    const item = queue[index];
+    updateFile(index, { status: "uploading", progress: 10 });
+
+    try {
+      const folder = item.file.type.startsWith("image/") ? "images" : "documents";
+      const res = await fetch("/api/upload/presigned-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: item.file.name,
+          contentType: item.file.type,
+          folder,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to get presigned URL");
+      const { presignedUrl, fileUrl, key } = await res.json();
+
+      updateFile(index, { progress: 30 });
+
+      const uploadRes = await fetch(presignedUrl, {
+        method: "PUT",
+        body: item.file,
+        headers: { "Content-Type": item.file.type },
+      });
+      if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+
+      updateFile(index, { progress: 70 });
+
+      await createDocument({
+        name: item.file.name,
+        url: fileUrl,
+        key,
+        size: item.file.size,
+        mimeType: item.file.type,
+        contentHash: item.hash,
+        accountId,
+      });
+
+      updateFile(index, { status: "uploaded", progress: 100 });
+    } catch (err) {
+      updateFile(index, {
+        status: "error",
+        error: err instanceof Error ? err.message : "Upload failed",
+      });
+    }
+  };
+
+  const processQueue = async () => {
+    setIsProcessing(true);
+
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      if (item.status !== "queued") continue;
+
+      updateFile(i, { status: "checking" });
+      try {
+        const hash = await computeHash(item.file);
+        updateFile(i, { hash });
+
+        const result = await checkDuplicate(hash);
+        if (result.isDuplicate) {
+          updateFile(i, {
+            status: "duplicate",
+            duplicateInfo: {
+              name: result.existingDocument!.name,
+              createdAt: result.existingDocument!.createdAt,
+            },
+          });
+          continue;
+        }
+      } catch {
+        // If duplicate check fails, proceed with upload
+      }
+
+      await uploadFile(i);
+    }
+
+    setIsProcessing(false);
+    router.refresh();
+  };
+
+  const uploadAnyway = async (index: number) => {
+    await uploadFile(index);
+    router.refresh();
+  };
+
+  const skipFile = (index: number) => {
+    updateFile(index, { status: "skipped" });
+  };
+
+  const uploadedCount = queue.filter((f) => f.status === "uploaded").length;
+  const hasQueued = queue.some((f) => f.status === "queued");
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Upload Documents
+        </Button>
+      </DialogTrigger>
+
+exec
+/usr/bin/bash -lc 'git show HEAD''^:app/api/upload/presigned-url/route.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createLogger } from "@/lib/logger";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const logger = createLogger({ module: "api.upload.presigned-url" });
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+
+    logger.info(
+      {
+        contentType,
+        folder,
+        key,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generated"
+    );
+
+    return NextResponse.json({ presignedUrl, fileUrl, key });
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        contentType,
+        folder,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generation failed"
+    );
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+exec
+/usr/bin/bash -lc 'rg -n "''^MINIO_|''^NEXT_PUBLIC_MINIO_ENDPOINT" .env.example .env.local.example docker-compose.yml' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'rg -n "''^MINIO_|''^NEXT_PUBLIC_MINIO_ENDPOINT" .env .env.local' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local.example:78:MINIO_ENDPOINT=
+.env.local.example:79:MINIO_PORT=
+.env.local.example:80:MINIO_BUCKET=
+.env.local.example:81:MINIO_USE_SSL="true"
+.env.local.example:82:MINIO_ACCESS_KEY=
+.env.local.example:83:MINIO_SECRET_KEY=
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env.example:33:MINIO_ENDPOINT="https://your-minio-host"
+.env.example:34:MINIO_PORT="9000"
+.env.example:35:MINIO_BUCKET="your-bucket-name"
+.env.example:36:MINIO_USE_SSL="true"
+.env.example:37:MINIO_ACCESS_KEY="your-access-key"
+.env.example:38:MINIO_SECRET_KEY="your-secret-key"
+
+ succeeded in 0ms:
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env:33:MINIO_ENDPOINT="https://your-minio-host"
+.env:34:MINIO_PORT="9000"
+.env:35:MINIO_BUCKET="your-bucket-name"
+.env:36:MINIO_USE_SSL="true"
+.env:37:MINIO_ACCESS_KEY="your-access-key"
+.env:38:MINIO_SECRET_KEY="your-secret-key"
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:78:MINIO_ENDPOINT="https://your-minio-host"
+.env.local:79:MINIO_PORT="9000"
+.env.local:80:MINIO_BUCKET="your-bucket-name"
+.env.local:81:MINIO_USE_SSL="true"
+.env.local:82:MINIO_ACCESS_KEY="your-access-key"
+.env.local:83:MINIO_SECRET_KEY="your-secret-key"
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '1,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '1,60p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import path from "path";
+     2	import { NextRequest, NextResponse } from "next/server";
+     3	import { getSession } from "@/lib/auth-server";
+     4	import { PutObjectCommand } from "@aws-sdk/client-s3";
+     5	import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+     6	import { createLogger } from "@/lib/logger";
+     7	import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+     8	import { randomUUID } from "crypto";
+     9	
+    10	const logger = createLogger({ module: "api.upload.presigned-url" });
+    11	
+    12	const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+    13	type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+    14	
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+    19	}
+    20	
+    21	export async function POST(req: NextRequest) {
+    22	  const session = await getSession();
+    23	  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    24	
+    25	  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+    26	
+    27	  // Sanitize: strip any path components to prevent path traversal
+    28	  const filename = path.basename(rawFilename ?? "");
+    29	  // Whitelist folder to only allow known upload destinations
+    30	  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    31	    ? (rawFolder as AllowedFolder)
+    32	    : "uploads";
+    33	
+    34	  if (!filename || !contentType) {
+    35	    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+    36	  }
+    37	
+    38	  const ALLOWED_CONTENT_TYPES = new Set([
+    39	    "image/jpeg", "image/png", "image/gif", "image/webp",
+    40	    "application/pdf", "application/msword",
+    41	    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    42	    "text/plain",
+    43	  ]);
+    44	  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    45	    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+    46	  }
+    47	
+    48	  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+    49	  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+    50	  const key = `${folder}/${randomUUID()}.${ext}`;
+    51	  const originalFilename = filename;
+    52	
+    53	  const command = new PutObjectCommand({
+    54	    Bucket: MINIO_BUCKET,
+    55	    Key: key,
+    56	    ContentType: contentType,
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+    89	}
+
+ succeeded in 0ms:
+     1	import { S3Client } from "@aws-sdk/client-s3";
+     2	
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc "nl -ba .env.local | sed -n '72,86p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    72	INNGEST_BASE_URL=
+    73	INNGEST_EVENT_KEY=
+    74	INNGEST_SIGNING_KEY=
+    75	
+    76	#MINIO
+    77	NEXT_PUBLIC_MINIO_ENDPOINT=
+    78	MINIO_ENDPOINT="https://your-minio-host"
+    79	MINIO_PORT="9000"
+    80	MINIO_BUCKET="your-bucket-name"
+    81	MINIO_USE_SSL="true"
+    82	MINIO_ACCESS_KEY="your-access-key"
+    83	MINIO_SECRET_KEY="your-secret-key"
+    84	
+    85	
+    86	#Playwright E2E Test Credentials
+
+exec
+/usr/bin/bash -lc "node -e \"try { new URL('') } catch (e) { console.log(e.name + ': ' + e.message) }\"" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+TypeError: Invalid URL
+
+codex
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment, and the latest upload route now passes it into `new URL(...)`.
+
+Evidence:
+- `lib/minio.ts` exports `MINIO_PUBLIC_URL` from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`, but only validates `MINIO_ENDPOINT`, credentials, and bucket.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` with no value.
+- The changed route added `buildPublicFileUrl()` at `app/api/upload/presigned-url/route.ts:15`, which does:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- At runtime, `new URL("")` throws `TypeError: Invalid URL`.
+- That call happens inside the `try` block after `getSignedUrl(...)`, so it matches the observed server log: `Presigned upload URL generation failed`.
+
+The triggering commit changed public URL generation from string concatenation:
+
+```ts
+`${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`
+```
+
+to strict URL parsing via `new URL(MINIO_PUBLIC_URL!)`. With an empty env var, the old code produced a malformed-but-non-throwing string, while the new code throws and returns HTTP 500.
+
+The client-side uploader change is unlikely to be causal; it only stores and displays the selected filename.
+
+Confidence: high. The incident environment is `development`, the repo’s development env has an empty `NEXT_PUBLIC_MINIO_ENDPOINT`, and the failing code path was introduced in the reported commit.
+tokens used
+27,326
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment, and the latest upload route now passes it into `new URL(...)`.
+
+Evidence:
+- `lib/minio.ts` exports `MINIO_PUBLIC_URL` from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`, but only validates `MINIO_ENDPOINT`, credentials, and bucket.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` with no value.
+- The changed route added `buildPublicFileUrl()` at `app/api/upload/presigned-url/route.ts:15`, which does:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- At runtime, `new URL("")` throws `TypeError: Invalid URL`.
+- That call happens inside the `try` block after `getSignedUrl(...)`, so it matches the observed server log: `Presigned upload URL generation failed`.
+
+The triggering commit changed public URL generation from string concatenation:
+
+```ts
+`${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`
+```
+
+to strict URL parsing via `new URL(MINIO_PUBLIC_URL!)`. With an empty env var, the old code produced a malformed-but-non-throwing string, while the new code throws and returns HTTP 500.
+
+The client-side uploader change is unlikely to be causal; it only stores and displays the selected filename.
+
+Confidence: high. The incident environment is `development`, the repo’s development env has an empty `NEXT_PUBLIC_MINIO_ENDPOINT`, and the failing code path was introduced in the reported commit.

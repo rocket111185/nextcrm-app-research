@@ -1,0 +1,2734 @@
+run_name: feature-task-5-A
+case_name: feature-task-5
+variant: A
+target_branch: feature/task-5
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T20:56:24Z
+elapsed_seconds: 98
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-5/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `actions/crm/targets/import-targets.ts` introduced an unsafe employee-range parser that assumes every imported `employees` value is JSON shaped as `{ "min": number, "max": number }`.
+
+The crash occurs here: [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11)
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The server action calls this unconditionally for each CSV row at [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59), before row validation completes.
+
+**Why this matches the incident**
+
+The observed error was:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That exact error happens when `JSON.parse(row.employees)` succeeds, but the parsed value does not contain `min` or `max`. Examples:
+
+```text
+"50"        -> parsed as number 50, parsed.min is undefined
+"{}"        -> parsed.min is undefined
+{"min":50}  -> parsed.max is undefined
+```
+
+A missing employees value would instead produce `Cannot read properties of null (reading 'min')`, and a normal range like `50-200` would produce a JSON syntax error. So the triggering CSV likely had an Employees column mapped with a value such as `50`, `{}`, or a partial structured range.
+
+**Supporting evidence**
+
+`employees` is stored as a plain optional string in Prisma: [schema.prisma](/home/dmytro/Github/phd-work/nextcrm-app-update/prisma/schema.prisma:1236)
+
+The target update form also treats it as a plain string and even uses `50-200` as the placeholder: [UpdateTargetForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)
+
+The CSV import preview only validates `last_name` or `company`; it does not validate or normalize `employees`, so the UI can allow the import and then fail in the server action: [ImportTargetsModal.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/components/modals/ImportTargetsModal.tsx:140)
+
+Git history shows the failing parser was added in commit `9790f4c` titled `Handle legacy employee range imports` on May 1, 2026. The incident occurred on May 4, 2026. Before that commit, import stored `employees: row.employees || null`.
+
+**Conclusion**
+
+This is not a Next.js/App Router failure, database failure, or authentication issue. The import action regressed when legacy structured employee-range support was added without guarding non-legacy values. A CSV import with a mapped Employees column containing a JSON-valid but non-`{min,max}` value caused the action to throw and abort the request.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0960-918d-7cf2-af98-c59805795459
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T19:04:06.332Z",
+      "timestampNs": "1777921446332505650",
+      "labels": {
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "err_digest": "1383626540",
+        "err_message": "Cannot read properties of undefined (reading 'toString')",
+        "err_stack": "TypeError: Cannot read properties of undefined (reading 'toString')\n    at parseEmployeesValue (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:383:26)\n    at /home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:416:27\n    at Array.forEach (<anonymous>)\n    at importTargets (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:399:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async executeActionAndPrepareForRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:5248)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:1986\n    at async handleAction (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:62:25378)\n    at async renderToHTMLOrFlightImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:69:55630)\n    at async doRender (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4079:28)\n    at async AppPageRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:71:63567)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4372:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4772:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)",
+        "err_type": "TypeError",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "pid": "94945",
+        "request_method": "POST",
+        "request_path": "/en/campaigns/targets",
+        "route_path": "/[locale]/campaigns/targets",
+        "route_renderSource": "react-server-components-payload",
+        "route_routeType": "action",
+        "route_routerKind": "App Router",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "af6b25b5543af455",
+        "time": "2026-05-04T19:04:06.330Z",
+        "trace_flags": "01",
+        "trace_id": "b7fc50998917f6d53bb5de0ae8776eb5"
+      },
+      "line": "Unhandled request error",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the server action named in the stack and its surrounding data flow only; I won’t modify files.
+exec
+/usr/bin/bash -lc "ls .claude/skills/systematic-debugging 2>/dev/null && sed -n '1,220p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+exec
+/usr/bin/bash -lc 'rg -n "parseEmployeesValue|importTargets|employees" .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./locales/en.json:450:    "description": "Manage your employees",
+./scripts/migration/transformers/index.ts:31:export { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:61:import { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/crm-accounts-transformer.ts:28:    employees: nullableString(mongoRecord.employees),
+./scripts/migration/batch-processor.ts:148:      'Employees': 'employees',
+./inngest/functions/enrich-target.ts:22:  employees:        "employees",
+./inngest/functions/enrich-target.ts:74:          industry: true, employees: true, city: true,
+./prisma/schema.prisma:29:  employees            String?
+./prisma/schema.prisma:1236:  employees        String?
+./lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+./lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+./lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+./lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+./lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+./lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+./lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+./lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+./lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+./lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+./lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+./lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md:21:| 2 | should create a new target with all fields | Open new target sheet, fill all field groups: first_name, last_name, email, email_2, mobile_phone, office_phone, home_phone, company, position, company_website, company_website_2, social_x, social_linkedin, social_instagram, social_facebook, city, country, industry, employees, description, status. Submit form, verify success toast |
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:11:`targetFieldMap` in `inngest/functions/enrich-target.ts` has 10 fields. The API PATCH route (`app/api/crm/targets/[id]/route.ts`) has 20 fields after adding company-search fields. The 8 new fields — `personal_email`, `company_email`, `company_phone`, `industry`, `employees`, `description`, `city`, `country` — are silently dropped in bulk Inngest enrichment jobs.
+./prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+./__tests__/reports/accounts.test.ts:60:        { employees: "5" },
+./__tests__/reports/accounts.test.ts:61:        { employees: "50" },
+./__tests__/reports/accounts.test.ts:62:        { employees: "500" },
+./__tests__/reports/accounts.test.ts:63:        { employees: null },
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md:18:- Campaign management (bulk assign to projects/employees)
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1107:        { employees: "5" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1108:        { employees: "50" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1109:        { employees: "500" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1110:        { employees: null },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1211:    select: { employees: true },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1227:    const emp = parseInt(a.employees ?? "", 10);
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:72:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:115:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:181:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:229:        employees: true,
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:368:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:479:    "employees": "string or null",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:600:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:643:          industry: true, employees: true, city: true,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:65:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:97:('personal_email','company_email','company_phone','city','country','industry','employees','description','converted_at','converted_account_id','converted_contact_id');
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:362:employees?: string;
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:378:employees: row.employees || null,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:393:  "city", "country", "industry", "employees", "description",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:425:// employees
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:427:numemployees: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:428:teamsize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:479:employees:      z.string().optional(),
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:530:  <FormField control={form.control} name="employees" render={({ field }) => (
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:628:          employees: target.employees ?? undefined,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:765:- 11 new fields on crm_Targets: personal_email, company_email, company_phone, city, country, industry, employees, description + conversion tracking fields
+./actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+./actions/reports/accounts.ts:45:    select: { employees: true },
+./actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+./components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+./components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+./components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+./actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+./actions/crm/targets/import-targets.ts:20:export async function importTargets(
+./actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+./actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+./actions/crm/targets/suggest-mapping.ts:28:  "employees",
+./actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+./actions/crm/targets/suggest-mapping.ts:87:    numemployees: "employees",
+./actions/crm/targets/suggest-mapping.ts:88:    teamsize: "employees",
+./actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+./actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+./actions/crm/targets/update-target.ts:27:  employees?: string;
+./app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+./app/[locale]/(routes)/page.tsx:115:          href="/employees"
+./app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+
+exec
+/usr/bin/bash -lc "rg --files | rg 'campaigns|targets|import|csv|schema|prisma|drizzle|supabase|actions'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+tests/fixtures/products-import.csv
+tests/e2e/product-import.spec.ts
+tests/e2e/campaign-targets.spec.ts
+scripts/validation/table-schema.ts
+scripts/migration/transformers/crm-campaigns-transformer.ts
+prisma/seeds/seed.ts
+prisma/seeds/currencies.ts
+prisma/schema.prisma.orig
+prisma/schema.prisma
+prisma/migrations/migration_lock.toml
+prisma/migrations/20260406190000_soft_delete_documents_target_lists/migration.sql
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql
+prisma/migrations/20260406120000_cleanup_dead_models_and_bigint/migration.sql
+prisma/migrations/20260405150000_add_line_items/migration.sql
+prisma/migrations/20260405070547_add_products_module/migration.sql
+prisma/migrations/20260404150000_add_currency_support/migration.sql
+prisma/migrations/20260404120000_add_currency_support/migration.sql
+prisma/migrations/20260404000000_fix_better_auth_id_defaults/migration.sql
+prisma/migrations/20260403000000_documents_enrichment/migration.sql
+prisma/migrations/20260401000001_add_better_auth_user_fields/migration.sql
+prisma/migrations/20260401000000_add_better_auth_tables_and_role/migration.sql
+prisma/migrations/20260325000001_drop_system_modules_enabled/migration.sql
+prisma/migrations/0_init/migration.sql
+prisma/migrations/20260331000001_add_report_config_and_schedule/migration.sql
+prisma/migrations/20260325000000_campaigns_module/migration.sql
+prisma/migrations/20260331000000_resolve_drift/migration.sql
+lib/prisma.ts
+prisma/migrations/20260323000001_add_api_keys/migration.sql
+prisma/initial-data/crm_Opportunities_Type.json
+prisma/initial-data/crm_Opportunities_Sales_Stages.json
+prisma/initial-data/crm_Lead_Types.json
+prisma/initial-data/crm_Lead_Statuses.json
+prisma/initial-data/crm_Lead_Sources.json
+prisma/initial-data/crm_Industry_Type.json
+prisma/initial-data/crm_Contact_Types.json
+prisma.config.ts
+prisma/migrations/20260328000002_add_crm_audit_log/migration.sql
+prisma/migrations/20260323000000_add_contact_enrichment/migration.sql
+prisma/migrations/20260328000001_add_soft_delete_columns/migration.sql
+prisma/migrations/20260320000001_add_api_tokens/migration.sql
+__tests__/reports/export-csv.test.ts
+__tests__/reports/campaigns.test.ts
+prisma/migrations/20260328000000_add_crm_activities/migration.sql
+prisma/migrations/20260320000000_add_pgvector_embeddings/migration.sql
+prisma/migrations/20260327000001_crm_settings_db_backed/migration.sql
+prisma/migrations/20260325000002_add_email_module/migration.sql
+__tests__/crm-settings-actions.test.ts
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql
+__tests__/campaigns/merge-tags.test.ts
+__tests__/campaigns/inngest/send-step.test.ts
+__tests__/actions/emails/accounts.test.ts
+components/campaigns/TipTapEditor.tsx
+__tests__/campaigns/api/webhooks-resend.test.ts
+__tests__/campaigns/api/unsubscribe.test.ts
+lib/mcp/tools/crm-targets.ts
+lib/mcp/tools/campaigns.ts
+lib/campaigns/merge-tags.ts
+inngest/functions/enrich-targets-bulk.ts
+inngest/functions/campaigns/send-step.ts
+inngest/functions/campaigns/send-now.ts
+inngest/functions/campaigns/schedule-send.ts
+inngest/functions/campaigns/process-follow-up.ts
+docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md
+app/api/campaigns/webhooks/resend/route.ts
+app/api/campaigns/unsubscribe/route.ts
+actions/user/update-profile.ts
+actions/user/set-language.ts
+actions/user/update-profile-photo.ts
+actions/user/search-users.ts
+actions/user/get-user-by-id.ts
+docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md
+docs/superpowers/plans/2026-03-25-campaigns-module.md
+actions/system/get-next-version.ts
+app/api/campaigns/targets/enrich/route.ts
+docs/specs/2026-03-23-bulk-actions-contacts-design.md
+app/api/campaigns/targets/enrich-bulk/route.ts
+actions/reports/users.ts
+actions/reports/types.ts
+actions/reports/schedule.ts
+actions/reports/sales.ts
+actions/reports/leads.ts
+actions/reports/export-pdf.ts
+actions/reports/export-csv.ts
+actions/reports/dashboard.ts
+actions/reports/config.ts
+actions/reports/campaigns.ts
+actions/reports/activity.ts
+actions/reports/accounts.ts
+app/api/campaigns/targets/[id]/route.ts
+actions/fulltext/unified-search.ts
+app/api/crm/targets/enrich/validate.ts
+app/api/crm/targets/enrich/route.ts
+app/api/campaigns/targets/[id]/enrich/route.ts
+actions/emails/sync.ts
+actions/emails/messages.ts
+actions/emails/accounts.ts
+app/api/crm/targets/enrich-bulk/route.ts
+actions/projects/watch-project.ts
+actions/projects/update-task.ts
+actions/projects/update-section-title.ts
+actions/projects/update-project.ts
+actions/projects/update-kanban-position.ts
+actions/projects/mark-task-done.ts
+actions/projects/delete-task.ts
+actions/projects/delete-section.ts
+actions/projects/delete-project.ts
+actions/projects/create-task.ts
+actions/projects/create-task-in-board.ts
+actions/projects/create-section.ts
+actions/projects/create-project.ts
+actions/projects/assign-document-to-task.ts
+actions/projects/add-comment-to-task.ts
+actions/projects/get-user-tasks.ts
+actions/projects/get-tasks.ts
+actions/projects/get-tasks-past-due.ts
+actions/projects/get-task.ts
+actions/projects/get-task-documents.ts
+app/api/crm/targets/[id]/route.ts
+actions/projects/get-task-comments.ts
+actions/projects/get-sections.ts
+actions/projects/get-kanban-data.ts
+actions/projects/get-boards.ts
+actions/projects/get-board.ts
+actions/projects/get-board-sections.ts
+actions/github/get-repo-stars.ts
+actions/github/get-repo-commits.ts
+actions/get-users.ts
+actions/get-user.ts
+actions/get-empoloyees.ts
+actions/documents/unlink-from-account.ts
+actions/documents/search-documents.ts
+actions/documents/retry-enrichment.ts
+actions/documents/get-storage-size.ts
+app/api/crm/targets/[id]/enrich/route.ts
+actions/documents/get-documents.ts
+actions/documents/get-documents-by-opportunityId.ts
+actions/documents/get-documents-by-contactId.ts
+actions/documents/get-documents-by-accountId.ts
+actions/documents/get-document-versions.ts
+actions/documents/delete-document.ts
+actions/documents/create-document.ts
+actions/documents/create-document-version.ts
+actions/documents/check-duplicate.ts
+actions/documents/bulk-link-to-account.ts
+actions/documents/bulk-delete-documents.ts
+actions/documents/bulk-change-type.ts
+app/api/crm/targets/[id]/contacts/route.ts
+actions/dashboard/get-tasks-count.ts
+actions/dashboard/get-opportunities-count.ts
+actions/dashboard/get-leads-count.ts
+actions/dashboard/get-documents-count.ts
+actions/dashboard/get-contracts-count.ts
+actions/dashboard/get-contacts-count.ts
+actions/dashboard/get-boards-count.ts
+actions/dashboard/get-active-users-count.ts
+actions/dashboard/get-accounts-count.ts
+app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts
+actions/campaigns/get-campaign.ts
+actions/campaigns/delete-campaign.ts
+actions/campaigns/create-campaign.ts
+actions/api-tokens.ts
+actions/campaigns/update-campaign.ts
+actions/campaigns/templates/update-template.ts
+actions/campaigns/templates/get-templates.ts
+actions/campaigns/templates/get-template.ts
+actions/campaigns/templates/generate-template.ts
+actions/campaigns/templates/delete-template.ts
+actions/campaigns/templates/create-template.ts
+actions/campaigns/send-campaign-now.ts
+actions/campaigns/schedule-campaign.ts
+actions/campaigns/pause-campaign.ts
+actions/campaigns/get-campaigns.ts
+actions/crm/get-opportunities.ts
+actions/crm/get-leads-by-accountId.ts
+actions/crm/get-lead.ts
+actions/crm/get-industries.ts
+actions/crm/get-currencies.ts
+actions/crm/get-crm-data.ts
+actions/crm/get-accounts.ts
+actions/crm/get-contracts.ts
+actions/crm/get-accounts-by-opportunityId.ts
+actions/crm/get-contract.ts
+actions/crm/get-accounts-by-contactId.ts
+actions/crm/get-contacts.ts
+actions/crm/get-account.ts
+actions/crm/get-contacts-by-opportunityId.ts
+actions/crm/get-contacts-by-accountId.ts
+actions/crm/get-contact.ts
+actions/crm/get-campaigns.ts
+actions/crm/get-targets.ts
+actions/crm/get-target.ts
+actions/crm/get-target-lists.ts
+actions/crm/get-target-list.ts
+actions/crm/get-sales-type.ts
+actions/crm/get-sales-stage.ts
+actions/crm/get-opportunity.ts
+actions/crm/get-opportunities-with-includes.ts
+actions/crm/get-opportunities-with-includes-by-contactId.ts
+actions/crm/get-opportunities-with-includes-by-accountId.ts
+actions/crm/get-leads.ts
+actions/admin/users/set-role.ts
+actions/ai/projects/boards/getAiReport.tsx
+actions/admin/users/invite-user.ts
+actions/admin/users/delete-user.ts
+actions/admin/users/deactivate-user.ts
+actions/admin/users/activate-user.ts
+actions/crm/get-user-opportunities.ts
+actions/crm/get-user-leads.ts
+actions/crm/tasks/delete-task.ts
+actions/crm/tasks/add-comment.ts
+actions/crm/tasks/get-user-tasks.ts
+actions/admin/send-mail-to-all/index.ts
+actions/admin/send-mail-to-all/types.ts
+actions/admin/send-mail-to-all/schema.ts
+actions/crm/contracts/update-contract/index.ts
+actions/crm/contracts/update-contract/types.ts
+actions/crm/contracts/update-contract/schema.ts
+actions/crm/leads/update-lead.ts
+actions/crm/leads/restore-lead.ts
+actions/crm/leads/delete-lead.ts
+actions/crm/leads/create-lead.ts
+actions/crm/opportunity-line-items/get-line-items.ts
+actions/crm/targets/import-targets.ts
+actions/crm/targets/suggest-mapping.ts
+actions/crm/targets/convert-target.ts
+actions/crm/targets/update-target.ts
+actions/crm/targets/delete-target.ts
+actions/crm/targets/create-target.ts
+actions/crm/opportunity-line-items/update-line-item/index.ts
+actions/crm/opportunity-line-items/update-line-item/types.ts
+actions/crm/opportunity-line-items/update-line-item/schema.ts
+actions/crm/contracts/restore-contract/index.ts
+actions/crm/contacts/update-contact.ts
+actions/crm/contacts/unlink-opportunity.ts
+actions/crm/contacts/restore-contact.ts
+actions/crm/contacts/delete-contact.ts
+actions/crm/contacts/create-contact.ts
+actions/crm/opportunity-line-items/add-line-item/index.ts
+actions/crm/opportunity-line-items/add-line-item/types.ts
+actions/crm/opportunity-line-items/add-line-item/schema.ts
+actions/crm/opportunity-line-items/reorder-line-items/index.ts
+actions/crm/target-lists/update-target-list.ts
+actions/crm/target-lists/remove-target-from-list.ts
+actions/crm/target-lists/delete-target-list.ts
+actions/crm/target-lists/create-target-list.ts
+actions/crm/target-lists/add-targets-to-list.ts
+actions/crm/contracts/delete-contract/index.ts
+actions/crm/contracts/delete-contract/types.ts
+actions/crm/contracts/delete-contract/schema.ts
+actions/crm/audit-log/get-audit-log-by-entity.ts
+actions/crm/audit-log/get-audit-log-admin.ts
+actions/crm/opportunity-line-items/remove-line-item/index.ts
+actions/crm/opportunities/update-opportunity.ts
+actions/crm/opportunities/restore-opportunity.ts
+actions/crm/opportunities/delete-opportunity.ts
+actions/crm/opportunities/create-opportunity.ts
+actions/crm/contracts/create-new-contract/index.ts
+actions/crm/contracts/create-new-contract/types.ts
+actions/crm/contracts/create-new-contract/schema.ts
+actions/crm/similarity/get-similar-opportunities.ts
+actions/crm/similarity/get-similar-leads.ts
+actions/crm/similarity/get-similar-contacts.ts
+actions/crm/activities/update-activity.ts
+actions/crm/similarity/get-similar-accounts.ts
+actions/crm/activities/get-activities-by-entity.ts
+actions/crm/activities/delete-activity.ts
+actions/crm/activities/create-activity.ts
+actions/crm/products/import-products.ts
+actions/crm/account/get-tasks.ts
+actions/crm/account/get-task.ts
+actions/crm/accounts/watch-account.ts
+actions/crm/accounts/update-account.ts
+actions/crm/accounts/unwatch-account.ts
+actions/crm/accounts/restore-account.ts
+actions/crm/accounts/delete-account.ts
+actions/crm/accounts/create-task.ts
+actions/crm/accounts/create-account.ts
+actions/crm/accounts/search-accounts.ts
+actions/crm/accounts/get-accounts.ts
+actions/crm/contract-line-items/get-line-items.ts
+actions/crm/products/update-product/index.ts
+actions/crm/products/update-product/types.ts
+actions/crm/products/update-product/schema.ts
+actions/crm/products/get-products.ts
+actions/crm/products/get-product.ts
+actions/crm/products/get-product-categories.ts
+actions/crm/contract-line-items/update-line-item/index.ts
+actions/crm/contract-line-items/update-line-item/types.ts
+actions/crm/contract-line-items/update-line-item/schema.ts
+actions/crm/contract-line-items/copy-from-opportunity/index.ts
+actions/crm/products/delete-product/index.ts
+actions/crm/contract-line-items/reorder-line-items/index.ts
+actions/crm/account-products/update-assignment/index.ts
+actions/crm/account-products/update-assignment/types.ts
+actions/crm/account-products/update-assignment/schema.ts
+actions/crm/contract-line-items/add-line-item/index.ts
+actions/crm/contract-line-items/add-line-item/types.ts
+actions/crm/contract-line-items/add-line-item/schema.ts
+actions/crm/products/create-product/index.ts
+actions/crm/products/create-product/types.ts
+actions/crm/products/create-product/schema.ts
+actions/crm/account-products/get-account-products.ts
+actions/crm/contract-line-items/remove-line-item/index.ts
+actions/crm/account-products/remove-assignment/index.ts
+actions/crm/account-products/assign-product/schema.ts
+actions/crm/account-products/assign-product/index.ts
+actions/crm/account-products/assign-product/types.ts
+actions/crm/opportunity/get-expected-revenue.ts
+actions/crm/opportunity/dashboard/set-inactive.ts
+app/[locale]/(routes)/reports/campaigns/page.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+app/[locale]/(routes)/projects/tasks/data/schema.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/data/schema.tsx
+app/[locale]/(routes)/projects/actions/get-task-done.ts
+app/[locale]/(routes)/profile/actions/api-keys.ts
+app/[locale]/(routes)/documents/data/schema.tsx
+app/[locale]/(routes)/documents/components/data-table-row-actions.tsx
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx
+app/[locale]/(routes)/admin/users/table-data/schema.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx
+app/[locale]/(routes)/crm/contracts/table-data/schema.tsx
+app/[locale]/(routes)/crm/contacts/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/templates/page.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+app/[locale]/(routes)/campaigns/templates/new/page.tsx
+app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/admin/currencies/_actions/currencies.ts
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx
+app/[locale]/(routes)/crm/products/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts
+app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx
+app/[locale]/(routes)/admin/actions/api-keys.ts
+app/[locale]/(routes)/campaigns/page.tsx
+app/[locale]/(routes)/campaigns/new/page.tsx
+app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx
+app/[locale]/(routes)/crm/accounts/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/new/components/WizardShell.tsx
+app/[locale]/(routes)/campaigns/new/components/Step4Schedule.tsx
+app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx
+app/[locale]/(routes)/campaigns/new/components/Step1Details.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx
+app/[locale]/(routes)/campaigns/targets/page.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/page.tsx
+app/[locale]/(routes)/crm/leads/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx
+app/[locale]/(routes)/campaigns/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/StepsTimeline.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/CampaignDetail.tsx
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx
+app/[locale]/(routes)/campaigns/targets/components/EnrichFieldSelector.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/schema.tsx
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/target-lists/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx
+
+codex
+The stack resolves to `actions/crm/targets/import-targets.ts`, with the failure before any database write path. I’m reading that action plus the import modal/mapping code to identify how an `undefined` value reaches the parser.
+exec
+/usr/bin/bash -lc "sed -n '1,180p' actions/crm/targets/suggest-mapping.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' tests/e2e/campaign-targets.spec.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,180p' actions/crm/targets/import-targets.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,260p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { createLogger } from "@/lib/logger";
+import { getSession } from "@/lib/auth-server";
+import { openAiHelper } from "@/lib/openai";
+
+
+const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+const TARGET_FIELDS = [
+  "last_name",
+  "first_name",
+  "email",
+  "mobile_phone",
+  "office_phone",
+  "company",
+  "position",
+  "company_website",
+  "personal_website",
+  "social_linkedin",
+  "social_x",
+  "social_instagram",
+  "social_facebook",
+  "personal_email",
+  "company_email",
+  "company_phone",
+  "city",
+  "country",
+  "industry",
+  "employees",
+  "description",
+];
+
+function fuzzyMatch(header: string): string | null {
+  const normalized = header.toLowerCase().replace(/[\s_\-]/g, "");
+  for (const field of TARGET_FIELDS) {
+    if (field.replace(/_/g, "") === normalized) return field;
+  }
+  const aliases: Record<string, string> = {
+    lastname: "last_name",
+    surname: "last_name",
+    familyname: "last_name",
+    firstname: "first_name",
+    givenname: "first_name",
+    name: "first_name",
+    mail: "email",
+    emailaddress: "email",
+    phone: "mobile_phone",
+    mobile: "mobile_phone",
+    cellphone: "mobile_phone",
+    mobilephone: "mobile_phone",
+    officephone: "office_phone",
+    workphone: "office_phone",
+    businessphone: "office_phone",
+    companyname: "company",
+    organization: "company",
+    organisation: "company",
+    jobtitle: "position",
+    title: "position",
+    role: "position",
+    website: "company_website",
+    companywebsite: "company_website",
+    personalwebsite: "personal_website",
+    linkedin: "social_linkedin",
+    linkedinurl: "social_linkedin",
+    twitter: "social_x",
+    x: "social_x",
+    instagram: "social_instagram",
+    facebook: "social_facebook",
+    personalemail: "personal_email",
+    directemail: "personal_email",
+    myemail: "personal_email",
+    companyemail: "company_email",
+    infoemail: "company_email",
+    contactemail: "company_email",
+    genericemail: "company_email",
+    companyphone: "company_phone",
+    mainphone: "company_phone",
+    switchboard: "company_phone",
+    hqphone: "company_phone",
+    hqcity: "city",
+    headquarterscity: "city",
+    hqcountry: "country",
+    nation: "country",
+    sector: "industry",
+    vertical: "industry",
+    businesstype: "industry",
+    headcount: "employees",
+    numemployees: "employees",
+    teamsize: "employees",
+    companysize: "employees",
+    about: "description",
+    bio: "description",
+    summary: "description",
+    companydescription: "description",
+  };
+  return aliases[normalized] ?? null;
+}
+
+export const suggestMapping = async (headers: string[]) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  if (!Array.isArray(headers)) return { error: "Invalid request" };
+
+  const userId = (session.user as any).id;
+  const openai = await openAiHelper(userId);
+
+  if (openai) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a data mapping assistant. Given a list of CSV column headers and a list of CRM field names, return a JSON object mapping each CSV header to the best matching CRM field, or null if no match. Only use the provided CRM field names as values. Return only valid JSON, no explanation.",
+          },
+          {
+            role: "user",
+            content: `CSV headers: ${JSON.stringify(headers)}\n\nCRM fields: ${JSON.stringify(TARGET_FIELDS)}\n\nReturn a JSON object like: { "CSV Header": "crm_field" or null }`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        const mapping: Record<string, string | null> = {};
+        for (const header of headers) {
+          const suggested = parsed[header];
+          mapping[header] = suggested && TARGET_FIELDS.includes(suggested) ? suggested : null;
+        }
+        return { mapping };
+      }
+    } catch (err) {
+      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+    }
+  }
+
+  // Fallback: fuzzy match
+  const mapping: Record<string, string | null> = {};
+  for (const header of headers) {
+    mapping[header] = fuzzyMatch(header);
+  }
+  return { mapping };
+};
+
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+import { test, expect, Page } from "@playwright/test";
+
+async function assertSuccessToast(page: Page) {
+  await expect(
+    page.locator('[data-sonner-toast][data-type="success"]').first()
+  ).toBeVisible({ timeout: 15000 });
+}
+
+async function waitForRows(page: Page) {
+  await expect(async () => {
+    const empty = await page.getByText("No results.").isVisible();
+    expect(empty).toBe(false);
+  }).toPass({ timeout: 10000 });
+}
+
+test.describe.serial("Campaign Targets", () => {
+  test.use({ storageState: "playwright/.auth/user.json" });
+
+  test("should display targets page with table", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    await expect(
+      page.locator("h2").filter({ hasText: "Targets" })
+    ).toBeVisible({ timeout: 10000 });
+
+    await expect(
+      page.getByRole("button", { name: /\+ New Target/i })
+    ).toBeVisible();
+
+    await expect(page.locator("table")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("should create a new target with all fields", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    // Open the new target sheet
+    await page.getByRole("button", { name: /\+ New Target/i }).click();
+
+    await expect(page.getByText("Create new Target")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // --- Name & Contact ---
+    await page.getByLabel("First name").fill("PW-Target-First");
+    await page.getByLabel("Last name").fill("PW-Target-Last");
+    await page.getByLabel("Email").first().fill("pw-target@test.example.com");
+    await page.getByLabel("Mobile phone").fill("+1 555 000 1111");
+    await page.getByLabel("Office phone").fill("+1 555 000 2222");
+
+    // --- Company ---
+    await page.getByLabel("Company", { exact: true }).fill("PW Test Corp");
+    await page.getByLabel("Position").fill("QA Engineer");
+    await page.getByLabel("Company website", { exact: true }).fill("https://pw-test-corp.com");
+    await page.getByLabel("Personal website").fill("https://pw-target.dev");
+
+    // --- Social ---
+    await page.getByLabel("LinkedIn").fill("https://linkedin.com/in/pw-target");
+    await page.getByLabel("X (Twitter)").fill("https://x.com/pw-target");
+    await page.getByLabel("Instagram").fill("https://instagram.com/pw-target");
+    await page.getByLabel("Facebook").fill("https://facebook.com/pw-target");
+
+    // --- Additional Contact ---
+    await page.getByLabel("Personal Email", { exact: true }).fill("pw-personal@test.example.com");
+    await page.getByLabel("Company Email", { exact: true }).fill("pw-company@test.example.com");
+    await page.getByLabel("Company Phone", { exact: true }).fill("+1 800 000 0000");
+
+    // --- Location & Industry ---
+    await page.getByLabel("City").fill("Prague");
+    await page.getByLabel("Country").fill("Czech Republic");
+    await page.getByLabel("Industry").fill("SaaS");
+    await page.getByLabel("Employees").fill("50-200");
+
+    // --- Description ---
+    await page.getByLabel("Description").fill("Playwright test target with all fields");
+
+    // Submit
+    await page.getByRole("button", { name: "Create target" }).click();
+
+    await assertSuccessToast(page);
+
+    // Verify the sheet closed and table refreshed
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  });
+
+  test("should filter targets by last name", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    const filterInput = page.getByPlaceholder("Filter by last name ...");
+    await expect(filterInput).toBeVisible({ timeout: 10000 });
+
+    // Type something that matches nothing
+    await filterInput.fill("zzz_no_match_zzz");
+    await expect(page.getByText("No results.")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Clear the filter and verify rows reappear
+    await filterInput.fill("");
+    await waitForRows(page);
+  });
+
+  test("should navigate to target detail via row action View", async ({
+    page,
+  }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "View" }).click();
+    await page.waitForURL(/\/targets\/[a-z0-9-]+$/, {
+      timeout: 10000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  });
+
+  test("should update a target via row action", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    const firstRow = page.locator("table tbody tr").first();
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "Update" }).click();
+
+    // Wait for the update form modal to appear
+    await expect(page.getByText("Update target details")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Modify a field
+    const positionField = page.getByLabel("Position");
+    await positionField.clear();
+    await positionField.fill("Senior QA Engineer");
+
+    await page.getByRole("button", { name: "Update target" }).click();
+
+    await assertSuccessToast(page);
+  });
+
+  test("should display target detail with all fields", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    // Navigate to the PW-created target detail via View row action
+    const firstRow = page.locator("table tbody tr").first();
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+    await page.getByRole("menuitem", { name: "View" }).click();
+    await page.waitForURL(/\/campaigns\/targets\/[a-z0-9-]+$/, {
+      timeout: 10000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    // Verify header with target name
+    await expect(
+      page.getByRole("heading", { name: /PW-Target-First/, level: 2 })
+    ).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify company info
+    await expect(page.getByText("Company").first()).toBeVisible();
+    await expect(page.getByText("PW Test Corp")).toBeVisible();
+
+    // Verify position
+    await expect(page.getByText("Position").first()).toBeVisible();
+
+    // Verify Contact Information card
+    await expect(page.getByText("Contact information")).toBeVisible();
+    await expect(page.getByText("pw-target@test.example.com")).toBeVisible();
+
+    // Verify Social Networks card
+    await expect(page.getByText("Social networks")).toBeVisible();
+  });
+
+  test("should convert target to account + contact", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    // Open Update modal for the target (convert is inside the update form)
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "Update" }).click();
+
+    await expect(page.getByText("Update target details")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Click "Convert to Account" button
+    await page
+      .getByRole("button", { name: /Convert to Account/i })
+      .click();
+
+    // Confirm the conversion dialog
+    await expect(
+      page.getByText("Convert to Account + Contact?")
+    ).toBeVisible({ timeout: 5000 });
+
+    await page
+      .getByRole("button", { name: "Convert", exact: true })
+      .click();
+
+    await assertSuccessToast(page);
+  });
+
+
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Import Targets from CSV
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Select a CSV file to import targets."}
+            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+            {step === "preview" && "Review the import summary before proceeding."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Upload */}
+        {step === "upload" && (
+          <div className="space-y-4 py-2">
+            <div className="border-2 border-dashed rounded-md p-8 text-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Select CSV file
+              </Button>
+              {selectedFile && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selected: {selectedFile.name}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Map Columns */}
+        {step === "mapping" && (
+          <div className="space-y-3 py-2">
+            {isSuggesting ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>AI is suggesting column mappings…</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                  <span>CRM Field</span>
+                  <span>CSV Column</span>
+                </div>
+                {TARGET_FIELDS.map((field) => (
+
+codex
+`parseEmployeesValue` unconditionally expects the CSV cell to be JSON shaped like `{ "min": number, "max": number }`. The rest of the target UI and schema treat `employees` as a plain optional string, so I’m checking whether this JSON shape is used anywhere else or is an isolated assumption in the import action.
+exec
+/usr/bin/bash -lc "sed -n '120,240p' actions/crm/products/import-products.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,140p' actions/crm/products/import-products.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1220,1245p' prisma/schema.prisma && sed -n '25,38p' prisma/schema.prisma" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    const isRecurring = row.is_recurring?.trim().toLowerCase() === "true";
+    let billingPeriod: string | undefined;
+    if (isRecurring) {
+      billingPeriod = row.billing_period?.trim().toUpperCase();
+      if (!["MONTHLY", "QUARTERLY", "ANNUALLY", "ONE_TIME"].includes(billingPeriod || "")) {
+        errors.push(`Row ${rowNum}: recurring product requires valid billing_period (MONTHLY, QUARTERLY, ANNUALLY, ONE_TIME)`);
+        return;
+      }
+    }
+
+    valid.push({
+      name: row.name.trim(),
+      description: row.description?.trim() || null,
+      sku,
+      type,
+      status: "DRAFT",
+      unit_price: unitPrice,
+      unit_cost: unitCost ?? null,
+      currency,
+      tax_rate: taxRate ?? null,
+      unit: row.unit?.trim() || null,
+      is_recurring: isRecurring,
+      billing_period: isRecurring ? billingPeriod : null,
+      categoryId: categoryId ?? null,
+      createdBy: userId,
+      updatedBy: userId,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Products.createMany({
+      data: valid,
+      skipDuplicates: true,
+    });
+
+    await writeAuditLog({
+      entityType: "product",
+      entityId: "bulk_import",
+      action: "imported",
+      changes: [{ field: "count", old: null, new: valid.length }],
+      userId,
+    });
+  }
+
+  revalidatePath("/[locale]/(routes)/crm/products", "page");
+  logger.info(
+    {
+      imported: valid.length,
+      skipped: errors.length,
+      userId,
+    },
+    "Product import completed"
+  );
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+import { createLogger } from "@/lib/logger";
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+import { writeAuditLog } from "@/lib/audit-log";
+import { revalidatePath } from "next/cache";
+
+const REQUIRED_FIELDS = ["name", "type", "unit_price", "currency"];
+const MAX_ROWS = 500;
+const logger = createLogger({ module: "actions.crm.products.import" });
+
+export async function importProducts(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const userId = session.user.id;
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  logger.info({ rows: data.length, userId }, "Product import started");
+
+  if (data.length > MAX_ROWS) {
+    throw new Error(`Import limited to ${MAX_ROWS} rows. File contains ${data.length} rows.`);
+  }
+
+  const [categories, currencies, existingSkus] = await Promise.all([
+    prismadb.crm_ProductCategories.findMany({ where: { isActive: true } }),
+    prismadb.currency.findMany({ where: { isEnabled: true } }),
+    prismadb.crm_Products.findMany({
+      where: { sku: { not: null } },
+      select: { sku: true },
+    }),
+  ]);
+
+  const categoryMap = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+  const currencyCodes = new Set(currencies.map((c) => c.code));
+  const existingSkuSet = new Set(existingSkus.map((p) => p.sku?.toLowerCase()));
+  const seenSkus = new Set<string>();
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((row, index) => {
+    const rowNum = index + 2;
+
+    const missing = REQUIRED_FIELDS.filter((f) => !row[f]?.trim());
+    if (missing.length > 0) {
+      errors.push(`Row ${rowNum}: missing required fields: ${missing.join(", ")}`);
+      return;
+    }
+
+    const type = row.type?.trim().toUpperCase();
+    if (type !== "PRODUCT" && type !== "SERVICE") {
+      errors.push(`Row ${rowNum}: invalid type "${row.type}" (must be PRODUCT or SERVICE)`);
+      return;
+    }
+
+    const currency = row.currency?.trim().toUpperCase();
+    if (!currencyCodes.has(currency)) {
+      errors.push(`Row ${rowNum}: unknown currency "${row.currency}"`);
+      return;
+    }
+
+    const unitPrice = parseFloat(row.unit_price);
+    if (isNaN(unitPrice) || unitPrice < 0) {
+      errors.push(`Row ${rowNum}: invalid unit_price "${row.unit_price}"`);
+      return;
+    }
+
+    let unitCost: number | undefined;
+    if (row.unit_cost?.trim()) {
+      unitCost = parseFloat(row.unit_cost);
+      if (isNaN(unitCost) || unitCost < 0) {
+        errors.push(`Row ${rowNum}: invalid unit_cost "${row.unit_cost}"`);
+        return;
+      }
+    }
+
+    let taxRate: number | undefined;
+    if (row.tax_rate?.trim()) {
+      taxRate = parseFloat(row.tax_rate);
+      if (isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
+        errors.push(`Row ${rowNum}: invalid tax_rate "${row.tax_rate}" (must be 0-100)`);
+        return;
+      }
+    }
+
+    const sku = row.sku?.trim() || null;
+    if (sku) {
+      const skuLower = sku.toLowerCase();
+      if (existingSkuSet.has(skuLower)) {
+        errors.push(`Row ${rowNum}: SKU "${sku}" already exists`);
+        return;
+      }
+      if (seenSkus.has(skuLower)) {
+        errors.push(`Row ${rowNum}: duplicate SKU "${sku}" in file`);
+        return;
+      }
+      seenSkus.add(skuLower);
+    }
+
+    let categoryId: string | undefined;
+    if (row.category?.trim()) {
+      categoryId = categoryMap.get(row.category.trim().toLowerCase());
+      if (!categoryId) {
+        errors.push(`Row ${rowNum}: unknown category "${row.category}"`);
+        return;
+      }
+    }
+
+    const isRecurring = row.is_recurring?.trim().toLowerCase() === "true";
+    let billingPeriod: string | undefined;
+    if (isRecurring) {
+      billingPeriod = row.billing_period?.trim().toUpperCase();
+      if (!["MONTHLY", "QUARTERLY", "ANNUALLY", "ONE_TIME"].includes(billingPeriod || "")) {
+        errors.push(`Row ${rowNum}: recurring product requires valid billing_period (MONTHLY, QUARTERLY, ANNUALLY, ONE_TIME)`);
+        return;
+      }
+    }
+
+    valid.push({
+      name: row.name.trim(),
+      description: row.description?.trim() || null,
+      sku,
+      type,
+      status: "DRAFT",
+      unit_price: unitPrice,
+      unit_cost: unitCost ?? null,
+      currency,
+      tax_rate: taxRate ?? null,
+      unit: row.unit?.trim() || null,
+
+ succeeded in 0ms:
+  social_facebook  String?
+  status           Boolean   @default(true)
+  tags             String[]
+  notes            String[]
+  created_by       String?   @db.Uuid
+  created_on       DateTime? @default(now())
+  updatedAt        DateTime? @updatedAt
+  updatedBy        String?   @db.Uuid
+
+  // Extended contact fields
+  personal_email   String?
+  company_email    String?
+  company_phone    String?
+  city             String?
+  country          String?
+  industry         String?
+  employees        String?
+  description      String?
+
+  // Conversion tracking
+  converted_at         DateTime?
+  converted_account_id String?   @db.Uuid
+  converted_contact_id String?   @db.Uuid
+
+  deletedAt        DateTime?
+  deletedBy        String?   @db.Uuid
+  billing_street       String?
+  company_id           String?
+  description          String?
+  email                String?
+  employees            String?
+  fax                  String?
+  industry             String?   @db.Uuid
+  member_of            String?
+  name                 String
+  office_phone         String?
+  shipping_city        String?
+  shipping_country     String?
+  shipping_postal_code String?
+  shipping_state       String?
+
+exec
+/usr/bin/bash -lc 'rg -n "min.*max|parse.*Value|employees.*min|headcount|companysize|Number of employees|Employees" actions app components lib tests docs prisma | head -200' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+prisma/schema.prisma:688:model Employees {
+actions/user/search-users.ts:20:  const safeTake = Math.min(PAGE_SIZE_MAX, Math.max(1, take));
+tests/e2e/campaign-targets.spec.ts:73:    await page.getByLabel("Employees").fill("50-200");
+docs/superpowers/specs/2026-04-05-products-module-design.md:205:  name: z.string().min(1).max(255),
+docs/superpowers/specs/2026-04-05-products-module-design.md:213:  tax_rate: z.coerce.number().min(0).max(100).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:256:| `name` | Required, min 1 char, max 255 |
+docs/superpowers/specs/2026-04-05-line-items-design.md:228:  name: z.string().min(1).max(255),
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:48:**Change:** `id: z.string().min(5).max(30)` → `id: z.string().uuid()`
+lib/mcp/tools/crm-target-lists.ts:115:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-target-lists.ts:143:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-products.ts:63:      tax_rate: z.number().min(0).max(100).optional(),
+lib/mcp/tools/crm-products.ts:121:      tax_rate: z.number().min(0).max(100).optional(),
+actions/reports/accounts.ts:48:    { label: "1-10", min: 1, max: 10 },
+actions/reports/accounts.ts:49:    { label: "11-50", min: 11, max: 50 },
+actions/reports/accounts.ts:50:    { label: "51-200", min: 51, max: 200 },
+actions/reports/accounts.ts:51:    { label: "201-500", min: 201, max: 500 },
+actions/reports/accounts.ts:52:    { label: "500+", min: 501, max: Infinity },
+actions/reports/accounts.ts:53:    { label: "Unknown", min: -1, max: -1 },
+actions/reports/accounts.ts:60:    const range = ranges.find((r) => emp >= r.min && emp <= r.max);
+lib/mcp/tools/crm-enrichment.ts:70:      contactIds: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-enrichment.ts:158:      targetIds: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/helpers.ts:6:  limit: z.number().min(1).max(100).default(20),
+lib/enrichment/services/specialized-agents.ts:68:      yearFounded: z.number().min(1800).max(2024).optional(),
+lib/enrichment/services/specialized-agents.ts:70:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:102:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:142:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:171:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:204:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:299:  schemaFields._confidence = z.record(z.string(), z.number().min(0).max(1));
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:54:  limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1085:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1143:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1961:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1986:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2080:      contactIds: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2154:      targetIds: z.array(z.string().uuid()).min(1).max(100),
+actions/get-empoloyees.ts:3:export const getEmployees = async () => {
+docs/superpowers/plans/2026-04-05-products-module.md:214:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-products-module.md:347:  name: z.string().min(1).max(255).optional(),
+lib/enrichment/services/openai.ts:47:      confidenceProperties[`${field.name}_confidence`] = z.number().min(0).max(1);
+lib/enrichment/services/openai.ts:92:        confidence: z.number().min(0).max(1), // Confidence for this specific source
+lib/enrichment/services/openai.ts:98:        consensus_confidence: z.number().min(0).max(1), // Overall confidence
+docs/superpowers/plans/2026-04-05-line-items.md:234:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:380:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:646:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:787:  name: z.string().min(1).max(255).optional(),
+lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+docs/superpowers/plans/2026-04-04-currency-support.md:691:  name: z.string().min(1, "Name is required").max(100),
+docs/superpowers/plans/2026-04-04-currency-support.md:692:  symbol: z.string().min(1).max(5),
+docs/superpowers/plans/2026-04-04-currency-support.md:1254:  title: z.string().min(3).max(255),
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+prisma/migrations/0_init/migration.sql:242:CREATE TABLE "Employees" (
+prisma/migrations/0_init/migration.sql:251:    CONSTRAINT "Employees_pkey" PRIMARY KEY ("id")
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1215:    { label: "1-10", min: 1, max: 10 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1216:    { label: "11-50", min: 11, max: 50 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1217:    { label: "51-200", min: 51, max: 200 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1218:    { label: "201-500", min: 201, max: 500 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1219:    { label: "500+", min: 501, max: Infinity },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1220:    { label: "Unknown", min: -1, max: -1 },
+docs/superpowers/plans/2026-03-31-reports-remaster.md:1232:    const range = ranges.find((r) => emp >= r.min && emp <= r.max);
+docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md:46:id: z.string().min(5).max(30),
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md:101:    await page.getByLabel("Employees").fill("50-200");
+docs/superpowers/plans/2026-03-20-mcp-server.md:528:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:561:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:661:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:694:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:790:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:823:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:919:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:952:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1053:      limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-03-20-mcp-server.md:1086:      limit: z.number().min(1).max(100).default(20),
+lib/enrichment/agent-architecture/agents/company-profile-agent.ts:9:  yearFounded: z.number().min(1800).max(new Date().getFullYear()).describe('Year the company was founded'),
+docs/superpowers/plans/2026-03-27-crm-settings.md:606:const nameSchema = z.string().trim().min(1, "Name is required").max(100, "Max 100 characters");
+actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+actions/crm/targets/import-targets.ts:12:  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+actions/crm/targets/import-targets.ts:17:  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:531:    <FormItem><FormLabel>Employees</FormLabel>
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+app/[locale]/(routes)/components/app-sidebar.tsx:39: * - Task 2.6: Added remaining module navigation items (Employees, Reports, Documents, Databox)
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:33:  comment: z.string().min(3).max(160),
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:47:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:48:    description: z.string().min(3).max(500),
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:49:    visibility: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:66:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:67:    user: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:69:    priority: z.string().min(3).max(10),
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:70:    content: z.string().min(3).max(500),
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:71:    boardId: z.string().min(3).max(255),
+actions/crm/contracts/update-contract/schema.ts:12:  title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:69:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:70:    user: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:71:    board: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:72:    priority: z.string().min(3).max(10),
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:73:    content: z.string().min(3).max(500),
+app/[locale]/(routes)/crm/leads/table-data/schema.tsx:11:  lastName: z.string().min(3).max(30).nonempty(),
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:47:  comment: z.string().min(3).max(160),
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:54:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:55:    description: z.string().min(3).max(500),
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:56:    visibility: z.string().min(3).max(255),
+actions/crm/products/update-product/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+actions/crm/contracts/create-new-contract/schema.ts:4:  title: z.string().min(3).max(255),
+actions/crm/products/create-product/schema.ts:4:  name: z.string().min(1).max(255),
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:50:    lastName: z.string().min(1, t("lastNameRequired")).max(30),
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:54:    phone: z.string().min(0).max(15).nullable().optional(),
+app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+actions/crm/contract-line-items/update-line-item/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:47:    last_name: z.string().min(1, t("lastNameRequired")).max(30),
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:51:    phone: z.string().min(0).max(15).optional(),
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:37:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:348:            <FormItem><FormLabel>Employees</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:312:            <FormItem><FormLabel>Employees</FormLabel>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:65:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:66:    user: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:68:    priority: z.string().min(3).max(10),
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:69:    section: z.string().min(3).max(255),
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:70:    content: z.string().min(3).max(500),
+actions/crm/opportunity-line-items/update-line-item/schema.ts:5:  name: z.string().min(1).max(255).optional(),
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:47:    title: z.string().min(3).max(255),
+actions/crm/contract-line-items/add-line-item/schema.ts:6:  name: z.string().min(1).max(255),
+actions/crm/opportunity-line-items/add-line-item/schema.ts:6:  name: z.string().min(1).max(255),
+actions/crm/accounts/search-accounts.ts:16:  const safeTake = Math.min(PAGE_SIZE_MAX, Math.max(1, take));
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:37:  name: z.string().min(3).max(50),
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:38:  username: z.string().min(2).max(50),
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:39:  account_name: z.string().min(2).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:60:    name: z.string().min(1, t("nameRequired")).max(80),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:64:    company_id: z.string().min(5).max(10),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:65:    vat: z.string().min(5).max(20).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:67:    billing_street: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:68:    billing_postal_code: z.string().min(2).max(10),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:69:    billing_city: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:70:    billing_state: z.string().min(3).max(50).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:71:    billing_country: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:77:    description: z.string().min(3).max(250).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:78:    assigned_to: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:79:    status: z.string().min(3).max(50).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:80:    annual_revenue: z.string().min(3).max(50).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:81:    member_of: z.string().min(3).max(50).nullable().optional(),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:82:    industry: z.string().min(3).max(50),
+app/[locale]/(routes)/page.tsx:25:import { getEmployees } from "@/actions/get-empoloyees";
+app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+app/[locale]/(routes)/page.tsx:116:          title="Employees"
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:41:    name: z.string().min(1, t("nameRequired")).max(100),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:45:    company_id: z.string().min(5).max(10),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:48:    billing_street: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:49:    billing_postal_code: z.string().min(2).max(10),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:50:    billing_city: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:51:    billing_state: z.string().min(3).max(50).optional(),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:52:    billing_country: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:58:    description: z.string().min(3).max(1000).optional(),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:59:    assigned_to: z.string().min(3).max(50),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:60:    status: z.string().min(3).max(50).optional(),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:61:    annual_revenue: z.string().min(3).max(50).optional(),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:62:    member_of: z.string().min(3).max(50).optional(),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:63:    industry: z.string().min(3).max(50),
+app/[locale]/(routes)/employees/page.tsx:10:  const t = await getTranslations("EmployeesPage");
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:59:    title: z.string().min(3).max(255),
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:60:    user: z.string().min(3).max(255),
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:63:    priority: z.string().min(3).max(10),
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:64:    content: z.string().min(3).max(500),
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:62:    <Card className="min-w-[350px] max-w-[450px]">
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:70:    return `${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${curr}`;
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:32:  name: z.string().min(3).max(50),
+app/[locale]/(routes)/admin/currencies/_actions/currencies.ts:28:  name: z.string().min(1, "Name is required").max(100),
+app/[locale]/(routes)/admin/currencies/_actions/currencies.ts:29:  symbol: z.string().min(1).max(5),
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts:18:const nameSchema = z.string().trim().min(1, "Name is required").max(100, "Max 100 characters");
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'git blame -L 1,25 -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100  1) "use server";
+3a781f03 actions/crm/targets/import-targets.ts (Pavel -  ClawdBot   2026-04-01 10:15:32 +0200  2) import { getSession } from "@/lib/auth-server";
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100  3) 
+7caf5443 app/api/crm/targets/import/route.ts   (Pavel Dovhomilja    2026-03-17 15:10:07 +0100  4) import { prismadb } from "@/lib/prisma";
+7caf5443 app/api/crm/targets/import/route.ts   (Pavel Dovhomilja    2026-03-17 15:10:07 +0100  5) import Papa from "papaparse";
+7caf5443 app/api/crm/targets/import/route.ts   (Pavel Dovhomilja    2026-03-17 15:10:07 +0100  6) 
+e35981eb actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  7) function normalizeCellValue(value?: string) {
+e35981eb actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  8)   return typeof value === "string" ? value.trim() : "";
+e35981eb actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300  9) }
+e35981eb actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:15:19 +0300 10) 
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 11) function parseEmployeesValue(value?: string) {
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 12)   const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 13)     min: number;
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 14)     max: number;
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 15)   };
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 16) 
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 17)   return `${parsed.min.toString()}-${parsed.max.toString()}`;
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 18) }
+9790f4c1 actions/crm/targets/import-targets.ts (Dmytro Rekechynskyi 2026-05-01 18:16:19 +0300 19) 
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100 20) export async function importTargets(
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100 21)   formData: FormData
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100 22) ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+3a781f03 actions/crm/targets/import-targets.ts (Pavel -  ClawdBot   2026-04-01 10:15:32 +0200 23)   const session = await getSession();
+f4450db6 actions/crm/targets/import-targets.ts (Pavel Dovhomilja    2026-03-19 15:41:58 +0100 24)   if (!session) throw new Error("Unauthorized");
+7caf5443 app/api/crm/targets/import/route.ts   (Pavel Dovhomilja    2026-03-17 15:10:07 +0100 25) 
+
+exec
+/usr/bin/bash -lc 'git log --oneline --decorate -- actions/crm/targets/import-targets.ts | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c (HEAD -> feature/task-5, origin/feature/task-5) Handle legacy employee range imports
+e35981e Normalize imported target values
+3a781f0 refactor(auth): update all server actions to better-auth with RBAC
+a298f68 Merge pull request #116 from pdovhomilja/feat/target-enrichment-conversion
+3f6c118 feat: add 8 new fields to target actions, import, and column mapping
+bc56b78 fix: relax campaigns targets import validation to allow last_name or company
+f4450db feat: refactor toasts, API routes to server actions, fix sidebar CSS
+
+codex
+History points to a recent commit named `Handle legacy employee range imports` introducing the failing parser on May 1. I’m checking that diff because the incident happened on May 4 and the error text matches the new code’s assumptions.
+exec
+/usr/bin/bash -lc 'git show --format=fuller --no-ext-diff --unified=80 e35981e -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git show --format=fuller --no-ext-diff --unified=80 9790f4c -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:16:19 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:16:19 2026 +0300
+
+    Handle legacy employee range imports
+
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -1,87 +1,97 @@
+ "use server";
+ import { getSession } from "@/lib/auth-server";
+ 
+ import { prismadb } from "@/lib/prisma";
+ import Papa from "papaparse";
+ 
+ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+   const session = await getSession();
+   if (!session) throw new Error("Unauthorized");
+ 
+   const file = formData.get("file") as File | null;
+   if (!file) throw new Error("No file provided");
+ 
+   const mappingRaw = formData.get("mapping") as string | null;
+   const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+ 
+   const text = await file.text();
+   const { data } = Papa.parse<Record<string, string>>(text, {
+     header: true,
+     skipEmptyLines: true,
+   });
+ 
+   const valid: any[] = [];
+   const errors: string[] = [];
+ 
+   data.forEach((rawRow, index) => {
+     const row: Record<string, string> = {};
+     if (Object.keys(mapping).length > 0) {
+       Object.entries(mapping).forEach(([csvCol, targetField]) => {
+         if (targetField && rawRow[csvCol] !== undefined) {
+           row[targetField] = rawRow[csvCol];
+         }
+       });
+     } else {
+       Object.assign(row, rawRow);
+     }
+ 
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+       return;
+     }
+ 
+     valid.push({
+       last_name: last_name ?? "",
+       first_name: row.first_name || null,
+       email: email || null,
+       mobile_phone: mobile_phone || null,
+       office_phone: row.office_phone || null,
+       company: row.company || null,
+       position: row.position || null,
+       company_website: companyDomain || null,
+       personal_website: row.personal_website || null,
+       social_linkedin: row.social_linkedin || null,
+       social_x: row.social_x || null,
+       social_instagram: row.social_instagram || null,
+       social_facebook: row.social_facebook || null,
+       personal_email: row.personal_email || null,
+       company_email: row.company_email || null,
+       company_phone: row.company_phone || null,
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+   });
+ 
+   if (valid.length > 0) {
+     await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+   }
+ 
+   return { imported: valid.length, skipped: errors.length, errors };
+ }
+
+ succeeded in 0ms:
+commit e35981ebc53f09b77510eb8e65482a590218def2
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:15:19 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:15:19 2026 +0300
+
+    Normalize imported target values
+
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 048419b..007cf72 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -1,81 +1,87 @@
+ "use server";
+ import { getSession } from "@/lib/auth-server";
+ 
+ import { prismadb } from "@/lib/prisma";
+ import Papa from "papaparse";
+ 
++function normalizeCellValue(value?: string) {
++  return typeof value === "string" ? value.trim() : "";
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+   const session = await getSession();
+   if (!session) throw new Error("Unauthorized");
+ 
+   const file = formData.get("file") as File | null;
+   if (!file) throw new Error("No file provided");
+ 
+   const mappingRaw = formData.get("mapping") as string | null;
+   const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+ 
+   const text = await file.text();
+   const { data } = Papa.parse<Record<string, string>>(text, {
+     header: true,
+     skipEmptyLines: true,
+   });
+ 
+   const valid: any[] = [];
+   const errors: string[] = [];
+ 
+   data.forEach((rawRow, index) => {
+     const row: Record<string, string> = {};
+     if (Object.keys(mapping).length > 0) {
+       Object.entries(mapping).forEach(([csvCol, targetField]) => {
+         if (targetField && rawRow[csvCol] !== undefined) {
+           row[targetField] = rawRow[csvCol];
+         }
+       });
+     } else {
+       Object.assign(row, rawRow);
+     }
+ 
+-    const last_name = row.last_name;
+-    const email = row.email;
+-    const mobile_phone = row.mobile_phone;
+-    const company = row.company;
++    const last_name = normalizeCellValue(row.last_name);
++    const email = normalizeCellValue(row.email).toLowerCase();
++    const mobile_phone = normalizeCellValue(row.mobile_phone);
++    const company = row.company?.trim();
++    const company_website = normalizeCellValue(row.company_website);
++    const companyDomain = company_website || company.trim().toLowerCase();
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+       return;
+     }
+ 
+     valid.push({
+       last_name: last_name ?? "",
+       first_name: row.first_name || null,
+       email: email || null,
+       mobile_phone: mobile_phone || null,
+       office_phone: row.office_phone || null,
+       company: row.company || null,
+       position: row.position || null,
+-      company_website: row.company_website || null,
++      company_website: companyDomain || null,
+       personal_website: row.personal_website || null,
+       social_linkedin: row.social_linkedin || null,
+       social_x: row.social_x || null,
+       social_instagram: row.social_instagram || null,
+       social_facebook: row.social_facebook || null,
+       personal_email: row.personal_email || null,
+       company_email: row.company_email || null,
+       company_phone: row.company_phone || null,
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+       employees: row.employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+   });
+ 
+   if (valid.length > 0) {
+     await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+   }
+ 
+   return { imported: valid.length, skipped: errors.length, errors };
+ }
+
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --decorate 9790f4c' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c (HEAD -> feature/task-5, origin/feature/task-5) Handle legacy employee range imports
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+exec
+/usr/bin/bash -lc 'git show --format= --no-ext-diff --unified=40 9790f4c -- components/modals/ImportTargetsModal.tsx' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '330,365p' 'app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx' && sed -n '70,90p' 'app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -256,80 +256,83 @@ const ImportTargetsModal = () => {
+                 <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                   <span>CRM Field</span>
+                   <span>CSV Column</span>
+                 </div>
+                 {TARGET_FIELDS.map((field) => (
+                   <div key={field.key} className="grid grid-cols-2 gap-2 items-center">
+                     <span className="text-sm">
+                       {field.label}
+                       {field.required && (
+                         <span className="text-destructive ml-1">*</span>
+                       )}
+                     </span>
+                     <Select
+                       value={mapping[field.key] ?? SKIP_VALUE}
+                       onValueChange={(val) =>
+                         setMapping((prev) => ({ ...prev, [field.key]: val }))
+                       }
+                     >
+                       <SelectTrigger className="h-8 text-sm">
+                         <SelectValue placeholder="— skip —" />
+                       </SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value={SKIP_VALUE}>— skip —</SelectItem>
+                         {csvHeaders.map((h) => (
+                           <SelectItem key={h} value={h}>
+                             {h}
+                           </SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 ))}
+                 <p className="text-xs text-muted-foreground pt-1">
+                   <span className="text-destructive">*</span> last_name or company is required per row.
+                 </p>
+                 {previewRows.length > 0 && (
+                   <p className="text-xs text-muted-foreground">
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+         )}
+ 
+         {/* Step 3: Preview */}
+         {step === "preview" && preview && (
+           <div className="space-y-4 py-2">
+             <div className="rounded-md border p-4 space-y-1">
+               <p className="text-sm font-medium">
+                 Ready to import{" "}
+                 <span className="text-green-600 dark:text-green-400">
+                   {preview.valid} row{preview.valid !== 1 ? "s" : ""}
+                 </span>
+                 {preview.skipped > 0 && (
+                   <>
+                     {" "}— {" "}
+                     <span className="text-yellow-600 dark:text-yellow-400">
+                       {preview.skipped} row{preview.skipped !== 1 ? "s" : ""} will be skipped
+                     </span>
+                   </>
+                 )}
+                 .
+               </p>
+               {preview.skipReasons.length > 0 && (
+                 <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 pt-1">
+                   {preview.skipReasons.map((r, i) => (
+                     <li key={i}>{r}</li>
+                   ))}
+                   {preview.skipped > preview.skipReasons.length && (
+                     <li>…and {preview.skipped - preview.skipReasons.length} more</li>
+                   )}
+                 </ul>
+               )}
+             </div>
+             {preview.valid === 0 && (
+               <p className="text-sm text-destructive">
+                 No valid rows to import. Go back and adjust your column mapping.
+               </p>
+             )}
+
+ succeeded in 0ms:
+                <FormLabel className="text-base">Is target active?</FormLabel>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        {form.formState.errors.root?.serverError && (
+          <p className="text-sm text-destructive" aria-live="polite">
+            {form.formState.errors.root.serverError.message}
+          </p>
+        )}
+        <Button disabled={form.formState.isSubmitting} type="submit" className="w-full">
+          {form.formState.isSubmitting ? (
+            <span className="flex items-center animate-pulse">Saving data ...</span>
+          ) : (
+            "Create target"
+          )}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+    personal_email: z.string().optional(),
+    company_email:  z.string().optional(),
+    company_phone:  z.string().optional(),
+    city:           z.string().optional(),
+    country:        z.string().optional(),
+    industry:       z.string().optional(),
+    employees:      z.string().optional(),
+    description:    z.string().optional(),
+    status: z.boolean(),
+  });
+
+  type UpdateTargetFormValues = z.infer<typeof formSchema>;
+
+  const form = useForm<UpdateTargetFormValues>({
+    resolver: zodResolver(formSchema),
+    mode: "onBlur",
+    defaultValues: {
+      first_name: initialData.first_name || "",
+      last_name: initialData.last_name || "",
+      email: initialData.email || "",
+      mobile_phone: initialData.mobile_phone || "",
+
+exec
+/usr/bin/bash -lc "node -e 'function n(v){return typeof v===\"string\"?v.trim():\"\"} function p(value){const parsed=JSON.parse(n(value)||\"null\"); return "'`${parsed.min.toString()}-${parsed.max.toString()}`}; for (const v of ["50","{}","{'"\\\"min\\\":50}\",undefined,\"50-200\",\"{\\\"min\\\":50,\\\"max\\\":200}\"]) { try { console.log(JSON.stringify(v), \"=>\", p(v)); } catch(e) { console.log(JSON.stringify(v), \"=>\", e.name + \": \" + e.message); } }'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"50" => TypeError: Cannot read properties of undefined (reading 'toString')
+"{}" => TypeError: Cannot read properties of undefined (reading 'toString')
+"{\"min\":50}" => TypeError: Cannot read properties of undefined (reading 'toString')
+undefined => TypeError: Cannot read properties of null (reading 'min')
+"50-200" => SyntaxError: Unexpected non-whitespace character after JSON at position 2 (line 1 column 3)
+"{\"min\":50,\"max\":200}" => 50-200
+
+exec
+/usr/bin/bash -lc "sed -n '1,125p' actions/crm/targets/update-target.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,130p' actions/crm/targets/create-target.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+import { prismadb } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+export const updateTarget = async (data: {
+  id: string;
+  last_name?: string;
+  first_name?: string;
+  email?: string;
+  mobile_phone?: string;
+  office_phone?: string;
+  company?: string;
+  company_website?: string;
+  personal_website?: string;
+  position?: string;
+  social_x?: string;
+  social_linkedin?: string;
+  social_instagram?: string;
+  social_facebook?: string;
+  personal_email?: string;
+  company_email?: string;
+  company_phone?: string;
+  city?: string;
+  country?: string;
+  industry?: string;
+  employees?: string;
+  description?: string;
+  status?: boolean;
+}) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  const { id, ...rest } = data;
+  if (!id) return { error: "id is required" };
+
+  try {
+    const target = await prismadb.crm_Targets.update({
+      where: { id },
+      data: { ...rest, updatedBy: (session.user as any).id },
+    });
+    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+    return { data: target };
+  } catch (error) {
+    return { error: "Failed to update target" };
+  }
+};
+
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+import { prismadb } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+export const createTarget = async (data: {
+  last_name?: string;
+  first_name?: string;
+  email?: string;
+  mobile_phone?: string;
+  office_phone?: string;
+  company?: string;
+  company_website?: string;
+  personal_website?: string;
+  position?: string;
+  social_x?: string;
+  social_linkedin?: string;
+  social_instagram?: string;
+  social_facebook?: string;
+  status?: boolean;
+}) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  const { last_name, email, mobile_phone, ...rest } = data;
+  if (!last_name && !data.company) return { error: "last_name or company is required" };
+
+  try {
+    const target = await prismadb.crm_Targets.create({
+      data: { last_name: last_name ?? "", email, mobile_phone, ...rest, created_by: (session.user as any).id },
+    });
+    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+    return { data: target };
+  } catch (error) {
+    return { error: "Failed to create target" };
+  }
+};
+
+exec
+/usr/bin/bash -lc "rg -n \"employees:\" 'app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx' 'app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx' actions/crm/targets/create-target.ts actions/crm/targets/update-target.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+
+exec
+/usr/bin/bash -lc "git show 3f6c118:actions/crm/targets/import-targets.ts | sed -n '1,115p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show f4450db:actions/crm/targets/import-targets.ts | sed -n '1,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+
+import { authOptions } from "@/lib/auth";
+import { prismadb } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import Papa from "papaparse";
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getServerSession(authOptions);
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = row.last_name;
+    const email = row.email;
+    const mobile_phone = row.mobile_phone;
+
+    if (!last_name) {
+      errors.push(`Row ${index + 2}: missing last_name`);
+      return;
+    }
+    if (!email && !mobile_phone) {
+      errors.push(`Row ${index + 2}: missing email or mobile_phone`);
+      return;
+    }
+
+    valid.push({
+      last_name,
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: row.company_website || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: row.employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+"use server";
+
+import { authOptions } from "@/lib/auth";
+import { prismadb } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import Papa from "papaparse";
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getServerSession(authOptions);
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = row.last_name;
+    const email = row.email;
+    const mobile_phone = row.mobile_phone;
+
+    if (!last_name) {
+      errors.push(`Row ${index + 2}: missing last_name`);
+      return;
+    }
+    if (!email && !mobile_phone) {
+      errors.push(`Row ${index + 2}: missing email or mobile_phone`);
+      return;
+    }
+
+    valid.push({
+      last_name,
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: row.company_website || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx' | sed -n '70,78p;342,354p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '7,65p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    70	    personal_email: z.string().optional(),
+    71	    company_email:  z.string().optional(),
+    72	    company_phone:  z.string().optional(),
+    73	    city:           z.string().optional(),
+    74	    country:        z.string().optional(),
+    75	    industry:       z.string().optional(),
+    76	    employees:      z.string().optional(),
+    77	    description:    z.string().optional(),
+    78	    status: z.boolean(),
+   342	            <FormItem><FormLabel>Industry</FormLabel>
+   343	              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+   344	              <FormMessage />
+   345	            </FormItem>
+   346	          )} />
+   347	          <FormField control={form.control} name="employees" render={({ field }) => (
+   348	            <FormItem><FormLabel>Employees</FormLabel>
+   349	              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+   350	              <FormMessage />
+   351	            </FormItem>
+   352	          )} />
+   353	        </div>
+   354	        <FormField control={form.control} name="description" render={({ field }) => (
+
+ succeeded in 0ms:
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+
+exec
+/usr/bin/bash -lc "nl -ba prisma/schema.prisma | sed -n '1232,1240p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '48,60p;140,170p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+  1232	  company_phone    String?
+  1233	  city             String?
+  1234	  country          String?
+  1235	  industry         String?
+  1236	  employees        String?
+  1237	  description      String?
+  1238	
+  1239	  // Conversion tracking
+  1240	  converted_at         DateTime?
+
+ succeeded in 0ms:
+    48	  { key: "social_instagram", label: "Instagram", required: false },
+    49	  { key: "social_facebook", label: "Facebook", required: false },
+    50	  { key: "personal_email", label: "Personal Email", required: false },
+    51	  { key: "company_email",  label: "Company Email",  required: false },
+    52	  { key: "company_phone",  label: "Company Phone",  required: false },
+    53	  { key: "city",           label: "City",           required: false },
+    54	  { key: "country",        label: "Country",        required: false },
+    55	  { key: "industry",       label: "Industry",       required: false },
+    56	  { key: "employees",      label: "Employees",      required: false },
+    57	  { key: "description",    label: "Description",    required: false },
+    58	];
+    59	
+    60	const SKIP_VALUE = "__skip__";
+   140	  const computePreview = () => {
+   141	    let valid = 0;
+   142	    let skipped = 0;
+   143	    const skipReasons: string[] = [];
+   144	
+   145	    for (let i = 0; i < csvRows.length; i++) {
+   146	      const raw = csvRows[i];
+   147	      const row: Record<string, string> = {};
+   148	      for (const field of TARGET_FIELDS) {
+   149	        const csvCol = mapping[field.key];
+   150	        if (csvCol && csvCol !== SKIP_VALUE) {
+   151	          row[field.key] = raw[csvCol] ?? "";
+   152	        }
+   153	      }
+   154	
+   155	      if (!row.last_name && !row.company) {
+   156	        skipped++;
+   157	        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+   158	        continue;
+   159	      }
+   160	      valid++;
+   161	    }
+   162	
+   163	    return { valid, skipped, skipReasons };
+   164	  };
+   165	
+   166	  const handleImport = async () => {
+   167	    if (!selectedFile) return;
+   168	    setIsLoading(true);
+   169	
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+
+codex
+**Incident Report**
+
+Most likely root cause: `actions/crm/targets/import-targets.ts` introduced an unsafe employee-range parser that assumes every imported `employees` value is JSON shaped as `{ "min": number, "max": number }`.
+
+The crash occurs here: [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11)
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The server action calls this unconditionally for each CSV row at [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59), before row validation completes.
+
+**Why this matches the incident**
+
+The observed error was:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That exact error happens when `JSON.parse(row.employees)` succeeds, but the parsed value does not contain `min` or `max`. Examples:
+
+```text
+"50"        -> parsed as number 50, parsed.min is undefined
+"{}"        -> parsed.min is undefined
+{"min":50}  -> parsed.max is undefined
+```
+
+A missing employees value would instead produce `Cannot read properties of null (reading 'min')`, and a normal range like `50-200` would produce a JSON syntax error. So the triggering CSV likely had an Employees column mapped with a value such as `50`, `{}`, or a partial structured range.
+
+**Supporting evidence**
+
+`employees` is stored as a plain optional string in Prisma: [schema.prisma](/home/dmytro/Github/phd-work/nextcrm-app-update/prisma/schema.prisma:1236)
+
+The target update form also treats it as a plain string and even uses `50-200` as the placeholder: [UpdateTargetForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)
+
+The CSV import preview only validates `last_name` or `company`; it does not validate or normalize `employees`, so the UI can allow the import and then fail in the server action: [ImportTargetsModal.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/components/modals/ImportTargetsModal.tsx:140)
+
+Git history shows the failing parser was added in commit `9790f4c` titled `Handle legacy employee range imports` on May 1, 2026. The incident occurred on May 4, 2026. Before that commit, import stored `employees: row.employees || null`.
+
+**Conclusion**
+
+This is not a Next.js/App Router failure, database failure, or authentication issue. The import action regressed when legacy structured employee-range support was added without guarding non-legacy values. A CSV import with a mapped Employees column containing a JSON-valid but non-`{min,max}` value caused the action to throw and abort the request.
+tokens used
+47,061
+**Incident Report**
+
+Most likely root cause: `actions/crm/targets/import-targets.ts` introduced an unsafe employee-range parser that assumes every imported `employees` value is JSON shaped as `{ "min": number, "max": number }`.
+
+The crash occurs here: [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:11)
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+The server action calls this unconditionally for each CSV row at [import-targets.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/actions/crm/targets/import-targets.ts:59), before row validation completes.
+
+**Why this matches the incident**
+
+The observed error was:
+
+```text
+Cannot read properties of undefined (reading 'toString')
+```
+
+That exact error happens when `JSON.parse(row.employees)` succeeds, but the parsed value does not contain `min` or `max`. Examples:
+
+```text
+"50"        -> parsed as number 50, parsed.min is undefined
+"{}"        -> parsed.min is undefined
+{"min":50}  -> parsed.max is undefined
+```
+
+A missing employees value would instead produce `Cannot read properties of null (reading 'min')`, and a normal range like `50-200` would produce a JSON syntax error. So the triggering CSV likely had an Employees column mapped with a value such as `50`, `{}`, or a partial structured range.
+
+**Supporting evidence**
+
+`employees` is stored as a plain optional string in Prisma: [schema.prisma](/home/dmytro/Github/phd-work/nextcrm-app-update/prisma/schema.prisma:1236)
+
+The target update form also treats it as a plain string and even uses `50-200` as the placeholder: [UpdateTargetForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347)
+
+The CSV import preview only validates `last_name` or `company`; it does not validate or normalize `employees`, so the UI can allow the import and then fail in the server action: [ImportTargetsModal.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/components/modals/ImportTargetsModal.tsx:140)
+
+Git history shows the failing parser was added in commit `9790f4c` titled `Handle legacy employee range imports` on May 1, 2026. The incident occurred on May 4, 2026. Before that commit, import stored `employees: row.employees || null`.
+
+**Conclusion**
+
+This is not a Next.js/App Router failure, database failure, or authentication issue. The import action regressed when legacy structured employee-range support was added without guarding non-legacy values. A CSV import with a mapped Employees column containing a JSON-valid but non-`{min,max}` value caused the action to throw and abort the request.

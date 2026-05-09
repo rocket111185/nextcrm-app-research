@@ -1,0 +1,726 @@
+run_name: feature-task-4-C
+case_name: feature-task-4
+variant: C
+target_branch: feature/task-4
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:09:09Z
+elapsed_seconds: 48
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-4/C/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced a build-breaking footer refactor.
+
+Evidence:
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels` from `./footer-links`.
+- [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) exports only `footerLinks` and `footerMeta`; it does not export `footerBadgeLabels`.
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21) also contains:
+  ```tsx
+  footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+  ```
+  TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses.
+
+Impact:
+- The incident is a build-time TypeScript failure, not a runtime request failure.
+- The repeated `"Build logging finished"` error events are likely noise from the build logging wrapper. The actionable failures are the two compiler diagnostics emitted at `2026-05-04T20:15:46.777Z`.
+
+Conclusion:
+- The footer metadata refactor added a reference to a non-existent export and introduced an invalid nullish/logical expression. This is the most likely cause of the failed builds.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e096c-3dcf-74c3-90d3-58e12542f88b
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "uncorrelated",
+      "eventCount": 5,
+      "firstSeen": "2026-05-04T20:11:49.374Z",
+      "lastSeen": "2026-05-04T20:15:46.777Z",
+      "events": [
+        {
+          "time": "2026-05-04T20:11:49.374Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:12:29.375Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the relevant files and repo status only, then report the likely failure chain without editing anything. The provided AGENTS instructions reference MCP tools that are not available here, so I’ll use read-only shell commands and keep outputs tight.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,140p' 'app/[locale]/(routes)/components/Footer.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import getNextVersion from "@/actions/system/get-next-version";
+import Link from "next/link";
+import { version } from "@/package.json";
+import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+
+const Footer = async () => {
+  const nextVersion = await getNextVersion();
+
+  return (
+    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+      <div className="hidden md:flex pr-5">
+        <Link href="/">
+          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+          </h1>
+        </Link>
+      </div>
+      <div className="hidden md:flex space-x-2 pr-2">
+        {footerMeta.poweredBy}
+        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+        </span>
+        +
+        <Link href={footerLinks[0].href}>
+          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+            {footerLinks[0].label}
+          </span>
+        </Link>
+        {footerMeta.hostedBy}
+        <span className="text-bold underline hover:text-foreground transition-colors">
+          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+        </span>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+ succeeded in 0ms:
+export const footerLinks = [
+  {
+    href: "https://ui.shadcn.com/",
+    label: "shadcnUI",
+  },
+  {
+    href: "https://www.vercel.com",
+    label: "Vercel",
+  },
+];
+
+export const footerMeta = {
+  poweredBy: "powered by Next.js",
+  hostedBy: "hosted by:",
+};
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'pwd && rg -n "footerBadgeLabels|footer-links|Build logging finished|build-with-logs" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+./app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+./app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+
+codex
+The local evidence matches the observability payload: `Footer.tsx` imports a symbol that is not exported, and the expression at the reported line mixes `??` with `||`. I’m checking recent history for those files to distinguish a code regression from a logging/reporting artifact.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' scripts/build-with-logs.*" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read scripts/build-with-logs.*: No such file or directory
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/footer-links.ts' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,45p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	export const footerLinks = [
+     2	  {
+     3	    href: "https://ui.shadcn.com/",
+     4	    label: "shadcnUI",
+     5	  },
+     6	  {
+     7	    href: "https://www.vercel.com",
+     8	    label: "Vercel",
+     9	  },
+    10	];
+    11	
+    12	export const footerMeta = {
+    13	  poweredBy: "powered by Next.js",
+    14	  hostedBy: "hosted by:",
+    15	};
+
+ succeeded in 0ms:
+     1	import getNextVersion from "@/actions/system/get-next-version";
+     2	import Link from "next/link";
+     3	import { version } from "@/package.json";
+     4	import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+     5	
+     6	const Footer = async () => {
+     7	  const nextVersion = await getNextVersion();
+     8	
+     9	  return (
+    10	    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+    11	      <div className="hidden md:flex pr-5">
+    12	        <Link href="/">
+    13	          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+    14	            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+    15	          </h1>
+    16	        </Link>
+    17	      </div>
+    18	      <div className="hidden md:flex space-x-2 pr-2">
+    19	        {footerMeta.poweredBy}
+    20	        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+    21	          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+    22	        </span>
+    23	        +
+    24	        <Link href={footerLinks[0].href}>
+    25	          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+    26	            {footerLinks[0].label}
+    27	          </span>
+    28	        </Link>
+    29	        {footerMeta.hostedBy}
+    30	        <span className="text-bold underline hover:text-foreground transition-colors">
+    31	          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+    32	        </span>
+    33	      </div>
+    34	    </footer>
+    35	  );
+    36	};
+    37	
+    38	export default Footer;
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts' | head -20" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+003a728 feat(footer): read app version from package.json instead of env var
+2cd7ebb chore: cleanup sidebar, footer, and add inngest proxy passthrough
+3ffff2a feat: PostgreSQL migration and Next.js 16 upgrade
+5922dde Update - getNextVersion - get next version from package.json - disabled fetching build count from github - api limit issue
+022fc4c Update - Build count info - added 2 actions for fetching data from Github - added build info counter to Sidebar component - updated .env.local.example - new strings for Github
+a7364dd Cypress and i18n integration
+
+codex
+The latest relevant commit is `4ef0d23 Refactor footer link metadata`, which is a strong suspect because it touches the exact footer metadata boundary now failing. I’m checking that commit diff to confirm whether it introduced both TypeScript errors.
+exec
+/usr/bin/bash -lc 'git show --stat --oneline 4ef0d23' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git show HEAD''^:'"'app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,60p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 Refactor footer link metadata
+ app/[locale]/(routes)/components/Footer.tsx      | 18 +++++++++---------
+ app/[locale]/(routes)/components/footer-links.ts | 15 +++++++++++++++
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+
+ succeeded in 0ms:
+import getNextVersion from "@/actions/system/get-next-version";
+import Link from "next/link";
+import { version } from "@/package.json";
+
+
+const Footer = async () => {
+  const nextVersion = await getNextVersion();
+  //console.log(nextVersion, "nextVersion");
+  return (
+    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+      <div className="hidden md:flex pr-5">
+        <Link href="/">
+          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+          </h1>
+        </Link>
+      </div>
+      <div className="hidden md:flex space-x-2 pr-2">
+        powered by Next.js
+        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+        </span>
+        +
+        <Link href={"https://ui.shadcn.com/"}>
+          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+            shadcnUI
+          </span>
+        </Link>{" "}
+        hosted by:
+        <span className="text-bold underline hover:text-foreground transition-colors">
+          <Link href="https://www.vercel.com">Vercel</Link>
+        </span>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+exec
+/usr/bin/bash -lc "git show -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts' --format=medium 4ef0d23" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,11 +1,11 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+@@ -16,19 +16,19 @@ const Footer = async () => {
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+     </footer>
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+exec
+/usr/bin/bash -lc "rg --files | rg 'build-with-logs|build|scripts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+scripts/validation/validators.ts
+scripts/validation/types.ts
+scripts/validation/table-schema.ts
+scripts/validation/report-generator.ts
+scripts/validate-migration.ts
+scripts/test-data/README.md
+scripts/migration/uuid-mapper.ts
+scripts/migration/utils.ts
+scripts/migration/types.ts
+scripts/migration/transformers/users-transformer.ts
+scripts/migration/transformers/todo-list-transformer.ts
+scripts/migration/transformers/tasks-transformer.ts
+scripts/migration/transformers/tasks-comments-transformer.ts
+scripts/migration/transformers/system-services-transformer.ts
+scripts/migration/transformers/system-modules-enabled-transformer.ts
+scripts/migration/transformers/sections-transformer.ts
+scripts/migration/transformers/openai-keys-transformer.ts
+scripts/migration/transformers/my-account-transformer.ts
+scripts/migration/transformers/modul-status-transformer.ts
+scripts/migration/transformers/invoices-transformer.ts
+scripts/migration/transformers/invoice-states-transformer.ts
+scripts/migration/transformers/index.ts
+scripts/migration/transformers/image-upload-transformer.ts
+scripts/migration/transformers/gpt-models-transformer.ts
+scripts/migration/transformers/employees-transformer.ts
+scripts/migration/transformers/documents-types-transformer.ts
+scripts/migration/transformers/documents-transformer.ts
+scripts/migration/transformers/crm-opportunities-type-transformer.ts
+scripts/migration/transformers/crm-opportunities-transformer.ts
+scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+scripts/migration/transformers/crm-leads-transformer.ts
+scripts/migration/transformers/crm-industry-type-transformer.ts
+scripts/migration/transformers/crm-contracts-transformer.ts
+scripts/migration/transformers/crm-contacts-transformer.ts
+scripts/migration/transformers/crm-campaigns-transformer.ts
+scripts/migration/transformers/crm-accounts-transformer.ts
+scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+scripts/migration/transformers/boards-transformer.ts
+scripts/migration/table-config.ts
+scripts/migration/progress-tracker.ts
+scripts/migration/orchestrator.ts
+scripts/migration/junction-populator.ts
+scripts/migration/error-logger.ts
+scripts/migration/checkpoint-manager.ts
+scripts/migration/batch-processor.ts
+scripts/migration/backfill-roles.ts
+scripts/migration/MIGRATION_MONGO_NATIVE.md
+scripts/migrate-openai-keys.ts
+scripts/migrate-mongo-to-postgres.ts
+scripts/db-backup.sh
+scripts/VALIDATION_README.md
+scripts/VALIDATION_QUICK_START.md
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md
+scripts/PHASE2_IMPLEMENTATION_STATUS.md
+scripts/MIGRATION_README.md
+e2b/build.ts
+buildCount.json
+
+exec
+/usr/bin/bash -lc "sed -n '1,160p' package.json" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+{
+  "name": "nextcrm-app",
+  "version": "0.6.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "migrate:mongo-to-postgres": "pnpm exec tsx scripts/migrate-mongo-to-postgres.ts",
+    "validate:migration": "pnpm exec tsx scripts/validate-migration.ts",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
+  },
+  "prisma": {
+    "seed": "ts-node ./prisma/seeds/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0",
+    "@aws-sdk/signature-v4-crt": "^3.997.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hookform/resolvers": "^5.2.2",
+    "@mendable/firecrawl-js": "^1.29.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@openai/agents": "^0.8.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@prisma/adapter-pg": "7.6.0",
+    "@prisma/client": "7.6.0",
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-hover-card": "^1.1.15",
+    "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@react-email/components": "^1.0.8",
+    "@react-email/markdown": "0.0.18",
+    "@react-email/render": "^2.0.4",
+    "@react-pdf/renderer": "^4.3.2",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@tanstack/react-table": "^8.21.3",
+    "@tiptap/extension-link": "^3.20.5",
+    "@tiptap/extension-underline": "^3.20.5",
+    "@tiptap/pm": "^3.20.5",
+    "@tiptap/react": "^3.20.5",
+    "@tiptap/starter-kit": "^3.20.5",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "@vercel/otel": "^2.1.2",
+    "ai": "^6.0.99",
+    "autoprefixer": "^10.4.24",
+    "aws-crt": "^1.29.0",
+    "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-auth": "^1.5.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "e2b": "^2.18.0",
+    "encoding": "^0.1.13",
+    "entities": "^7.0.1",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "16.1.6",
+    "form-data": "^4.0.5",
+    "geist": "^1.7.0",
+    "imap": "^0.8.19",
+    "inngest": "^4.0.2",
+    "input-otp": "^1.4.2",
+    "jotai": "^2.18.0",
+    "lucide-react": "^0.574.0",
+    "mailparser": "^3.9.3",
+    "mammoth": "^1.12.0",
+    "mcp-handler": "^1.1.0",
+    "moment": "^2.30.1",
+    "mongodb": "^7.1.0",
+    "next": "^16.2.1",
+    "next-intl": "^4.8.3",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^8.0.4",
+    "openai": "^6.25.0",
+    "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.18.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "postcss": "^8.5.6",
+    "primeicons": "^7.0.0",
+    "primereact": "^10.9.7",
+    "react": "19.2.4",
+    "react-day-picker": "^9.13.2",
+    "react-doc-viewer": "^0.1.15",
+    "react-dom": "19.2.4",
+    "react-dropzone": "^15.0.0",
+    "react-hook-form": "^7.71.2",
+    "react-hot-toast": "^2.6.0",
+    "react-icons": "^5.5.0",
+    "react-resizable-panels": "^4.6.5",
+    "react-youtube": "^10.1.0",
+    "recharts": "2.15.4",
+    "resend": "6.9.2",
+    "sharp": "^0.34.5",
+    "sonner": "^2.0.7",
+    "swr": "^2.4.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.1",
+    "tailwindcss-animate": "^1.0.7",
+    "vaul": "^1.1.2",
+    "xmlbuilder2": "^4.0.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/imap": "^0.8.43",
+    "@types/jest": "^30.0.0",
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^25.3.0",
+    "@types/nodemailer": "^7.0.11",
+    "@types/papaparse": "^5.5.2",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.16.0",
+    "@types/react": "npm:types-react@19.0.0-rc.1",
+    "@types/react-dom": "npm:types-react-dom@19.0.0-rc.1",
+    "dotenv": "^17.3.1",
+    "jest": "^30.3.0",
+    "jest-environment-node": "^30.3.0",
+    "prisma": "^7.6.0",
+    "shadcn": "^3.8.5",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+
+exec
+/usr/bin/bash -lc 'rg -n "build-with-logs|Build logging finished|logging finished" -S .github . package.json' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 1 in 0ms:
+codex
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced a build-breaking footer refactor.
+
+Evidence:
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels` from `./footer-links`.
+- [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) exports only `footerLinks` and `footerMeta`; it does not export `footerBadgeLabels`.
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21) also contains:
+  ```tsx
+  footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+  ```
+  TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses.
+
+Impact:
+- The incident is a build-time TypeScript failure, not a runtime request failure.
+- The repeated `"Build logging finished"` error events are likely noise from the build logging wrapper. The actionable failures are the two compiler diagnostics emitted at `2026-05-04T20:15:46.777Z`.
+
+Conclusion:
+- The footer metadata refactor added a reference to a non-existent export and introduced an invalid nullish/logical expression. This is the most likely cause of the failed builds.
+
+No code changes were made.
+tokens used
+17,881
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced a build-breaking footer refactor.
+
+Evidence:
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) imports `footerBadgeLabels` from `./footer-links`.
+- [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) exports only `footerLinks` and `footerMeta`; it does not export `footerBadgeLabels`.
+- [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21) also contains:
+  ```tsx
+  footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+  ```
+  TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses.
+
+Impact:
+- The incident is a build-time TypeScript failure, not a runtime request failure.
+- The repeated `"Build logging finished"` error events are likely noise from the build logging wrapper. The actionable failures are the two compiler diagnostics emitted at `2026-05-04T20:15:46.777Z`.
+
+Conclusion:
+- The footer metadata refactor added a reference to a non-existent export and introduced an invalid nullish/logical expression. This is the most likely cause of the failed builds.
+
+No code changes were made.

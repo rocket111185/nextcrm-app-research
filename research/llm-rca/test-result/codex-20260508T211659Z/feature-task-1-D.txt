@@ -1,0 +1,1688 @@
+run_name: feature-task-1-D
+case_name: feature-task-1
+variant: D
+target_branch: feature/task-1
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:35:41Z
+elapsed_seconds: 61
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-1/D/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `/api/feedback` failed because the development environment did not have a usable Resend API key configured.
+
+The client error was logged through `/api/client-logs`, but the failed request itself was `axios.post("/api/feedback", data)` from `FeedbackForm`. At incident commit `9be250f`, `app/api/feedback/route.ts` initializes Resend before processing the feedback. `lib/resend.ts` throws when neither `RESEND_API_KEY` nor the `systemServices` `resend_smtp` key exists, and the route converts that into HTTP 500.
+
+Supporting evidence:
+
+- Incident environment is `development` on `localhost:3000`.
+- Local `.env.local` has `RESEND_API_KEY` present but blank.
+- The reported commit only changed sign-in files, not feedback code.
+- At `9be250f`, feedback submission depends on Resend for every successful submission and does not have the dev/test fallback used by auth OTP email sending.
+- The observed browser error is exactly consistent with `/api/feedback` returning 500 during Resend initialization or email send.
+
+Confidence: high. The most likely failure path is missing email-provider configuration in development, not the sign-in changes from the incident commit.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0984-8b04-7d62-9e09-77132f6a05b5
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e2980506f723a88135d38840469ec308",
+      "eventCount": 1,
+      "firstSeen": "2026-05-02T18:34:29.669Z",
+      "lastSeen": "2026-05-02T18:34:29.669Z",
+      "events": [
+        {
+          "time": "2026-05-02T18:34:29.669Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.[locale].(routes).components.FeedbackForm",
+          "route": "/en",
+          "clientUrl": "http://localhost:3000/en",
+          "message": "Feedback submission failed",
+          "error": {
+            "name": "AxiosError",
+            "message": "Request failed with status code 500",
+            "stack": "AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n"
+          },
+          "correlation": {
+            "traceId": "e2980506f723a88135d38840469ec308",
+            "spanId": "f184cde15745e45a",
+            "clientSessionId": "4f335a33-9f27-425f-8755-32b3bc9b3859"
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-2",
+    "commit": "9be250f3b729ab946e5f722fcf5c443d9e9ab516",
+    "changedFiles": [
+      "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx",
+      "app/[locale]/(auth)/sign-in/page.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx"
+    ],
+    "diffStat": ".../(auth)/sign-in/components/LoginComponent.tsx   | 17 ++++++++++----\n app/[locale]/(auth)/sign-in/page.tsx               |  4 +++-\n .../boards/[boardId]/components/Kanban.tsx         | 27 ++++++++++------------\n .../projects/boards/[boardId]/forms/NewSection.tsx |  5 ++++\n 4 files changed, 33 insertions(+), 20 deletions(-)"
+  }
+}
+```
+
+codex
+I’ll inspect the relevant feedback/client-log path and recent diff context only, then report the most likely cause without editing anything.
+exec
+/usr/bin/bash -lc "rg -n \"FeedbackForm|Feedback submission failed|client-logs|feedback\" app components lib src . --glob '"'!node_modules'"' --glob '"'!*.map'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git status --short && git show --stat --oneline --decorate --no-renames HEAD && git diff -- app/[locale]/\\(auth\\)/sign-in/components/LoginComponent.tsx app/[locale]/\\(auth\\)/sign-in/page.tsx app/[locale]/\\(routes\\)/projects/boards/[boardId]/components/Kanban.tsx app/[locale]/\\(routes\\)/projects/boards/[boardId]/forms/NewSection.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: src: No such file or directory (os error 2)
+app/client-logger.ts:8:const ENDPOINT = "/api/client-logs";
+app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+app/api/feedback/route.ts:33:  const { feedback } = body;
+app/api/feedback/route.ts:35:    typeof feedback === "string" ? feedback.trim() : "";
+app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+./app/client-logger.ts:8:const ENDPOINT = "/api/client-logs";
+./docs/superpowers/specs/2026-04-05-products-playwright-tests-design.md:136:- Duplicate SKU — error feedback expected
+./docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:266:- Note: bulk modals call `/enrich-bulk` routes — those routes only fire an Inngest event today and do not call enrichment directly. They must be updated to call `getApiKey` before sending the Inngest event and return `402 NO_API_KEY` early if no key is found, providing fast user feedback rather than a silent Inngest job failure.
+./app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+./app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+./app/api/feedback/route.ts:33:  const { feedback } = body;
+./app/api/feedback/route.ts:35:    typeof feedback === "string" ? feedback.trim() : "";
+./app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1145:- Modify: `app/api/feedback/route.ts`
+./scripts/VALIDATION_README.md:366:   - Collect user feedback
+./CONTRIBUTING.md:31:- Focus on constructive feedback
+./CONTRIBUTING.md:163:   - Wait for review and address feedback
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:500:- [ ] Submit a form in each tab — toast feedback still works (no regressions)
+app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+app/[locale]/(routes)/components/FeedbackForm.tsx:28:  feedback: z.string().min(1, {
+app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+app/[locale]/(routes)/components/FeedbackForm.tsx:43:  const feedbackValue = form.watch("feedback") || "";
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/FeedbackForm.tsx:54:      logger.error({ err: error }, "Feedback submission failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:57:      toast.success("Thank you for your feedback.");
+app/[locale]/(routes)/components/FeedbackForm.tsx:68:          name="feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:71:              <FormLabel>Send us a feedback</FormLabel>
+app/[locale]/(routes)/components/FeedbackForm.tsx:74:                  placeholder="Your feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:81:                We appreciate every feedback. Thank you for helping us make this
+app/[locale]/(routes)/components/FeedbackForm.tsx:85:                {feedbackValue.length}/1000
+app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+./app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+./app/[locale]/(routes)/components/FeedbackForm.tsx:28:  feedback: z.string().min(1, {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:43:  const feedbackValue = form.watch("feedback") || "";
+./app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:54:      logger.error({ err: error }, "Feedback submission failed");
+./app/[locale]/(routes)/components/FeedbackForm.tsx:57:      toast.success("Thank you for your feedback.");
+./app/[locale]/(routes)/components/FeedbackForm.tsx:68:          name="feedback"
+./app/[locale]/(routes)/components/FeedbackForm.tsx:71:              <FormLabel>Send us a feedback</FormLabel>
+./app/[locale]/(routes)/components/FeedbackForm.tsx:74:                  placeholder="Your feedback"
+./app/[locale]/(routes)/components/FeedbackForm.tsx:81:                We appreciate every feedback. Thank you for helping us make this
+./app/[locale]/(routes)/components/FeedbackForm.tsx:85:                {feedbackValue.length}/1000
+./app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+./app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+./app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+
+ succeeded in 0ms:
+3fee71d (HEAD -> feature/task-1, origin/feature/task-1) Refine feedback submission flow
+ app/[locale]/(routes)/components/Feedback.tsx     |  2 +-
+ app/[locale]/(routes)/components/FeedbackForm.tsx | 11 ++++++++++-
+ app/api/feedback/route.ts                         | 12 +++++++++---
+ 3 files changed, 20 insertions(+), 5 deletions(-)
+
+codex
+The workspace is currently on `feature/task-1` at `3fee71d`, while the incident metadata says `feature/task-2` at `9be250f`. I’ll use the local source to identify the failing path and call out that branch/commit mismatch as a confidence limit.
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/FeedbackForm.tsx' | sed -n '1,140p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/api/feedback/route.ts | sed -n '1,180p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import { createClientLogger } from "@/app/client-logger";
+     4	import * as z from "zod";
+     5	import axios from "axios";
+     6	import { useState } from "react";
+     7	import { useForm } from "react-hook-form";
+     8	import { zodResolver } from "@hookform/resolvers/zod";
+     9	
+    10	import {
+    11	  Form,
+    12	  FormField,
+    13	  FormItem,
+    14	  FormLabel,
+    15	  FormControl,
+    16	  FormDescription,
+    17	  FormMessage,
+    18	} from "@/components/ui/form";
+    19	import { Button } from "@/components/ui/button";
+    20	
+    21	import { Textarea } from "@/components/ui/textarea";
+    22	import { toast } from "sonner";
+    23	import { Icons } from "@/components/ui/icons";
+    24	
+    25	
+    26	const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+    27	const formSchema = z.object({
+    28	  feedback: z.string().min(1, {
+    29	    message: "Feedback must be at least 1 character.",
+    30	  }),
+    31	});
+    32	
+    33	interface FeedbackFormProps {
+    34	  setOpen: (open: boolean) => void;
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	  const feedbackValue = form.watch("feedback") || "";
+    44	
+    45	  const onSubmit = async (data: any) => {
+    46	    setLoading(true);
+    47	    try {
+    48	      await axios.post("/api/feedback", {
+    49	        ...data,
+    50	        page: window.location.pathname,
+    51	        submittedAt: new Date().toISOString(),
+    52	      });
+    53	    } catch (error) {
+    54	      logger.error({ err: error }, "Feedback submission failed");
+    55	      toast.error("Something went wrong. Please try again later.");
+    56	    } finally {
+    57	      toast.success("Thank you for your feedback.");
+    58	      setOpen(false);
+    59	      setLoading(false);
+    60	    }
+    61	  };
+    62	
+    63	  return (
+    64	    <Form {...form}>
+    65	      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+    66	        <FormField
+    67	          control={form.control}
+    68	          name="feedback"
+    69	          render={({ field }) => (
+    70	            <FormItem>
+    71	              <FormLabel>Send us a feedback</FormLabel>
+    72	              <FormControl>
+    73	                <Textarea
+    74	                  placeholder="Your feedback"
+    75	                  disabled={loading}
+    76	                  maxLength={1000}
+    77	                  {...field}
+    78	                />
+    79	              </FormControl>
+    80	              <FormDescription className="text-xs text-muted-foreground">
+    81	                We appreciate every feedback. Thank you for helping us make this
+    82	                app better
+    83	              </FormDescription>
+    84	              <div className="text-right text-xs text-muted-foreground">
+    85	                {feedbackValue.length}/1000
+    86	              </div>
+    87	              <FormMessage />
+    88	            </FormItem>
+    89	          )}
+    90	        />
+    91	        <div className="flex justify-end space-x-2">
+    92	          <Button
+    93	            variant={"outline"}
+    94	            onClick={() => setOpen(false)}
+    95	            disabled={loading}
+    96	          >
+    97	            Cancel
+    98	          </Button>
+    99	          <Button type="submit" variant={"secondary"} disabled={loading}>
+   100	            {loading ? (
+   101	              <div className="flex space-x-2">
+   102	                <Icons.spinner className="h-4 w-4 animate-spin" />
+   103	                <span>Sending ...</span>
+   104	              </div>
+   105	            ) : (
+   106	              "Submit"
+   107	            )}
+   108	          </Button>
+   109	        </div>
+   110	      </form>
+   111	    </Form>
+   112	  );
+   113	};
+   114	
+   115	export default FeedbackForm;
+
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	function buildFeedbackSubject(sourcePath: string) {
+     8	  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+     9	}
+    10	
+    11	export async function POST(req: Request) {
+    12	  /*
+    13	  Resend.com function init - this is a helper function that will be used to send emails
+    14	  */
+    15	  let resend;
+    16	  try {
+    17	    resend = await resendHelper();
+    18	  } catch (error: any) {
+    19	    return NextResponse.json(
+    20	      { error: error?.message || "Resend API key is not configured" },
+    21	      { status: 500 }
+    22	    );
+    23	  }
+    24	  
+    25	  const session = await getSession();
+    26	  if (!session) {
+    27	    return new NextResponse("Unauthenticated", { status: 401 });
+    28	  }
+    29	  const body = await req.json();
+    30	  if (!body) {
+    31	    return new NextResponse("Missing body", { status: 400 });
+    32	  }
+    33	  const { feedback } = body;
+    34	  const normalizedFeedback =
+    35	    typeof feedback === "string" ? feedback.trim() : "";
+    36	  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+    37	
+    38	  if (!normalizedFeedback) {
+    39	    return new NextResponse("Missing feedback", { status: 400 });
+    40	  }
+    41	
+    42	  try {
+    43	    //Send mail via Resend to info@softbase.cz
+    44	    await resend.emails.send({
+    45	      from:
+    46	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    47	      to: "info@softbase.cz",
+    48	      subject: buildFeedbackSubject(sourcePath),
+    49	      text: normalizedFeedback,
+    50	    });
+    51	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    52	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    53	  } catch (error) {
+    54	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    55	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    56	  }
+    57	}
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/client-logs/route.ts | sed -n '1,160p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { createLogger } from "@/lib/logger";
+     2	import { NextResponse } from "next/server";
+     3	
+     4	const logger = createLogger({ module: "app.api.client-logs" });
+     5	const levels = new Set(["debug", "info", "warn", "error"]);
+     6	const MAX_BODY_BYTES = 64 * 1024;
+     7	
+     8	interface ClientLogBody {
+     9	  context?: unknown;
+    10	  level?: unknown;
+    11	  message?: unknown;
+    12	  pathname?: unknown;
+    13	  sessionId?: unknown;
+    14	  timestamp?: unknown;
+    15	  url?: unknown;
+    16	}
+    17	
+    18	function limitString(value: unknown, fallback: string) {
+    19	  if (typeof value !== "string" || value.trim() === "") {
+    20	    return fallback;
+    21	  }
+    22	
+    23	  return value.length > 1_000 ? `${value.slice(0, 1_000)}...[truncated]` : value;
+    24	}
+    25	
+    26	export async function POST(req: Request) {
+    27	  const contentLength = Number(req.headers.get("content-length") ?? 0);
+    28	  if (contentLength > MAX_BODY_BYTES) {
+    29	    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    30	  }
+    31	
+    32	  let body: ClientLogBody;
+    33	  try {
+    34	    const parsed = await req.json();
+    35	    body = parsed && typeof parsed === "object" ? (parsed as ClientLogBody) : {};
+    36	  } catch {
+    37	    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    38	  }
+    39	
+    40	  const level = typeof body.level === "string" && levels.has(body.level) ? body.level : "info";
+    41	  const message = limitString(body?.message, "Client log");
+    42	  const payload = {
+    43	    client: {
+    44	      sessionId: limitString(body?.sessionId, "unknown"),
+    45	      pathname: limitString(body?.pathname, "unknown"),
+    46	      url: limitString(body?.url, "unknown"),
+    47	      timestamp: limitString(body?.timestamp, "unknown"),
+    48	      userAgent: limitString(req.headers.get("user-agent"), "unknown"),
+    49	    },
+    50	    context: body.context && typeof body.context === "object" ? body.context : {},
+    51	  };
+    52	
+    53	  switch (level) {
+    54	    case "debug":
+    55	      logger.debug(payload, message);
+    56	      break;
+    57	    case "warn":
+    58	      logger.warn(payload, message);
+    59	      break;
+    60	    case "error":
+    61	      logger.error(payload, message);
+    62	      break;
+    63	    default:
+    64	      logger.info(payload, message);
+    65	  }
+    66	
+    67	  return new NextResponse(null, { status: 204 });
+    68	}
+
+exec
+/usr/bin/bash -lc "rg -n \"sendMail|nodemailer|EMAIL|SMTP|RESEND|feedback@|mail\" app lib components prisma package.json .env* --glob '"'!node_modules'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local:5:# Encryption key for email credentials (generate with: openssl rand -hex 32)
+.env.local:12:# Google OAuth (optional for local dev — Email OTP works without it)
+.env.local:16:#SMTP
+.env.local:17:EMAIL_HOST=smtp.resend.com
+.env.local:18:EMAIL_FROM=info@domain.com
+.env.local:19:EMAIL_USERNAME=smtp@domain.com
+.env.local:20:EMAIL_PASSWORD=SuperSEEcretPaSWord123+
+.env.local:66:RESEND_API_KEY=
+.env.local:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.local:88:# E2E tests use Email OTP — the test setup intercepts OTP from the database
+.env.local:89:TEST_USER_EMAIL=admin@domain.com
+.env:18:# Email Service (Resend)
+.env:19:RESEND_API_KEY="your-resend-api-key"
+.env:40:# SMTP / IMAP (optional, for email client functionality)
+.env:41:SMTP_HOST="smtp.example.com"
+.env:42:SMTP_PORT="587"
+.env:43:SMTP_USER="your-smtp-user"
+.env:44:SMTP_PASSWORD="your-smtp-password"
+.env:49:# Email feature — generate with: openssl rand -hex 32
+.env:50:EMAIL_ENCRYPTION_KEY=your_64_hex_char_key_here
+.env:52:# Campaigns — Resend email sending
+.env:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+.env.example:18:# Email Service (Resend)
+.env.example:19:RESEND_API_KEY="your-resend-api-key"
+.env.example:40:# SMTP / IMAP (optional, for email client functionality)
+.env.example:41:SMTP_HOST="smtp.example.com"
+.env.example:42:SMTP_PORT="587"
+.env.example:43:SMTP_USER="your-smtp-user"
+.env.example:44:SMTP_PASSWORD="your-smtp-password"
+.env.example:49:# Email feature — generate with: openssl rand -hex 32
+.env.example:50:EMAIL_ENCRYPTION_KEY=your_64_hex_char_key_here
+.env.example:52:# Campaigns — Resend email sending
+.env.example:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env.example:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+package.json:57:    "@react-email/components": "^1.0.8",
+package.json:58:    "@react-email/markdown": "0.0.18",
+package.json:59:    "@react-email/render": "^2.0.4",
+package.json:95:    "mailparser": "^3.9.3",
+package.json:103:    "nodemailer": "^8.0.4",
+package.json:141:    "@types/mailparser": "^3.4.6",
+package.json:143:    "@types/nodemailer": "^7.0.11",
+package.json:188:      "nodemailer@<8.0.4": ">=8.0.4",
+package.json:192:      "nodemailer@<=8.0.4": ">=8.0.5",
+.env.local.example:5:# Encryption key for email credentials (generate with: openssl rand -hex 32)
+.env.local.example:12:# Google OAuth (optional for local dev — Email OTP works without it)
+.env.local.example:16:#SMTP
+.env.local.example:17:EMAIL_HOST=smtp.resend.com
+.env.local.example:18:EMAIL_FROM=info@domain.com
+.env.local.example:19:EMAIL_USERNAME=smtp@domain.com
+.env.local.example:20:EMAIL_PASSWORD=SuperSEEcretPaSWord123+
+.env.local.example:66:RESEND_API_KEY=
+.env.local.example:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.local.example:88:# E2E tests use Email OTP — the test setup intercepts OTP from the database
+.env.local.example:89:TEST_USER_EMAIL=admin@domain.com
+prisma/seeds/seed.ts:123:  const testUserEmail = process.env.TEST_USER_EMAIL || "test@nextcrm.app";
+prisma/seeds/seed.ts:125:    where: { email: testUserEmail },
+prisma/seeds/seed.ts:133:      email: testUserEmail,
+prisma/seeds/seed.ts:141:  console.log(`Test user seeded: ${testUserEmail}`);
+prisma/schema.prisma.orig:45:  email          String?   @unique
+prisma/schema.prisma.orig:46:  emailVerified  DateTime?
+lib/sendmail.ts:1:import nodemailer from "nodemailer";
+lib/sendmail.ts:4:const logger = createLogger({ module: "sendmail" });
+lib/sendmail.ts:6:interface EmailOptions {
+lib/sendmail.ts:14:export default async function sendEmail(
+lib/sendmail.ts:15:  emailOptions: EmailOptions
+lib/sendmail.ts:17:  const transporter = nodemailer.createTransport({
+lib/sendmail.ts:18:    host: process.env.EMAIL_HOST,
+lib/sendmail.ts:22:      user: process.env.EMAIL_USERNAME,
+lib/sendmail.ts:23:      pass: process.env.EMAIL_PASSWORD,
+lib/sendmail.ts:28:    await transporter.sendMail(emailOptions);
+lib/sendmail.ts:31:        hasHtml: Boolean(emailOptions.html),
+lib/sendmail.ts:33:      "Email sent"
+lib/sendmail.ts:39:        hasHtml: Boolean(emailOptions.html),
+lib/sendmail.ts:41:      "Email send failed"
+lib/auth.ts:3:import { emailOTP, testUtils } from "better-auth/plugins";
+lib/auth.ts:65:  emailAndPassword: {
+lib/auth.ts:70:    emailOTP({
+lib/auth.ts:71:      sendVerificationOTP: async ({ email, otp, type }) => {
+lib/auth.ts:74:          await resend.emails.send({
+lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+lib/auth.ts:76:            to: email,
+lib/auth.ts:78:            text: `Your one-time verification code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you did not request this, please ignore this email.`,
+lib/auth.ts:81:          // In dev/test, email sending may fail — OTP is captured by testUtils plugin
+lib/auth.ts:83:            console.log(`[Auth] OTP email send failed for ${email}, but captured by testUtils. Content: "${otp}"`);
+prisma/schema.prisma:28:  email                String?
+prisma/schema.prisma:58:  emails             EmailsToAccounts[]
+prisma/schema.prisma:83:  email             String?
+prisma/schema.prisma:159:  email        String?
+prisma/schema.prisma:172:  @@unique([targetId, email])
+prisma/schema.prisma:371:  email             String
+prisma/schema.prisma:461:  email            String?
+prisma/schema.prisma:462:  personal_email   String?
+prisma/schema.prisma:489:  emails            EmailsToContacts[]
+prisma/schema.prisma:605:  email
+prisma/schema.prisma:692:  email  String?
+prisma/schema.prisma:922:  email            String       @unique
+prisma/schema.prisma:923:  emailVerified    Boolean      @default(false)
+prisma/schema.prisma:959:  emailAccounts        EmailAccount[]
+prisma/schema.prisma:960:  emails               Email[]
+prisma/schema.prisma:974:  @@index([email])
+prisma/schema.prisma:1210:  email            String?
+prisma/schema.prisma:1230:  personal_email   String?
+prisma/schema.prisma:1231:  company_email    String?
+prisma/schema.prisma:1392:// EMAIL FEATURE
+prisma/schema.prisma:1395:model EmailAccount {
+prisma/schema.prisma:1416:  emails Email[]
+prisma/schema.prisma:1422:enum EmailFolder {
+prisma/schema.prisma:1427:model Email {
+prisma/schema.prisma:1429:  emailAccountId  String      @db.Uuid
+prisma/schema.prisma:1433:  folder          EmailFolder
+prisma/schema.prisma:1436:  fromEmail       String?
+prisma/schema.prisma:1448:  account   EmailAccount     @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:1450:  embedding EmailEmbedding?
+prisma/schema.prisma:1451:  contacts  EmailsToContacts[]
+prisma/schema.prisma:1452:  accounts  EmailsToAccounts[]
+prisma/schema.prisma:1454:  @@unique([emailAccountId, rfcMessageId])
+prisma/schema.prisma:1456:  @@index([emailAccountId])
+prisma/schema.prisma:1463:model EmailEmbedding {
+prisma/schema.prisma:1465:  emailId     String   @unique @db.Uuid
+prisma/schema.prisma:1470:  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:1472:  @@map("EmailEmbedding")
+prisma/schema.prisma:1475:model EmailsToContacts {
+prisma/schema.prisma:1476:  emailId   String @db.Uuid
+prisma/schema.prisma:1479:  email   Email        @relation(fields: [emailId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:1482:  @@id([emailId, contactId])
+prisma/schema.prisma:1483:  @@index([emailId])
+prisma/schema.prisma:1487:model EmailsToAccounts {
+prisma/schema.prisma:1488:  emailId   String @db.Uuid
+prisma/schema.prisma:1491:  email   Email        @relation(fields: [emailId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:1494:  @@id([emailId, accountId])
+prisma/schema.prisma:1495:  @@index([emailId])
+lib/resend.ts:11:  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+lib/resend.ts:14:    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+lib/new-user-notify.ts:4:import sendEmail from "./sendmail";
+lib/new-user-notify.ts:14:    await sendEmail({
+lib/new-user-notify.ts:15:      from: process.env.EMAIL_FROM,
+lib/new-user-notify.ts:16:      to: admin.email,
+lib/new-user-notify.ts:21:    console.log("Email sent to admin");
+app/api/og/route.tsx:31:      : "NextCRM is an open source CRM build on top of NextJS. Technology stack: NextJS with Typescrtipt, MongoDB, TailwindCSS, React, Prisma, shadCN, resend.com, react.email and more. ";
+lib/mcp/tools/index.ts:12:export { crmEmailAccountTools } from "./crm-email-accounts";
+lib/mcp/tools/index.ts:28:import { crmEmailAccountTools } from "./crm-email-accounts";
+lib/mcp/tools/index.ts:45:  ...crmEmailAccountTools,
+lib/mcp/tools/crm-targets.ts:45:    description: "Search targets by name, email, or company (substring match)",
+lib/mcp/tools/crm-targets.ts:57:          ilike("email", args.query),
+lib/mcp/tools/crm-targets.ts:78:      email: z.string().email().optional(),
+lib/mcp/tools/crm-targets.ts:88:        email?: string;
+lib/mcp/tools/crm-targets.ts:110:      email: z.string().email().optional(),
+lib/mcp/tools/crm-targets.ts:121:        email?: string;
+lib/mcp/tools/crm-leads.ts:45:    description: "Search leads by name, company, or email (substring match)",
+lib/mcp/tools/crm-leads.ts:57:          ilike("email", args.query),
+lib/mcp/tools/crm-leads.ts:78:      email: z.string().email().optional(),
+lib/mcp/tools/crm-leads.ts:87:        email?: string;
+lib/mcp/tools/crm-leads.ts:108:      email: z.string().email().optional(),
+lib/mcp/tools/crm-leads.ts:118:        email?: string;
+lib/mcp/tools/crm-enrichment.ts:37:        select: { id: true, email: true },
+lib/mcp/tools/crm-enrichment.ts:40:      if (!contact!.email) {
+lib/mcp/tools/crm-enrichment.ts:41:        externalError("Contact has no email. Add an email to enable enrichment.");
+lib/mcp/tools/crm-enrichment.ts:125:        select: { id: true, email: true },
+lib/mcp/tools/crm-enrichment.ts:128:      if (!target!.email) {
+lib/mcp/tools/crm-enrichment.ts:129:        externalError("Target has no email. Add an email to enable enrichment.");
+lib/mcp/tools/crm-email-accounts.ts:5:export const crmEmailAccountTools = [
+lib/mcp/tools/crm-email-accounts.ts:7:    name: "crm_list_email_accounts",
+lib/mcp/tools/crm-email-accounts.ts:8:    description: "List the authenticated user's connected email accounts",
+lib/mcp/tools/crm-email-accounts.ts:13:        prismadb.emailAccount.findMany({
+lib/mcp/tools/crm-email-accounts.ts:35:        prismadb.emailAccount.count({ where }),
+app/api/inngest/route.ts:8:import { emailSyncAll } from "@/inngest/functions/emails/sync-all";
+app/api/inngest/route.ts:9:import { emailSyncAccount } from "@/inngest/functions/emails/sync-account";
+app/api/inngest/route.ts:10:import { embedEmail } from "@/inngest/functions/emails/embed-email";
+app/api/inngest/route.ts:11:import { emailLinkCrm } from "@/inngest/functions/emails/link-crm";
+app/api/inngest/route.ts:34:    emailSyncAll,
+app/api/inngest/route.ts:35:    emailSyncAccount,
+app/api/inngest/route.ts:36:    embedEmail,
+app/api/inngest/route.ts:37:    emailLinkCrm,
+lib/mcp/tools/crm-contacts.ts:45:    description: "Search contacts by name, email, or phone (substring match)",
+lib/mcp/tools/crm-contacts.ts:57:          ilike("email", args.query),
+lib/mcp/tools/crm-contacts.ts:79:      email: z.string().email().optional(),
+lib/mcp/tools/crm-contacts.ts:88:        email?: string;
+lib/mcp/tools/crm-contacts.ts:116:      email: z.string().email().optional(),
+lib/mcp/tools/crm-contacts.ts:126:        email?: string;
+lib/mcp/tools/crm-activities.ts:23:      type: z.enum(["call", "meeting", "note", "email"]).optional(),
+lib/mcp/tools/crm-activities.ts:79:    description: "Create a CRM activity (call/meeting/note/email) and link to entities",
+lib/mcp/tools/crm-activities.ts:81:      type: z.enum(["call", "meeting", "note", "email"]),
+prisma/migrations/20260401000001_add_better_auth_user_fields/migration.sql:2:ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "emailVerified" BOOLEAN NOT NULL DEFAULT false;
+lib/mcp/tools/crm-accounts.ts:78:      email: z.string().email().optional(),
+lib/mcp/tools/crm-accounts.ts:86:        email?: string;
+lib/mcp/tools/crm-accounts.ts:114:      email: z.string().email().optional(),
+lib/mcp/tools/crm-accounts.ts:123:        email?: string;
+app/api/feedback/route.ts:13:  Resend.com function init - this is a helper function that will be used to send emails
+app/api/feedback/route.ts:43:    //Send mail via Resend to info@softbase.cz
+app/api/feedback/route.ts:44:    await resend.emails.send({
+app/api/feedback/route.ts:46:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+app/api/feedback/route.ts:51:    logger.info({ userId: session.user.id }, "Feedback email sent");
+app/api/feedback/route.ts:54:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+lib/mcp/tools/campaigns.ts:64:      reply_to: z.string().email().optional(),
+lib/mcp/tools/campaigns.ts:94:      reply_to: z.string().email().optional(),
+lib/mcp/tools/campaigns.ts:181:    description: "List campaign email templates (org-wide)",
+lib/mcp/tools/campaigns.ts:208:    description: "Create a campaign email template",
+lib/junction-helpers.ts:429:   * Returns a standard set of user fields (id, name, email, avatar).
+lib/junction-helpers.ts:450:              email: true,
+lib/junction-helpers.ts:492:                  email: true,
+lib/junction-helpers.ts:518: * // users = [{ id: '...', name: 'John Doe', email: '...', avatar: '...' }, ...]
+components/skeletons/emails-skeleton.tsx:3:const EmailsSkeleton = () => (
+components/skeletons/emails-skeleton.tsx:37:export default EmailsSkeleton;
+app/api/crm/targets/enrich/route.ts:45:    select: { id: true, email: true, company: true, company_website: true },
+app/api/crm/targets/enrich/route.ts:52:  // Scenario 1: personal search — requires email
+app/api/crm/targets/enrich/route.ts:54:  if (!target.email && !target.company) {
+app/api/crm/targets/enrich/route.ts:56:      { error: "Add an email (personal search) or company name (company search) to this target before enriching." },
+app/api/crm/targets/enrich/route.ts:90:          { email: target.email ?? '' },
+app/api/crm/targets/enrich/route.ts:92:          "email",
+prisma/migrations/20260328000000_add_crm_activities/migration.sql:6:  CREATE TYPE "crm_Activity_Type" AS ENUM ('call', 'meeting', 'note', 'email');
+lib/enrichment/utils/skip-list.ts:32:      'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 
+lib/enrichment/utils/skip-list.ts:33:      'aol.com', 'icloud.com', 'protonmail.com'
+lib/enrichment/utils/skip-list.ts:38:export function shouldSkipEmail(email: string, skipList: Set<string>): boolean {
+lib/enrichment/utils/skip-list.ts:39:  const domain = email.split('@')[1]?.toLowerCase();
+lib/enrichment/utils/skip-list.ts:51:export function getSkipReason(email: string, skipList: Set<string>): string {
+lib/enrichment/utils/skip-list.ts:52:  const domain = email.split('@')[1]?.toLowerCase();
+lib/enrichment/utils/skip-list.ts:53:  if (!domain) return 'Invalid email';
+lib/enrichment/utils/skip-list.ts:56:    if (['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com', 'icloud.com'].includes(domain)) {
+lib/enrichment/utils/skip-list.ts:57:      return 'Common email provider';
+lib/enrichment/utils/skip-list.ts:59:    if (domain.includes('mail')) {
+lib/enrichment/utils/skip-list.ts:60:      return 'Temporary/free email service';
+lib/enrichment/utils/email-detection.ts:3:export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+lib/enrichment/utils/email-detection.ts:5:export function detectEmailColumn(rows: CSVRow[], columns: string[]): {
+lib/enrichment/utils/email-detection.ts:19:    // Check if column name suggests email
+lib/enrichment/utils/email-detection.ts:22:      columnLower.includes('email') ? 10 :
+lib/enrichment/utils/email-detection.ts:23:      columnLower.includes('mail') ? 8 :
+lib/enrichment/utils/email-detection.ts:24:      columnLower.includes('e-mail') ? 8 :
+lib/enrichment/utils/email-detection.ts:31:    let emailCount = 0;
+lib/enrichment/utils/email-detection.ts:35:      if (value && EMAIL_REGEX.test(value)) {
+lib/enrichment/utils/email-detection.ts:36:        emailCount++;
+lib/enrichment/utils/email-detection.ts:40:    const dataScore = (emailCount / sampleSize) * 10;
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:3:  ADD COLUMN IF NOT EXISTS "personal_email"       TEXT,
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:4:  ADD COLUMN IF NOT EXISTS "company_email"        TEXT,
+lib/enrichment/types/index.ts:16:  emailColumn: string;
+prisma/migrations/20260325000002_add_email_module/migration.sql:3:  CREATE TYPE "EmailFolder" AS ENUM ('INBOX', 'SENT');
+prisma/migrations/20260325000002_add_email_module/migration.sql:7:-- CreateTable: EmailAccount
+prisma/migrations/20260325000002_add_email_module/migration.sql:8:CREATE TABLE IF NOT EXISTS "EmailAccount" (
+prisma/migrations/20260325000002_add_email_module/migration.sql:28:    CONSTRAINT "EmailAccount_pkey" PRIMARY KEY ("id")
+prisma/migrations/20260325000002_add_email_module/migration.sql:31:-- CreateTable: Email
+prisma/migrations/20260325000002_add_email_module/migration.sql:32:CREATE TABLE IF NOT EXISTS "Email" (
+prisma/migrations/20260325000002_add_email_module/migration.sql:34:    "emailAccountId" UUID NOT NULL,
+prisma/migrations/20260325000002_add_email_module/migration.sql:38:    "folder"         "EmailFolder" NOT NULL,
+prisma/migrations/20260325000002_add_email_module/migration.sql:41:    "fromEmail"      TEXT,
+prisma/migrations/20260325000002_add_email_module/migration.sql:53:    CONSTRAINT "Email_pkey" PRIMARY KEY ("id")
+prisma/migrations/20260325000002_add_email_module/migration.sql:56:-- CreateTable: EmailEmbedding
+prisma/migrations/20260325000002_add_email_module/migration.sql:57:CREATE TABLE IF NOT EXISTS "EmailEmbedding" (
+prisma/migrations/20260325000002_add_email_module/migration.sql:59:    "emailId"     UUID NOT NULL,
+prisma/migrations/20260325000002_add_email_module/migration.sql:64:    CONSTRAINT "EmailEmbedding_pkey" PRIMARY KEY ("id")
+prisma/migrations/20260325000002_add_email_module/migration.sql:67:-- CreateTable: EmailsToContacts
+prisma/migrations/20260325000002_add_email_module/migration.sql:68:CREATE TABLE IF NOT EXISTS "EmailsToContacts" (
+prisma/migrations/20260325000002_add_email_module/migration.sql:69:    "emailId"   UUID NOT NULL,
+prisma/migrations/20260325000002_add_email_module/migration.sql:72:    CONSTRAINT "EmailsToContacts_pkey" PRIMARY KEY ("emailId", "contactId")
+prisma/migrations/20260325000002_add_email_module/migration.sql:75:-- CreateTable: EmailsToAccounts
+prisma/migrations/20260325000002_add_email_module/migration.sql:76:CREATE TABLE IF NOT EXISTS "EmailsToAccounts" (
+prisma/migrations/20260325000002_add_email_module/migration.sql:77:    "emailId"   UUID NOT NULL,
+prisma/migrations/20260325000002_add_email_module/migration.sql:80:    CONSTRAINT "EmailsToAccounts_pkey" PRIMARY KEY ("emailId", "accountId")
+prisma/migrations/20260325000002_add_email_module/migration.sql:85:  ALTER TABLE "Email" ADD CONSTRAINT "Email_emailAccountId_rfcMessageId_key" UNIQUE ("emailAccountId", "rfcMessageId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:90:  ALTER TABLE "EmailEmbedding" ADD CONSTRAINT "EmailEmbedding_emailId_key" UNIQUE ("emailId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:95:CREATE INDEX IF NOT EXISTS "EmailAccount_userId_idx"   ON "EmailAccount"("userId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:96:CREATE INDEX IF NOT EXISTS "EmailAccount_isActive_idx" ON "EmailAccount"("isActive");
+prisma/migrations/20260325000002_add_email_module/migration.sql:98:CREATE INDEX IF NOT EXISTS "Email_userId_idx"                       ON "Email"("userId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:99:CREATE INDEX IF NOT EXISTS "Email_emailAccountId_idx"               ON "Email"("emailAccountId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:100:CREATE INDEX IF NOT EXISTS "Email_folder_idx"                       ON "Email"("folder");
+prisma/migrations/20260325000002_add_email_module/migration.sql:101:CREATE INDEX IF NOT EXISTS "Email_isDeleted_idx"                    ON "Email"("isDeleted");
+prisma/migrations/20260325000002_add_email_module/migration.sql:102:CREATE INDEX IF NOT EXISTS "Email_sentAt_idx"                       ON "Email"("sentAt");
+prisma/migrations/20260325000002_add_email_module/migration.sql:103:CREATE INDEX IF NOT EXISTS "Email_userId_folder_isDeleted_isRead_idx" ON "Email"("userId", "folder", "isDeleted", "isRead");
+prisma/migrations/20260325000002_add_email_module/migration.sql:105:CREATE INDEX IF NOT EXISTS "EmailsToContacts_emailId_idx"   ON "EmailsToContacts"("emailId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:106:CREATE INDEX IF NOT EXISTS "EmailsToContacts_contactId_idx" ON "EmailsToContacts"("contactId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:108:CREATE INDEX IF NOT EXISTS "EmailsToAccounts_emailId_idx"   ON "EmailsToAccounts"("emailId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:109:CREATE INDEX IF NOT EXISTS "EmailsToAccounts_accountId_idx" ON "EmailsToAccounts"("accountId");
+prisma/migrations/20260325000002_add_email_module/migration.sql:113:  ALTER TABLE "EmailAccount" ADD CONSTRAINT "EmailAccount_userId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:119:  ALTER TABLE "Email" ADD CONSTRAINT "Email_emailAccountId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:120:    FOREIGN KEY ("emailAccountId") REFERENCES "EmailAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000002_add_email_module/migration.sql:125:  ALTER TABLE "Email" ADD CONSTRAINT "Email_userId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:131:  ALTER TABLE "EmailEmbedding" ADD CONSTRAINT "EmailEmbedding_emailId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:132:    FOREIGN KEY ("emailId") REFERENCES "Email"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000002_add_email_module/migration.sql:137:  ALTER TABLE "EmailsToContacts" ADD CONSTRAINT "EmailsToContacts_emailId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:138:    FOREIGN KEY ("emailId") REFERENCES "Email"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000002_add_email_module/migration.sql:143:  ALTER TABLE "EmailsToContacts" ADD CONSTRAINT "EmailsToContacts_contactId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:149:  ALTER TABLE "EmailsToAccounts" ADD CONSTRAINT "EmailsToAccounts_emailId_fkey"
+prisma/migrations/20260325000002_add_email_module/migration.sql:150:    FOREIGN KEY ("emailId") REFERENCES "Email"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000002_add_email_module/migration.sql:155:  ALTER TABLE "EmailsToAccounts" ADD CONSTRAINT "EmailsToAccounts_accountId_fkey"
+components/modals/ImportTargetsModal.tsx:39:  { key: "email", label: "Email", required: false },
+components/modals/ImportTargetsModal.tsx:50:  { key: "personal_email", label: "Personal Email", required: false },
+components/modals/ImportTargetsModal.tsx:51:  { key: "company_email",  label: "Company Email",  required: false },
+lib/enrichment/strategies/enrichment-strategy.ts:3:import { parseEmail, generateSearchQueriesFromEmail } from './email-parser';
+lib/enrichment/strategies/enrichment-strategy.ts:28:    // Parse email if available
+lib/enrichment/strategies/enrichment-strategy.ts:29:    const emailField = Object.entries(row).find(([key]) => 
+lib/enrichment/strategies/enrichment-strategy.ts:30:      key.toLowerCase().includes('email')
+lib/enrichment/strategies/enrichment-strategy.ts:34:    let emailDomain: string | null = null;
+lib/enrichment/strategies/enrichment-strategy.ts:35:    let isPersonalEmail = false;
+lib/enrichment/strategies/enrichment-strategy.ts:37:    if (emailField && emailField[1]) {
+lib/enrichment/strategies/enrichment-strategy.ts:38:      console.log(`[EnrichmentStrategy] Parsing email: ${emailField[1]}`);
+lib/enrichment/strategies/enrichment-strategy.ts:39:      const parsedEmail = parseEmail(emailField[1]);
+lib/enrichment/strategies/enrichment-strategy.ts:40:      if (parsedEmail) {
+lib/enrichment/strategies/enrichment-strategy.ts:41:        searchQueries = generateSearchQueriesFromEmail(parsedEmail);
+lib/enrichment/strategies/enrichment-strategy.ts:42:        emailDomain = parsedEmail.domain;
+lib/enrichment/strategies/enrichment-strategy.ts:43:        console.log(`[EnrichmentStrategy] Parsed domain: ${emailDomain}, Generated ${searchQueries.length} search queries`);
+lib/enrichment/strategies/enrichment-strategy.ts:45:        // Check if it's a personal email domain
+lib/enrichment/strategies/enrichment-strategy.ts:46:        isPersonalEmail = !!(emailDomain && (
+lib/enrichment/strategies/enrichment-strategy.ts:47:          emailDomain.includes('gmail.com') || 
+lib/enrichment/strategies/enrichment-strategy.ts:48:          emailDomain.includes('yahoo.') || 
+lib/enrichment/strategies/enrichment-strategy.ts:49:          emailDomain.includes('hotmail.') || 
+lib/enrichment/strategies/enrichment-strategy.ts:50:          emailDomain.includes('outlook.') ||
+lib/enrichment/strategies/enrichment-strategy.ts:51:          emailDomain.includes('aol.com') ||
+lib/enrichment/strategies/enrichment-strategy.ts:52:          emailDomain.includes('icloud.com') ||
+lib/enrichment/strategies/enrichment-strategy.ts:53:          emailDomain.includes('protonmail.com')
+lib/enrichment/strategies/enrichment-strategy.ts:57:        if (parsedEmail.companyName) {
+lib/enrichment/strategies/enrichment-strategy.ts:58:          row._parsed_company = parsedEmail.companyName;
+lib/enrichment/strategies/enrichment-strategy.ts:60:        if (parsedEmail.firstName && parsedEmail.lastName) {
+lib/enrichment/strategies/enrichment-strategy.ts:61:          row._parsed_name = `${parsedEmail.firstName} ${parsedEmail.lastName}`;
+lib/enrichment/strategies/enrichment-strategy.ts:71:        if (websiteField && emailDomain && !emailDomain.includes('gmail.com') && !emailDomain.includes('yahoo.') && !emailDomain.includes('hotmail.') && !emailDomain.includes('outlook.')) {
+lib/enrichment/strategies/enrichment-strategy.ts:74:            value: `https://${emailDomain}`,
+lib/enrichment/strategies/enrichment-strategy.ts:76:            source: 'Auto-generated from email domain'
+lib/enrichment/strategies/enrichment-strategy.ts:94:        console.log(`[EnrichmentStrategy] No company info from email, trying name-based search for: ${fullName}`);
+lib/enrichment/strategies/enrichment-strategy.ts:102:      } else if (emailDomain && !isPersonalEmail) {
+lib/enrichment/strategies/enrichment-strategy.ts:103:        // Fall back to domain search only if not personal email
+lib/enrichment/strategies/enrichment-strategy.ts:105:          emailDomain,
+lib/enrichment/strategies/enrichment-strategy.ts:106:          `site:${emailDomain}`,
+lib/enrichment/strategies/enrichment-strategy.ts:107:          `"${emailDomain}" company about`
+lib/enrichment/strategies/enrichment-strategy.ts:114:    if (emailDomain && !isPersonalEmail) {
+lib/enrichment/strategies/enrichment-strategy.ts:116:        const websiteUrl = `https://${emailDomain}`;
+lib/enrichment/strategies/enrichment-strategy.ts:121:          console.log(`[EnrichmentStrategy] Direct scrape successful for ${emailDomain}, content length: ${directScrape.data.markdown.length}`);
+lib/enrichment/strategies/enrichment-strategy.ts:136:            title: scrapeData?.title as string || `${emailDomain} - Official Website`,
+lib/enrichment/strategies/enrichment-strategy.ts:143:        console.log(`[EnrichmentStrategy] Direct domain scrape failed for ${emailDomain}, falling back to search`);
+app/api/crm/targets/[id]/contacts/route.ts:13:  const { name, email, phone, linkedinUrl } = await request.json() as {
+app/api/crm/targets/[id]/contacts/route.ts:14:    name?: string; email?: string; phone?: string; linkedinUrl?: string;
+app/api/crm/targets/[id]/contacts/route.ts:17:  if (!name && !email) {
+app/api/crm/targets/[id]/contacts/route.ts:18:    return new NextResponse("name or email required", { status: 400 });
+app/api/crm/targets/[id]/contacts/route.ts:25:      email: email ?? null,
+lib/enrichment/strategies/email-parser.ts:1:export interface ParsedEmail {
+lib/enrichment/strategies/email-parser.ts:9:export function parseEmail(email: string): ParsedEmail | null {
+lib/enrichment/strategies/email-parser.ts:10:  const emailRegex = /^([^@]+)@([^@]+)$/;
+lib/enrichment/strategies/email-parser.ts:11:  const match = email.match(emailRegex);
+lib/enrichment/strategies/email-parser.ts:18:  const result: ParsedEmail = {
+lib/enrichment/strategies/email-parser.ts:78:export function generateSearchQueriesFromEmail(parsedEmail: ParsedEmail): string[] {
+lib/enrichment/strategies/email-parser.ts:82:  queries.push(`site:${parsedEmail.domain}`);
+lib/enrichment/strategies/email-parser.ts:85:  if (parsedEmail.companyName) {
+lib/enrichment/strategies/email-parser.ts:86:    queries.push(`site:${parsedEmail.domain} about team company`);
+lib/enrichment/strategies/email-parser.ts:87:    queries.push(`${parsedEmail.companyName} company`);
+lib/enrichment/strategies/email-parser.ts:90:    queries.push(`"${parsedEmail.domain}" company information`);
+lib/enrichment/strategies/email-parser.ts:94:  if (parsedEmail.firstName && parsedEmail.lastName) {
+lib/enrichment/strategies/email-parser.ts:95:    const fullName = `${parsedEmail.firstName} ${parsedEmail.lastName}`;
+lib/enrichment/strategies/email-parser.ts:96:    queries.push(`"${fullName}" ${parsedEmail.companyName || parsedEmail.domain}`);
+prisma/migrations/20260325000000_campaigns_module/migration.sql:6:    "email" TEXT,
+prisma/migrations/20260325000000_campaigns_module/migration.sql:167:    "email" TEXT NOT NULL,
+components/modals/AddTargetToListModal.tsx:25:  email: string | null;
+components/modals/AddTargetToListModal.tsx:67:      t.email?.toLowerCase().includes(q) ||
+components/modals/AddTargetToListModal.tsx:118:            placeholder="Search by name, email or company..."
+components/modals/AddTargetToListModal.tsx:157:                        {t.email || t.company || "No contact info"}
+lib/enrichment/strategies/agent-enrichment-strategy.ts:3:import { shouldSkipEmail, loadSkipList, getSkipReason } from '../utils/skip-list';
+lib/enrichment/strategies/agent-enrichment-strategy.ts:29:    emailColumn: string,
+lib/enrichment/strategies/agent-enrichment-strategy.ts:34:    const email = row[emailColumn];
+lib/enrichment/strategies/agent-enrichment-strategy.ts:35:    console.log(`[AgentEnrichmentStrategy] Starting enrichment for email: ${email}`);
+lib/enrichment/strategies/agent-enrichment-strategy.ts:38:    if (email) {
+lib/enrichment/strategies/agent-enrichment-strategy.ts:41:      if (shouldSkipEmail(email, skipList)) {
+lib/enrichment/strategies/agent-enrichment-strategy.ts:42:        const skipReason = getSkipReason(email, skipList);
+lib/enrichment/strategies/agent-enrichment-strategy.ts:43:        console.log(`[AgentEnrichmentStrategy] Skipping email ${email}: ${skipReason}`);
+lib/enrichment/strategies/agent-enrichment-strategy.ts:61:          emailColumn,
+lib/enrichment/services/specialized-agents.ts:190:    - Extract email patterns if visible
+lib/enrichment/services/specialized-agents.ts:194:      emails: z.array(z.string().email()).optional(),
+lib/enrichment/services/specialized-agents.ts:241:  if (fieldNames.some(n => n.includes('email') || n.includes('phone') || n.includes('social')) ||
+lib/enrichment/services/specialized-agents.ts:259:    1. Parse the provided context (email, company name, etc.)
+lib/enrichment/services/openai.ts:850:5. If email is provided, intelligently parse it to extract useful components`,
+app/api/crm/leads/create-lead-from-web/route.ts:25:  const { firstName, lastName, account, job, email, phone, lead_source } = body;
+app/api/crm/leads/create-lead-from-web/route.ts:59:          email,
+lib/enrichment/presets/target-fields.ts:13:  { name: "personal_email",   displayName: "Personal Email",          description: "The target's personal (non-company) email", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:27:  { name: "company_email",    displayName: "Company Email",           description: "Generic company contact email (info@...)", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:35:// email is included here because BulkEnrichTargetsModal previously listed it; keep for backwards compat.
+lib/enrichment/presets/target-fields.ts:37:  { name: "email",            displayName: "Email",                   description: "The target's direct email address", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:38:  { name: "personal_email",   displayName: "Personal Email",          description: "The target's personal (non-company) email", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:49:  { name: "company_email",    displayName: "Company Email",           description: "Generic company contact email (info@...)", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:71:  personal_email:   "personal_email",
+lib/enrichment/presets/target-fields.ts:72:  company_email:    "company_email",
+prisma/migrations/0_init/migration.sql:48:    "email" TEXT,
+prisma/migrations/0_init/migration.sql:80:    "email" TEXT,
+prisma/migrations/0_init/migration.sql:172:    "email" TEXT,
+prisma/migrations/0_init/migration.sql:173:    "personal_email" TEXT,
+prisma/migrations/0_init/migration.sql:246:    "email" TEXT,
+prisma/migrations/0_init/migration.sql:267:    "email" TEXT,
+prisma/migrations/0_init/migration.sql:268:    "email_accountant" TEXT,
+prisma/migrations/0_init/migration.sql:346:    "partner_email" TEXT,
+prisma/migrations/0_init/migration.sql:521:    "email" TEXT NOT NULL,
+prisma/migrations/0_init/migration.sql:949:CREATE UNIQUE INDEX "Users_email_key" ON "Users"("email");
+prisma/migrations/0_init/migration.sql:952:CREATE INDEX "Users_email_idx" ON "Users"("email");
+lib/enrichment/e2b/apply-result.ts:1:const PERSONAL_EMAIL_DOMAINS = new Set([
+lib/enrichment/e2b/apply-result.ts:2:  'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+lib/enrichment/e2b/apply-result.ts:3:  'icloud.com', 'aol.com', 'protonmail.com', 'me.com',
+lib/enrichment/e2b/apply-result.ts:10:    email: string | null;
+lib/enrichment/e2b/apply-result.ts:21:  email: string | null;
+lib/enrichment/e2b/apply-result.ts:32:  if (ctx.email) {
+lib/enrichment/e2b/apply-result.ts:33:    const domain = ctx.email.split('@')[1];
+lib/enrichment/e2b/apply-result.ts:34:    if (domain && !PERSONAL_EMAIL_DOMAINS.has(domain.toLowerCase())) {
+lib/enrichment/e2b/apply-result.ts:58:  contact: { email: string | null; linkedinUrl: string | null }
+lib/enrichment/e2b/apply-result.ts:60:  if (contact.email) {
+lib/enrichment/e2b/apply-result.ts:61:    return { targetId_email: { targetId, email: contact.email } };
+lib/enrichment/e2b/apply-result.ts:66:  throw new Error("buildContactUpsertKey: contact has neither email nor linkedinUrl");
+lib/enrichment/e2b/agent-script.ts:7: *    COMPANY_NAME, COMPANY_WEBSITE, TARGET_EMAIL, TARGET_NAME, KNOWN_DOMAIN
+lib/enrichment/e2b/agent-script.ts:16:const email          = process.env.TARGET_EMAIL    || '';
+lib/enrichment/e2b/agent-script.ts:23:  ? \`Derive the company domain from the email: \${knownDomain}. Open https://\${knownDomain} directly.\`
+lib/enrichment/e2b/agent-script.ts:89:- Contact email: \${email || 'not known'}
+lib/enrichment/e2b/agent-script.ts:95:   - Any email address (look for "mailto:" links, "@" patterns)
+lib/enrichment/e2b/agent-script.ts:99:3. If the homepage lacks phone or email, open the /contact or /about page with browser_open, then browser_get_text again. These pages almost always have phone and email.
+lib/enrichment/e2b/agent-script.ts:120:      "email": null,
+prisma/initial-data/crm_Lead_Sources.json:5:  { "name": "Email Campaign" },
+app/api/crm/contacts/enrich/route.ts:37:    select: { id: true, email: true },
+app/api/crm/contacts/enrich/route.ts:43:  if (!contact.email) {
+app/api/crm/contacts/enrich/route.ts:45:      { error: "Contact has no email. Add an email to enable enrichment." },
+app/api/crm/contacts/enrich/route.ts:79:          { email: contact.email! },
+app/api/crm/contacts/enrich/route.ts:81:          "email",
+components/crm/activities/ActivityForm.tsx:25:type ActivityType = "call" | "meeting" | "note" | "email";
+components/crm/activities/ActivityForm.tsx:32:  email: "completed",
+components/crm/activities/ActivityForm.tsx:56:  const [emailSubject, setEmailSubject] = useState(
+components/crm/activities/ActivityForm.tsx:70:  const showEmailSubject = type === "email";
+components/crm/activities/ActivityForm.tsx:86:    if (showEmailSubject && emailSubject) metadata.subject = emailSubject;
+components/crm/activities/ActivityForm.tsx:136:                <SelectItem value="email">Email</SelectItem>
+components/crm/activities/ActivityForm.tsx:203:          {showEmailSubject && (
+components/crm/activities/ActivityForm.tsx:205:              <Label htmlFor="activity-email-subject">Email Subject</Label>
+components/crm/activities/ActivityForm.tsx:207:                id="activity-email-subject"
+components/crm/activities/ActivityForm.tsx:208:                value={emailSubject}
+components/crm/activities/ActivityForm.tsx:209:                onChange={(e) => setEmailSubject(e.target.value)}
+lib/auth-client.ts:2:import { emailOTPClient, adminClient } from "better-auth/client/plugins";
+lib/auth-client.ts:8:    emailOTPClient(),
+components/crm/activities/ActivityEntry.tsx:32:  email: Mail,
+components/crm/activities/ActivityEntry.tsx:39:  email: "Email",
+lib/api-keys.ts:2:import { decrypt } from "@/lib/email-crypto";
+components/campaigns/TipTapEditor.tsx:125:        {"{{first_name}} {{last_name}} {{email}} {{company}} {{position}}"}
+lib/email-crypto.ts:8:  const raw = process.env.EMAIL_ENCRYPTION_KEY;
+lib/email-crypto.ts:11:      "EMAIL_ENCRYPTION_KEY must be set to a 64-character hex string (32 bytes). Generate with: openssl rand -hex 32"
+app/api/crm/contacts/create-from-remote/route.ts:24:  const { name, surname, email, phone, company, message, tag } = body;
+app/api/crm/contacts/create-from-remote/route.ts:25:  if (!name || !surname || !email || !phone || !company || !message || !tag) {
+app/api/crm/contacts/create-from-remote/route.ts:37:        email,
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:3:import { EmailContext } from '../core/types';
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:5:export function createEmailParserTool() {
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:7:    name: 'parse_email',
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:8:    description: 'Extract context from an email address',
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:10:      email: z.string().email().describe('Email address to parse'),
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:12:    async execute({ email }) {
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:13:      const [localPart, domain] = email.split('@');
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:15:      // Extract personal name from email
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:18:      // Determine if it's a personal email
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:19:      const personalDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'aol.com'];
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:20:      const isPersonalEmail = personalDomains.includes(domain.toLowerCase());
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:23:      const companyDomain = isPersonalEmail ? undefined : domain;
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:26:      const context: EmailContext = {
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:27:        email,
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:32:        isPersonalEmail,
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:79:    .replace(/^(www|app|api|mail|email)\./i, '')
+lib/campaigns/merge-tags.ts:4:  email?: string | null;
+lib/campaigns/merge-tags.ts:12:  email: "email",
+lib/enrichment/agent-architecture/core/types.ts:3:// Email context that flows through all agents
+lib/enrichment/agent-architecture/core/types.ts:4:export const EmailContext = z.object({
+lib/enrichment/agent-architecture/core/types.ts:5:  email: z.union([z.email(), z.literal('')]),
+lib/enrichment/agent-architecture/core/types.ts:10:  isPersonalEmail: z.boolean(),
+lib/enrichment/agent-architecture/core/types.ts:13:export type EmailContext = z.infer<typeof EmailContext>;
+lib/enrichment/agent-architecture/core/types.ts:28:  email: z.union([z.email(), z.literal('')]),
+lib/enrichment/agent-architecture/core/types.ts:29:  emailContext: EmailContext,
+lib/enrichment/agent-architecture/orchestrator.ts:1:import { EmailContext, RowEnrichmentResult } from './core/types';
+lib/enrichment/agent-architecture/orchestrator.ts:3:import { parseEmail } from '../strategies/email-parser';
+lib/enrichment/agent-architecture/orchestrator.ts:22:    emailColumn: string,
+lib/enrichment/agent-architecture/orchestrator.ts:28:      email: string;
+lib/enrichment/agent-architecture/orchestrator.ts:29:      emailContext: EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:34:    const email = row[emailColumn] || null;
+lib/enrichment/agent-architecture/orchestrator.ts:37:    if (!email && !companyName) {
+lib/enrichment/agent-architecture/orchestrator.ts:43:        error: 'Enrichment requires at least an email or company name',
+lib/enrichment/agent-architecture/orchestrator.ts:47:    let emailContext = email
+lib/enrichment/agent-architecture/orchestrator.ts:48:      ? this.extractEmailContext(email)
+lib/enrichment/agent-architecture/orchestrator.ts:51:    // If email is personal (or has no company domain), supplement with the target's
+lib/enrichment/agent-architecture/orchestrator.ts:53:    if (!emailContext.companyDomain && identityOverride?.companyWebsite) {
+lib/enrichment/agent-architecture/orchestrator.ts:56:        emailContext = { ...emailContext, companyDomain: overrideDomain, domain: emailContext.domain || overrideDomain };
+lib/enrichment/agent-architecture/orchestrator.ts:60:    if (!emailContext.companyNameGuess && identityOverride?.companyName) {
+lib/enrichment/agent-architecture/orchestrator.ts:61:      emailContext = { ...emailContext, companyNameGuess: identityOverride.companyName };
+lib/enrichment/agent-architecture/orchestrator.ts:64:    const displayIdentity = emailContext.companyNameGuess || emailContext.domain || email || companyName || 'unknown';
+lib/enrichment/agent-architecture/orchestrator.ts:65:    console.log(`[Orchestrator] Starting enrichment — email: ${email ?? 'none'}, company: ${companyName ?? 'none'}`);
+lib/enrichment/agent-architecture/orchestrator.ts:66:    console.log(`[Orchestrator] Email context: domain=${emailContext.domain}, company=${emailContext.companyNameGuess || 'unknown'}`);
+lib/enrichment/agent-architecture/orchestrator.ts:71:      if (!emailContext.companyDomain && emailContext.companyNameGuess) {
+lib/enrichment/agent-architecture/orchestrator.ts:73:          onAgentProgress(`Discovering company domain for "${emailContext.companyNameGuess}"...`, 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:77:            `"${emailContext.companyNameGuess}" official website`,
+lib/enrichment/agent-architecture/orchestrator.ts:87:                emailContext = { ...emailContext, companyDomain: hostname, domain: emailContext.domain || hostname };
+lib/enrichment/agent-architecture/orchestrator.ts:125:      const context: OrchestrationContext = { email: email ?? '', emailContext, discoveredData: {} };
+lib/enrichment/agent-architecture/orchestrator.ts:131:          onAgentProgress(`Discovery Agent: Identifying company from ${emailContext.domain}`, 'agent');
+lib/enrichment/agent-architecture/orchestrator.ts:147:        if (!emailContext.companyDomain) {
+lib/enrichment/agent-architecture/orchestrator.ts:155:                emailContext = { ...emailContext, companyDomain: domain, domain: emailContext.domain || domain };
+lib/enrichment/agent-architecture/orchestrator.ts:156:                context.emailContext = emailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:344:  private extractEmailContext(email: string): EmailContext {
+lib/enrichment/agent-architecture/orchestrator.ts:345:    const parsed = parseEmail(email);
+lib/enrichment/agent-architecture/orchestrator.ts:346:    const [, domain] = email.split('@');
+lib/enrichment/agent-architecture/orchestrator.ts:348:    const personalDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'];
+lib/enrichment/agent-architecture/orchestrator.ts:349:    const isPersonalEmail = personalDomains.includes(domain.toLowerCase());
+lib/enrichment/agent-architecture/orchestrator.ts:352:      email,
+lib/enrichment/agent-architecture/orchestrator.ts:354:      companyDomain: isPersonalEmail ? undefined : domain,
+lib/enrichment/agent-architecture/orchestrator.ts:359:      isPersonalEmail,
+lib/enrichment/agent-architecture/orchestrator.ts:363:  private buildCompanyNameContext(companyName: string | null, companyWebsite?: string): EmailContext {
+lib/enrichment/agent-architecture/orchestrator.ts:374:      email: '',
+lib/enrichment/agent-architecture/orchestrator.ts:379:      isPersonalEmail: false,
+lib/enrichment/agent-architecture/orchestrator.ts:441:    const ctxEmail = context['email'] as string;
+lib/enrichment/agent-architecture/orchestrator.ts:442:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:443:    console.log(`[AGENT-DISCOVERY] Email: ${ctxEmail}`);
+lib/enrichment/agent-architecture/orchestrator.ts:444:    console.log(`[AGENT-DISCOVERY] Domain: ${ctxEmailContext.domain}`);
+lib/enrichment/agent-architecture/orchestrator.ts:450:    if (ctxEmailContext.companyDomain) {
+lib/enrichment/agent-architecture/orchestrator.ts:451:      const websiteUrl = `https://${ctxEmailContext.companyDomain}`;
+lib/enrichment/agent-architecture/orchestrator.ts:454:        onAgentProgress(`Attempting to access ${ctxEmailContext.companyDomain} directly...`, 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:552:      if (ctxEmailContext.companyDomain) {
+lib/enrichment/agent-architecture/orchestrator.ts:553:        searchQueries.push(`"${ctxEmailContext.companyDomain}" company official website`);
+lib/enrichment/agent-architecture/orchestrator.ts:554:        searchQueries.push(`site:${ctxEmailContext.companyDomain} about`);
+lib/enrichment/agent-architecture/orchestrator.ts:557:      // 2. Try company name guess from email
+lib/enrichment/agent-architecture/orchestrator.ts:558:      if (ctxEmailContext.companyNameGuess) {
+lib/enrichment/agent-architecture/orchestrator.ts:559:        searchQueries.push(`"${ctxEmailContext.companyNameGuess}" company official website`);
+lib/enrichment/agent-architecture/orchestrator.ts:563:      if (ctxEmailContext.companyDomain) {
+lib/enrichment/agent-architecture/orchestrator.ts:564:        const domainPart = ctxEmailContext.companyDomain.split('.')[0];
+lib/enrichment/agent-architecture/orchestrator.ts:568:      // 4. General search with email domain
+lib/enrichment/agent-architecture/orchestrator.ts:569:      if (ctxEmailContext.domain) {
+lib/enrichment/agent-architecture/orchestrator.ts:570:        searchQueries.push(`email domain ${ctxEmailContext.domain} company information`);
+lib/enrichment/agent-architecture/orchestrator.ts:681:        const fallbackData = this.inferFromDomain(ctxEmailContext, missingFields);
+lib/enrichment/agent-architecture/orchestrator.ts:704:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:709:                       ctxEmailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/orchestrator.ts:724:    const domainQuery = ctxEmailContext?.companyDomain 
+lib/enrichment/agent-architecture/orchestrator.ts:725:      ? `site:${ctxEmailContext.companyDomain} OR ` 
+lib/enrichment/agent-architecture/orchestrator.ts:757:    if (ctxEmailContext?.companyDomain) enrichmentContext.targetDomain = ctxEmailContext.companyDomain;
+lib/enrichment/agent-architecture/orchestrator.ts:866:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:871:                       ctxEmailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/orchestrator.ts:884:    const domainQuery = ctxEmailContext?.companyDomain 
+lib/enrichment/agent-architecture/orchestrator.ts:885:      ? `site:${ctxEmailContext.companyDomain} OR ` 
+lib/enrichment/agent-architecture/orchestrator.ts:914:    if (ctxEmailContext?.companyDomain) enrichmentContext.targetDomain = ctxEmailContext.companyDomain;
+lib/enrichment/agent-architecture/orchestrator.ts:1023:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:1028:                       ctxEmailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/orchestrator.ts:1040:    const domainQuery = ctxEmailContext?.companyDomain 
+lib/enrichment/agent-architecture/orchestrator.ts:1041:      ? `site:${ctxEmailContext.companyDomain} OR ` 
+lib/enrichment/agent-architecture/orchestrator.ts:1069:    if (ctxEmailContext?.companyDomain) enrichmentContext.targetDomain = ctxEmailContext.companyDomain;
+lib/enrichment/agent-architecture/orchestrator.ts:1178:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:1183:                       ctxEmailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/orchestrator.ts:1185:    const companyDomain = ctxEmailContext?.companyDomain;
+lib/enrichment/agent-architecture/orchestrator.ts:1411:    const ctxEmailContext = context['emailContext'] as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:1416:                       ctxEmailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/orchestrator.ts:1418:    const companyDomain = ctxEmailContext?.companyDomain;
+lib/enrichment/agent-architecture/orchestrator.ts:2090:    const emailContext = context.emailContext as EmailContext;
+lib/enrichment/agent-architecture/orchestrator.ts:2093:- Email domain: ${emailContext.domain}
+lib/enrichment/agent-architecture/orchestrator.ts:2094:- Possible company domain: ${emailContext.companyDomain || 'Unknown'}
+lib/enrichment/agent-architecture/orchestrator.ts:2095:- Possible company name: ${emailContext.companyNameGuess || 'Unknown'}
+lib/enrichment/agent-architecture/orchestrator.ts:2100:IMPORTANT: Only extract information that is clearly about the company associated with the email domain ${emailContext.domain}.
+lib/enrichment/agent-architecture/orchestrator.ts:2151:    emailContext: EmailContext,
+lib/enrichment/agent-architecture/orchestrator.ts:2157:    if (!emailContext.companyDomain) {
+lib/enrichment/agent-architecture/orchestrator.ts:2162:    const domainParts = emailContext.companyDomain.split('.');
+lib/enrichment/agent-architecture/orchestrator.ts:2206:            url: `https://${emailContext.companyDomain}`,
+lib/enrichment/agent-architecture/orchestrator.ts:2207:            snippet: `Inferred from email domain: ${emailContext.companyDomain}`
+lib/enrichment/agent-architecture/orchestrator.ts:2214:          value: `https://${emailContext.companyDomain}`,
+lib/enrichment/agent-architecture/orchestrator.ts:2218:            url: `https://${emailContext.companyDomain}`,
+lib/enrichment/agent-architecture/orchestrator.ts:2219:            snippet: `Primary domain from email address`
+lib/enrichment/agent-architecture/orchestrator.ts:2226:          value: `${cleanedName} is a company that operates the ${emailContext.companyDomain} domain.`,
+lib/enrichment/agent-architecture/orchestrator.ts:2230:            url: `https://${emailContext.companyDomain}`,
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:6:  emailContext?: {
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:49:                       context.emailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:51:    const companyDomain = context.emailContext?.companyDomain;
+app/api/campaigns/webhooks/resend/route.ts:6:  if (!signature || !process.env.RESEND_WEBHOOK_SECRET) return false;
+app/api/campaigns/webhooks/resend/route.ts:7:  const expected = createHmac("sha256", process.env.RESEND_WEBHOOK_SECRET)
+app/api/campaigns/webhooks/resend/route.ts:23:    data: { message_id?: string; email_id?: string; created_at: string };
+app/api/campaigns/webhooks/resend/route.ts:26:  const messageId = event.data.message_id ?? event.data.email_id;
+app/api/campaigns/webhooks/resend/route.ts:35:    case "email.delivered":
+app/api/campaigns/webhooks/resend/route.ts:44:    case "email.bounced":
+app/api/campaigns/webhooks/resend/route.ts:51:    case "email.opened":
+app/api/campaigns/webhooks/resend/route.ts:60:    case "email.clicked":
+lib/enrichment/agent-architecture/agents/general-agent.ts:6:  emailContext?: {
+lib/enrichment/agent-architecture/agents/general-agent.ts:48:                       context.emailContext?.companyNameGuess;
+lib/enrichment/agent-architecture/agents/general-agent.ts:50:    const companyDomain = context.emailContext?.companyDomain;
+lib/enrichment/agent-architecture/agents/general-agent.ts:88:      // Scrape the company contact page for email/phone fields
+lib/enrichment/agent-architecture/agents/general-agent.ts:91:          console.log(`[AGENT-GENERAL] Scraping contact pages for email/phone fields`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:258:      return name.includes('email') || name.includes('phone');
+lib/enrichment/agent-architecture/agents/discovery-agent.ts:10:  domain: z.string().describe('Primary domain extracted from email or discovered'),
+lib/enrichment/agent-architecture/agents/discovery-agent.ts:23:    Your mission is to establish the foundational company information from an email address.
+lib/enrichment/agent-architecture/agents/discovery-agent.ts:26:    1. Extract domain from email (e.g., john@acme.com -> acme.com)
+lib/enrichment/agent-architecture/agents/discovery-agent.ts:32:       d. Search for email domain [domain] company information
+lib/enrichment/agent-architecture/agents/discovery-agent.ts:43:    - Website: Confirm the primary domain (might differ from email domain)
+app/api/auth/test-otp/route.ts:11:  const email = request.nextUrl.searchParams.get("email");
+app/api/auth/test-otp/route.ts:12:  if (!email) {
+app/api/auth/test-otp/route.ts:13:    return NextResponse.json({ error: "email required" }, { status: 400 });
+app/api/auth/test-otp/route.ts:18:    const otp = (ctx as any).test?.getOTP(email);
+app/[locale]/(routes)/layout.tsx:89:    emails: dict("emails"),
+app/api/campaigns/unsubscribe/route.ts:29:      <p>You will no longer receive emails from this campaign.</p>
+app/[locale]/(routes)/campaigns/templates/page.tsx:10:    <Container title="Campaign Templates" description="Reusable email templates">
+app/[locale]/(auth)/inactive/page.tsx:50:                    <Link href={`mailto:  ${user.email}`}>{user.email}</Link>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:25:type Step = "email" | "otp";
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:29:  const [step, setStep] = useState<Step>("email");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:30:  const [email, setEmail] = useState("");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:48:    if (!email) {
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:49:      toast.error("Please enter your email address.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:54:      const { error } = await authClient.emailOtp.sendVerificationOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:55:        email,
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:63:      toast.success("Verification code sent to your email.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:78:      const { error } = await authClient.signIn.emailOtp({
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:79:        email,
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:118:              Or continue with email
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:123:        {step === "email" && (
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:126:              <Label htmlFor="email">Email</Label>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:128:                id="email"
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:129:                type="email"
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:131:                value={email}
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:132:                onChange={(e) => setEmail(e.target.value)}
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:137:            <Button onClick={sendOtp} disabled={isLoading || !email}>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:147:              Enter the 6-digit code sent to <strong>{email}</strong>
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:173:                setStep("email");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:178:              Use a different email
+app/[locale]/(routes)/admin/users/table-data/schema.tsx:12:  email: z.string(),
+app/[locale]/(routes)/campaigns/templates/new/page.tsx:9:          Create a campaign email template
+app/[locale]/(routes)/emails/use-mail.ts:3:import { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(auth)/pending/page.tsx:51:                  <Link href={`mailto:  ${user.email}`}>{user.email}</Link>
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:123:            placeholder="e.g. Welcome Email"
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:153:          <Label htmlFor="ai-prompt">Describe the email you want</Label>
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:158:            placeholder="e.g. A warm outreach email introducing our SaaS product to a B2B prospect, focusing on ROI benefits"
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:174:        <Label>Email Body</Label>
+app/[locale]/(routes)/emails/page.tsx:5:import { MailComponent } from "./components/mail";
+app/[locale]/(routes)/emails/page.tsx:7:import EmailsSkeleton from "@/components/skeletons/emails-skeleton";
+app/[locale]/(routes)/emails/page.tsx:10:import { getEmailAccounts } from "@/actions/emails/accounts";
+app/[locale]/(routes)/emails/page.tsx:11:import { getEmails } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/page.tsx:12:import { EmailFolder } from "@prisma/client";
+app/[locale]/(routes)/emails/page.tsx:14:const EmailRoute = async ({
+app/[locale]/(routes)/emails/page.tsx:55:  const connectedAccounts = await getEmailAccounts();
+app/[locale]/(routes)/emails/page.tsx:59:      <Container title={t("emails")} description="Your connected mailboxes">
+app/[locale]/(routes)/emails/page.tsx:62:            You don&apos;t have any mailbox registered yet.
+app/[locale]/(routes)/emails/page.tsx:68:            Go to your profile to set up your first mailbox
+app/[locale]/(routes)/emails/page.tsx:76:  const activeFolder = params.folder === "SENT" ? EmailFolder.SENT : EmailFolder.INBOX;
+app/[locale]/(routes)/emails/page.tsx:79:  const emailsResult = activeAccountId
+app/[locale]/(routes)/emails/page.tsx:80:    ? await getEmails(activeAccountId, activeFolder, activePage, params.search)
+app/[locale]/(routes)/emails/page.tsx:81:    : { emails: [], total: 0, page: 1, totalPages: 0 };
+app/[locale]/(routes)/emails/page.tsx:85:      title={t("emails")}
+app/[locale]/(routes)/emails/page.tsx:86:      description="Your connected mailboxes"
+app/[locale]/(routes)/emails/page.tsx:88:      <Suspense fallback={<EmailsSkeleton />}>
+app/[locale]/(routes)/emails/page.tsx:91:          mails={emailsResult.emails}
+app/[locale]/(routes)/emails/page.tsx:94:          page={emailsResult.page}
+app/[locale]/(routes)/emails/page.tsx:95:          totalPages={emailsResult.totalPages}
+app/[locale]/(routes)/emails/page.tsx:105:export default EmailRoute;
+app/[locale]/(routes)/emails/data.tsx:1:// Type definitions for the emails feature — mock data removed
+app/[locale]/(routes)/emails/data.tsx:3:export type EmailRecipient = { name?: string; email: string };
+app/[locale]/(routes)/emails/data.tsx:5:/** Core shape returned by getEmails() list view. Detail fields are optional — populated by getEmail(). */
+app/[locale]/(routes)/emails/data.tsx:10:  fromEmail: string | null;
+app/[locale]/(routes)/emails/data.tsx:14:  // Detail fields — present only when fetched via getEmail()
+app/[locale]/(routes)/emails/data.tsx:16:  toRecipients?: EmailRecipient[];
+app/[locale]/(routes)/emails/data.tsx:17:  ccRecipients?: EmailRecipient[];
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:66:    accessorKey: "email",
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:68:      <DataTableColumnHeader column={column} title="E-mail" />
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:71:    cell: ({ row }) => <div className="">{row.getValue("email")}</div>,
+app/[locale]/(routes)/admin/users/page.tsx:12:import SendMailToAll from "./components/send-mail-to-all";
+app/[locale]/(routes)/campaigns/page.tsx:13:          <p className="text-muted-foreground">Manage your email campaigns</p>
+app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx:25:          Update your campaign email template
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:8:import { sendMailToAll } from "@/actions/admin/send-mail-to-all";
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:29:  const { execute, fieldErrors, isLoading } = useAction(sendMailToAll, {
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:31:      toast.success(t("sendMail.sent"));
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:49:        <Button>{t("sendMail.trigger")}</Button>
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:53:          <SheetTitle>{t("sendMail.title")}</SheetTitle>
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:55:            {t("sendMail.description")}
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:62:              label={t("sendMail.messageTitle")}
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:68:              label={t("sendMail.message")}
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:69:              placeholder={t("sendMail.message")}
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:77:                t("sendMail.sendButton")
+app/[locale]/(routes)/emails/components/mail-display.tsx:45:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail-display.tsx:46:import { getEmail, deleteEmail } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/components/mail-display.tsx:47:import { ComposeModal } from "@/app/[locale]/(routes)/emails/components/ComposeModal";
+app/[locale]/(routes)/emails/components/mail-display.tsx:49:const logger = createClientLogger({ module: "app.[locale].(routes).emails.components.mail-display" });
+app/[locale]/(routes)/emails/components/mail-display.tsx:51:  mail: Mail | null;
+app/[locale]/(routes)/emails/components/mail-display.tsx:55:export function MailDisplay({ mail, activeAccountId }: MailDisplayProps) {
+app/[locale]/(routes)/emails/components/mail-display.tsx:59:  const [fullEmail, setFullEmail] = useState<Awaited<ReturnType<typeof getEmail>> | null>(null);
+app/[locale]/(routes)/emails/components/mail-display.tsx:64:    async function loadEmail() {
+app/[locale]/(routes)/emails/components/mail-display.tsx:67:      if (!mail?.id) {
+app/[locale]/(routes)/emails/components/mail-display.tsx:68:        if (!cancelled) setFullEmail(null);
+app/[locale]/(routes)/emails/components/mail-display.tsx:73:        const data = await getEmail(mail.id);
+app/[locale]/(routes)/emails/components/mail-display.tsx:74:        if (!cancelled) setFullEmail(data);
+app/[locale]/(routes)/emails/components/mail-display.tsx:76:        if (!cancelled) setFullEmail(null);
+app/[locale]/(routes)/emails/components/mail-display.tsx:80:    void loadEmail();
+app/[locale]/(routes)/emails/components/mail-display.tsx:82:  }, [mail?.id]);
+app/[locale]/(routes)/emails/components/mail-display.tsx:84:  const senderName = fullEmail?.fromName ?? fullEmail?.fromEmail ?? "?";
+app/[locale]/(routes)/emails/components/mail-display.tsx:92:    if (!mail?.id) return;
+app/[locale]/(routes)/emails/components/mail-display.tsx:94:      await deleteEmail(mail.id);
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+app/[locale]/(routes)/emails/components/mail-display.tsx:107:              <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:116:              <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:128:                disabled={!mail}
+app/[locale]/(routes)/emails/components/mail-display.tsx:142:                  <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:204:                replyTo={fullEmail ? (fullEmail as unknown as Mail) : undefined}
+app/[locale]/(routes)/emails/components/mail-display.tsx:206:                  <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:217:              <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:229:                replyTo={fullEmail ? (fullEmail as unknown as Mail) : undefined}
+app/[locale]/(routes)/emails/components/mail-display.tsx:231:                  <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:244:            <Button variant="ghost" size="icon" disabled={!mail}>
+app/[locale]/(routes)/emails/components/mail-display.tsx:258:      {mail ? (
+app/[locale]/(routes)/emails/components/mail-display.tsx:268:                  {fullEmail?.fromName ?? fullEmail?.fromEmail ?? "(unknown)"}
+app/[locale]/(routes)/emails/components/mail-display.tsx:271:                  {fullEmail?.subject ?? "(no subject)"}
+app/[locale]/(routes)/emails/components/mail-display.tsx:275:                  {fullEmail?.fromEmail ?? ""}
+app/[locale]/(routes)/emails/components/mail-display.tsx:277:                {Array.isArray(fullEmail?.toRecipients) && fullEmail.toRecipients.length > 0 && (
+app/[locale]/(routes)/emails/components/mail-display.tsx:280:                    {(fullEmail.toRecipients as { name?: string; email: string }[])
+app/[locale]/(routes)/emails/components/mail-display.tsx:281:                      .map((r) => r.name ?? r.email).join(", ")}
+app/[locale]/(routes)/emails/components/mail-display.tsx:284:                {Array.isArray(fullEmail?.ccRecipients) && fullEmail.ccRecipients.length > 0 && (
+app/[locale]/(routes)/emails/components/mail-display.tsx:287:                    {(fullEmail.ccRecipients as { name?: string; email: string }[])
+app/[locale]/(routes)/emails/components/mail-display.tsx:288:                      .map((r) => r.name ?? r.email).join(", ")}
+app/[locale]/(routes)/emails/components/mail-display.tsx:293:            {fullEmail?.sentAt && (
+app/[locale]/(routes)/emails/components/mail-display.tsx:295:                {format(new Date(fullEmail.sentAt), "PPpp")}
+app/[locale]/(routes)/emails/components/mail-display.tsx:301:            {fullEmail?.bodyHtml ? (
+app/[locale]/(routes)/emails/components/mail-display.tsx:303:                srcDoc={fullEmail.bodyHtml}
+app/[locale]/(routes)/emails/components/mail-display.tsx:308:                title="Email body"
+app/[locale]/(routes)/emails/components/mail-display.tsx:312:                {fullEmail?.bodyText ?? (fullEmail ? "(No content)" : "Loading...")}
+app/[locale]/(routes)/emails/components/mail-display.tsx:322:                  placeholder={`Reply to ${fullEmail?.fromName ?? fullEmail?.fromEmail ?? "..."}...`}
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:33:  email: z.string().email(),
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:67:        email: "",
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:96:          name="email"
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:99:              <FormLabel>{t("inviteForm.email")}</FormLabel>
+app/[locale]/(routes)/campaigns/new/page.tsx:19:        <p className="text-muted-foreground">Create an email campaign</p>
+app/[locale]/(routes)/emails/components/mail.tsx:6:import { AccountSwitcher } from "@/app/[locale]/(routes)/emails/components/account-switcher";
+app/[locale]/(routes)/emails/components/mail.tsx:7:import { ComposeModal } from "@/app/[locale]/(routes)/emails/components/ComposeModal";
+app/[locale]/(routes)/emails/components/mail.tsx:8:import { MailDisplay } from "@/app/[locale]/(routes)/emails/components/mail-display";
+app/[locale]/(routes)/emails/components/mail.tsx:9:import { MailList } from "@/app/[locale]/(routes)/emails/components/mail-list";
+app/[locale]/(routes)/emails/components/mail.tsx:10:import { Nav } from "@/app/[locale]/(routes)/emails/components/nav";
+app/[locale]/(routes)/emails/components/mail.tsx:11:import type { ConnectedAccount, Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail.tsx:12:import { useMail } from "@/app/[locale]/(routes)/emails/use-mail";
+app/[locale]/(routes)/emails/components/mail.tsx:26:  mails: Mail[];
+app/[locale]/(routes)/emails/components/mail.tsx:38:  mails,
+app/[locale]/(routes)/emails/components/mail.tsx:48:  const [mail] = useMail();
+app/[locale]/(routes)/emails/components/mail.tsx:151:                  All mail
+app/[locale]/(routes)/emails/components/mail.tsx:171:              <MailList items={mails} page={page} totalPages={totalPages} />
+app/[locale]/(routes)/emails/components/mail.tsx:174:              <MailList items={mails.filter((item) => !item.isRead)} page={page} totalPages={totalPages} />
+app/[locale]/(routes)/emails/components/mail.tsx:181:            mail={mails.find((item) => item.id === mail.selected) || null}
+app/[locale]/(routes)/emails/components/mail-list.tsx:9:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/mail-list.tsx:10:import { useMail } from "@/app/[locale]/(routes)/emails/use-mail";
+app/[locale]/(routes)/emails/components/mail-list.tsx:19:  const [mail, setMail] = useMail();
+app/[locale]/(routes)/emails/components/mail-list.tsx:37:              mail.selected === item.id && "bg-muted"
+app/[locale]/(routes)/emails/components/mail-list.tsx:41:                ...mail,
+app/[locale]/(routes)/emails/components/mail-list.tsx:50:                    {item.fromName ?? item.fromEmail ?? "Unknown"}
+app/[locale]/(routes)/emails/components/mail-list.tsx:59:                    mail.selected === item.id
+app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx:7:  email: z.string().nullable(),
+app/[locale]/(routes)/emails/components/account-switcher.tsx:14:import type { ConnectedAccount } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/campaigns/new/components/Step1Details.tsx:79:        <Label htmlFor="replyTo">Reply-to Email</Label>
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:11:import { sendEmail } from "@/actions/emails/messages";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:13:import type { Mail } from "@/app/[locale]/(routes)/emails/data";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:36:    mode === "reply" ? replyTo?.fromEmail ?? "" : "";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:57:      await sendEmail({
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:84:            {mode === "reply" ? "Reply" : mode === "forward" ? "Forward" : "New Email"}
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx:80:      setError("Email content is required");
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx:102:            placeholder="Describe your email campaign..."
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx:145:          placeholder="Your email subject..."
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx:150:        <Label>Email Content</Label>
+app/[locale]/(routes)/admin/actions/api-keys.ts:6:import { encrypt, decrypt } from "@/lib/email-crypto";
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx:7:  email: string;
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx:34:      s.email.toLowerCase().includes(search.toLowerCase());
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx:44:          placeholder="Search name or email..."
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx:65:              {["Name", "Email", "Status", "Opened", "Clicked", "Bounced"].map((h) => (
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx:83:                <td className="px-3 py-2 text-muted-foreground">{s.email}</td>
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:19:  const setSMTP = async (formData: FormData) => {
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:68:            {process.env.RESEND_API_KEY ? (
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:70:                keyValue={process.env.RESEND_API_KEY}
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:91:        <form action={setSMTP}>
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx:64:    accessorKey: "email",
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx:66:      <DataTableColumnHeader column={column} title="E-mail" />
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx:68:    cell: ({ row }) => <div className="">{row.getValue("email")}</div>,
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:31:  email: string | null;
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:181:                <p className="text-sm font-medium leading-none">E-mail</p>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:182:                {data?.email ? (
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:184:                    href={`mailto:${data.email}`}
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx:187:                    {data.email}
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:19:  email: string | null;
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:43:  const [form, setForm] = useState({ name: "", email: "", phone: "", linkedinUrl: "" });
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:59:      setForm({ name: "", email: "", phone: "", linkedinUrl: "" });
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:106:                <Label htmlFor="email">Email</Label>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:108:                  id="email"
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:109:                  type="email"
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:110:                  value={form.email}
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:111:                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:151:              <TableHead>Email</TableHead>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:165:                  <TableCell>{contact.email ?? "—"}</TableCell>
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:46:  targetEmail: string | null;
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:55:function getScenario(email: string | null, company: string | null): EnrichScenario {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:56:  if (email) return "personal";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:63:  targetEmail,
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:70:  const scenario = getScenario(targetEmail, targetCompany);
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:203:            Add an email or company name to this target to enable enrichment.
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:221:                  ? "Using email to find contact & company info"
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:46:        select: { id: true, first_name: true, last_name: true, email: true },
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:102:                    {record.target.email && (
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:103:                      <div className="text-xs text-muted-foreground">{record.target.email}</div>
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:133:                      {t.target?.email || t.target?.mobile_phone || "No contact info"}
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:59:    email: z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:70:    personal_email: z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:71:    company_email:  z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:89:      email: initialData.email || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:100:      personal_email: initialData?.personal_email || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:101:      company_email: initialData?.company_email || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:156:            name="email"
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:159:                <FormLabel>Email</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:307:          <FormField control={form.control} name="personal_email" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:308:            <FormItem><FormLabel>Personal Email</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:313:          <FormField control={form.control} name="company_email" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:314:            <FormItem><FormLabel>Company Email</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:29:    email: z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:40:    personal_email: z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:41:    company_email:  z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:58:      personal_email: "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:59:      company_email: "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:120:            name="email"
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:123:                <FormLabel>Email</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:271:          <FormField control={form.control} name="personal_email" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:272:            <FormItem><FormLabel>Personal Email</FormLabel>
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:277:          <FormField control={form.control} name="company_email" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:278:            <FormItem><FormLabel>Company Email</FormLabel>
+app/[locale]/(routes)/crm/contacts/table-data/schema.tsx:10:  email: z.string().nullable(),
+app/[locale]/(routes)/crm/contacts/table-data/schema.tsx:11:  personal_email: z.string().nullable(),
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:38:        select: { id: true, first_name: true, last_name: true, email: true },
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:96:                      {record.contact.email && (
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:97:                        <div className="text-xs text-muted-foreground">{record.contact.email}</div>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:37:  contactEmail: string | null;
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:46:  contactEmail,
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:165:  const noEmail = !contactEmail;
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:177:            {noEmail
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:178:              ? "Add an email to this contact to enable enrichment."
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:183:        {noEmail && (
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:185:            No email address found on this contact.
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:189:        {!noEmail && step === "select" && (
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:100:    accessorKey: "email",
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:102:      <DataTableColumnHeader column={column} title="E-mail" />
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:104:    cell: ({ row }) => <div className="">{row.getValue("email")}</div>,
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:58:    email: z.string().email(t("emailInvalid")).optional().or(z.literal("")),
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:59:    personal_email: z.string().nullable().optional(),
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:83:    email: initialData.email ?? "",
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:89:    personal_email: initialData.personal_email ?? "",
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:200:              name="email"
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:203:                  <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:217:              name="personal_email"
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:220:                  <FormLabel>{t("personalEmail")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:224:                      placeholder="littlejohny@gmail.com"
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx:10:  contactEmail: string | null;
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx:24:export function EnrichButton({ contactId, contactEmail, contactCurrentData }: EnrichButtonProps) {
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx:33:        disabled={!contactEmail}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx:34:        title={!contactEmail ? "Add an email to enable enrichment" : "Enrich with AI"}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx:41:        contactEmail={contactEmail}
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:55:    email: z.union([z.string().email(t("emailInvalid")), z.literal("")]).optional(),
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:56:    personal_email: z.string().optional(),
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:82:      email: "",
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:83:      personal_email: "",
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:190:              name="email"
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:193:                  <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:207:              name="personal_email"
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:210:                  <FormLabel>{t("personalEmail")}</FormLabel>
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:214:                      placeholder="littlejohny@gmail.com"
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:54:                contactEmail={data.email ?? null}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:217:                <p className="text-sm font-medium leading-none">E-mail</p>
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:218:                {data?.email ? (
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:220:                    href={`mailto:${data.email}`}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:223:                    {data.email}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:232:                  Personal e-mail
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:234:                {data?.personal_email ? (
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:236:                    href={`mailto:${data.personal_email}`}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:239:                    {data.personal_email}
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:216:                    <TableHead>Email</TableHead>
+app/[locale]/(routes)/crm/dashboard/user/page.tsx:235:                      <TableCell>{lead.email ?? "—"}</TableCell>
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:56:    accessorKey: "email",
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:58:      <DataTableColumnHeader column={column} title="E-mail" />
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:61:    cell: ({ row }) => <div className="w-[150px]">{row.getValue("email")}</div>,
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:66:    email: z.string().email(t("emailInvalid")),
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:104:          email: "",
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:192:              name="email"
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:195:                  <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:47:    email: z.string().email(t("emailInvalid")),
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:125:              name="email"
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:128:                  <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:53:    email: z.string().email(t("emailInvalid")).nullable().optional().or(z.literal("")),
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:176:                name="email"
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:179:                    <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:101:    accessorKey: "email",
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:103:      <DataTableColumnHeader column={column} title="E-mail" />
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:106:    cell: ({ row }) => <div className="w-[150px]">{row.getValue("email")}</div>,
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:50:    email: z.string().email(t("emailInvalid")).or(z.literal("")).optional(),
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:72:      email: "",
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:172:                name="email"
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:175:                    <FormLabel>{t("email")}</FormLabel>
+app/[locale]/(routes)/profile/page.tsx:13:import { EmailAccountsTabContent } from "./components/tabs/EmailAccountsTabContent";
+app/[locale]/(routes)/profile/page.tsx:37:            emailsContent={<EmailAccountsTabContent />}
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:22:  email: string;
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:25:const AvatarDropdown = ({ avatar, userId, name, email }: Props) => {
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:46:          <div className="text-xs text-muted-foreground">{email}</div>
+app/[locale]/(routes)/profile/actions/api-keys.ts:6:import { encrypt, decrypt } from "@/lib/email-crypto";
+app/[locale]/(routes)/components/nav-user.tsx:35: * Displays user avatar, name, email, and provides dropdown menu with user actions.
+app/[locale]/(routes)/components/nav-user.tsx:39: * - User name and email display (when sidebar expanded)
+app/[locale]/(routes)/components/nav-user.tsx:49: * @param user - User object containing id, name, email, avatar
+app/[locale]/(routes)/components/nav-user.tsx:56:    email?: string | null
+app/[locale]/(routes)/components/nav-user.tsx:96:                <span className="truncate text-xs">{user.email}</span>
+app/[locale]/(routes)/components/nav-user.tsx:117:                  <span className="truncate text-xs">{user.email}</span>
+app/[locale]/(routes)/profile/components/ProfileHero.tsx:20:        <div className="text-white/75 text-sm">{data.email}</div>
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:21:  createEmailAccount,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:22:  deleteEmailAccount,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:23:  setEmailAccountActive,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:24:  testEmailConnection,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:26:} from "@/actions/emails/accounts";
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:27:import type { getEmailAccounts } from "@/actions/emails/accounts";
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:28:import { triggerSync } from "@/actions/emails/sync";
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:30:type Account = Awaited<ReturnType<typeof getEmailAccounts>>[number];
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:32:export function EmailAccountsList({ accounts }: { accounts: Account[] }) {
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:51:  const [provider, setProvider] = useState<"gmail" | "generic">("generic");
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:58:  function applyGmailPreset() {
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:59:    setProvider("gmail");
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:62:      label: f.label || "Gmail",
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:63:      imapHost: "imap.gmail.com",
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:66:      smtpHost: "smtp.gmail.com",
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:69:      sentFolderName: "[Gmail]/Sent Mail",
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:95:    const result = await testEmailConnection({
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:107:    await createEmailAccount({
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:117:    if (!confirm("Delete this email account and all synced emails?")) return;
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:118:    await deleteEmailAccount(id);
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:123:    await setEmailAccountActive(id, !current);
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:140:        <p className="text-sm text-muted-foreground">No email accounts connected.</p>
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:200:            Add Email Account
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:206:              {provider === "gmail" ? "Connect Gmail Account" : "Connect IMAP Account"}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:214:                variant={provider === "gmail" ? "default" : "outline"}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:217:                onClick={applyGmailPreset}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:225:                Connect Gmail
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:237:                    label: f.label === "Gmail" ? "" : f.label,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:238:                    imapHost: f.imapHost === "imap.gmail.com" ? "" : f.imapHost,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:239:                    smtpHost: f.smtpHost === "smtp.gmail.com" ? "" : f.smtpHost,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:240:                    sentFolderName: f.sentFolderName === "[Gmail]/Sent Mail" ? "Sent" : f.sentFolderName,
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:251:                { key: "label", label: "Label (e.g. Work Gmail)", type: "text" },
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:254:                { key: "smtpHost", label: "SMTP Host", type: "text" },
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:255:                { key: "smtpPort", label: "SMTP Port", type: "number" },
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:256:                { key: "username", label: "Username / Email", type: "email" },
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:270:            {/* App Password hint for Gmail */}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:271:            {provider === "gmail" && (
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:275:                  Gmail requires a <strong>16-character App Password</strong> — your regular Gmail password won&apos;t work.{" "}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:292:                {provider === "gmail" ? "App Password (16 characters)" : "Password"}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:299:                placeholder={provider === "gmail" ? "xxxx xxxx xxxx xxxx" : ""}
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:335:                  placeholder='e.g. Sent or [Gmail]/Sent Mail'
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:357:              <Label htmlFor="smtpSsl">SMTP SSL</Label>
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:12:type Tab = "profile" | "security" | "preferences" | "developer" | "emails" | "llms";
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:19:  emails: Mail,
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:28:  emailsContent: React.ReactNode;
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:37:  emailsContent,
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:44:  const TAB_IDS: Tab[] = ["profile", "security", "preferences", "developer", "emails", "llms"];
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:53:    { id: "emails", label: t("tabs.emails"), desc: t("tabs.emailsDesc") },
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx:64:    emails: emailsContent,
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:112:                    <p className="text-sm font-medium leading-none">Email</p>
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:113:                    {data?.email ? (
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:115:                        href={`mailto:${data.email}`}
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:118:                        {data.email}
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:1:import { getEmailAccounts } from "@/actions/emails/accounts";
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:2:import { EmailAccountsList } from "../EmailAccountsList";
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:4:export async function EmailAccountsTabContent() {
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:5:  const accounts = await getEmailAccounts();
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:10:          Email Accounts
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx:12:        <EmailAccountsList accounts={accounts} />
+app/[locale]/(routes)/components/menu-items/Emails.tsx:5: * Emails Module Menu Item - Task Group 2.5
+app/[locale]/(routes)/components/menu-items/Emails.tsx:8: * Returns a NavItem object for Emails navigation.
+app/[locale]/(routes)/components/menu-items/Emails.tsx:10: * Emails module is a simple navigation item (not a collapsible group)
+app/[locale]/(routes)/components/menu-items/Emails.tsx:11: * pointing to the main emails page at /emails.
+app/[locale]/(routes)/components/menu-items/Emails.tsx:13: * @param title - Localized label for Emails module
+app/[locale]/(routes)/components/menu-items/Emails.tsx:14: * @returns NavItem object for Emails navigation
+app/[locale]/(routes)/components/menu-items/Emails.tsx:21:export const getEmailsMenuItem = ({ title }: Props): NavItem => {
+app/[locale]/(routes)/components/menu-items/Emails.tsx:24:    url: "/emails",
+app/[locale]/(routes)/components/menu-items/Emails.tsx:29:export default getEmailsMenuItem;
+app/[locale]/(routes)/components/Header.tsx:28: * - Removed unused props: name, email, avatar (now only used by nav-user)
+app/[locale]/(routes)/components/Header.tsx:32: * Note: User profile functionality (avatar, name, email, user actions) is now
+app/[locale]/(routes)/components/app-sidebar.tsx:18:import getEmailsMenuItem from "./menu-items/Emails";
+app/[locale]/(routes)/components/app-sidebar.tsx:38: * - Task 2.5: Added Emails module navigation (simple item with module filtering)
+app/[locale]/(routes)/components/app-sidebar.tsx:47: * - NavUser displays user avatar, name, email
+app/[locale]/(routes)/components/app-sidebar.tsx:66:  email?: string | null;
+app/[locale]/(routes)/components/app-sidebar.tsx:106:    getEmailsMenuItem({ title: dict?.emails || "Emails" }),
+app/[locale]/(routes)/components/app-sidebar.tsx:122:    email: session.user.email,
+app/[locale]/(routes)/components/__tests__/nav-main-demo.tsx:45:      title: "Emails",
+app/[locale]/(routes)/components/__tests__/nav-main-demo.tsx:46:      url: "/emails",
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:103:                    <p className="text-sm font-medium leading-none">Email</p>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:106:                      href={`mailto:${data.email}`}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:109:                      {data.email}
+
+codex
+The feedback endpoint has a direct payload-shape mismatch: the client posts `page`, but the server dereferences `body.context.pathname`. I’m checking whether the incident commit is available locally so I can separate “current checkout” from the reported revision.
+exec
+/usr/bin/bash -lc 'git rev-parse --verify 9be250f3b729ab946e5f722fcf5c443d9e9ab516''^{commit}' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f3b729ab946e5f722fcf5c443d9e9ab516
+
+exec
+/usr/bin/bash -lc 'git show --name-only --oneline --no-renames 9be250f3b729ab946e5f722fcf5c443d9e9ab516 --' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f Polish sign-in copy and labels
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:app/api/feedback/route.ts | nl -ba | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:'app/[locale]/(routes)/components/FeedbackForm.tsx' | nl -ba | sed -n '35,62p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	
+     8	export async function POST(req: Request) {
+     9	  /*
+    10	  Resend.com function init - this is a helper function that will be used to send emails
+    11	  */
+    12	  let resend;
+    13	  try {
+    14	    resend = await resendHelper();
+    15	  } catch (error: any) {
+    16	    return NextResponse.json(
+    17	      { error: error?.message || "Resend API key is not configured" },
+    18	      { status: 500 }
+    19	    );
+    20	  }
+    21	  
+    22	  const session = await getSession();
+    23	  if (!session) {
+    24	    return new NextResponse("Unauthenticated", { status: 401 });
+    25	  }
+    26	  const body = await req.json();
+    27	  if (!body) {
+    28	    return new NextResponse("Missing body", { status: 400 });
+    29	  }
+    30	  const { feedback } = body;
+    31	
+    32	  if (!feedback) {
+    33	    return new NextResponse("Missing feedback", { status: 400 });
+    34	  }
+    35	
+    36	  try {
+    37	    //Send mail via Resend to info@softbase.cz
+    38	    await resend.emails.send({
+    39	      from:
+    40	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    41	      to: "info@softbase.cz",
+    42	      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
+    43	      text: feedback, // Add this line to fix the types issue
+    44	    });
+    45	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    46	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    47	  } catch (error) {
+    48	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    49	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    50	  }
+    51	}
+
+ succeeded in 0ms:
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	
+    44	  const onSubmit = async (data: any) => {
+    45	    setLoading(true);
+    46	    try {
+    47	      await axios.post("/api/feedback", data);
+    48	    } catch (error) {
+    49	      logger.error({ err: error }, "Feedback submission failed");
+    50	      toast.error("Something went wrong. Please try again later.");
+    51	    } finally {
+    52	      toast.success("Thank you for your feedback.");
+    53	      setOpen(false);
+    54	      setLoading(false);
+    55	    }
+    56	  };
+    57	
+    58	  return (
+    59	    <Form {...form}>
+    60	      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+    61	        <FormField
+    62	          control={form.control}
+
+codex
+At the exact incident commit, the feedback client still posts only form data and the server does not yet read `body.context`, so that mismatch is not the incident’s root cause. The 500 at that revision points to the server-side email path.
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:lib/resend.ts | nl -ba | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { Resend } from "resend";
+     2	import { prismadb } from "./prisma";
+     3	
+     4	export default async function resendHelper() {
+     5	  const resendKey = await prismadb.systemServices.findFirst({
+     6	    where: {
+     7	      name: "resend_smtp",
+     8	    },
+     9	  });
+    10	
+    11	  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+    12	
+    13	  if (!apiKey) {
+    14	    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+    15	  }
+    16	
+    17	  const resend = new Resend(apiKey);
+    18	
+    19	  return resend;
+    20	}
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:.env.local | nl -ba | sed -n '60,70p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:lib/auth.ts | nl -ba | sed -n '60,90p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+fatal: path '.env.local' exists on disk, but not in '9be250f3b729ab946e5f722fcf5c443d9e9ab516'
+
+ succeeded in 0ms:
+    60	      clientId: process.env.GOOGLE_ID!,
+    61	      clientSecret: process.env.GOOGLE_SECRET!,
+    62	    },
+    63	  },
+    64	
+    65	  emailAndPassword: {
+    66	    enabled: false,
+    67	  },
+    68	
+    69	  plugins: [
+    70	    emailOTP({
+    71	      sendVerificationOTP: async ({ email, otp, type }) => {
+    72	        try {
+    73	          const resend = await resendHelper();
+    74	          await resend.emails.send({
+    75	            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+    76	            to: email,
+    77	            subject: `Your verification code: ${otp}`,
+    78	            text: `Your one-time verification code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you did not request this, please ignore this email.`,
+    79	          });
+    80	        } catch (e) {
+    81	          // In dev/test, email sending may fail — OTP is captured by testUtils plugin
+    82	          if (process.env.NODE_ENV !== "production") {
+    83	            console.log(`[Auth] OTP email send failed for ${email}, but captured by testUtils. Content: "${otp}"`);
+    84	          } else {
+    85	            throw e;
+    86	          }
+    87	        }
+    88	      },
+    89	    }),
+    90	    // testUtils captures OTPs for E2E testing — only enabled in non-production
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:app/client-logger.ts | nl -ba | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	type ClientLogLevel = "debug" | "info" | "warn" | "error";
+     4	type ClientLogContext = Record<string, unknown>;
+     5	
+     6	const MAX_STRING_LENGTH = 4_000;
+     7	const MAX_DEPTH = 4;
+     8	const ENDPOINT = "/api/client-logs";
+     9	
+    10	const sessionId =
+    11	  typeof crypto !== "undefined" && "randomUUID" in crypto
+    12	    ? crypto.randomUUID()
+    13	    : Math.random().toString(36).slice(2);
+    14	
+    15	function truncate(value: string) {
+    16	  return value.length > MAX_STRING_LENGTH
+    17	    ? `${value.slice(0, MAX_STRING_LENGTH)}...[truncated]`
+    18	    : value;
+    19	}
+    20	
+    21	function serialize(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+    22	  if (value instanceof Error) {
+    23	    return {
+    24	      name: value.name,
+    25	      message: truncate(value.message),
+    26	      stack: value.stack ? truncate(value.stack) : undefined,
+    27	    };
+    28	  }
+    29	
+    30	  if (value === null || typeof value !== "object") {
+    31	    return typeof value === "string" ? truncate(value) : value;
+    32	  }
+    33	
+    34	  if (seen.has(value)) {
+    35	    return "[Circular]";
+    36	  }
+    37	
+    38	  if (depth >= MAX_DEPTH) {
+    39	    return "[MaxDepth]";
+    40	  }
+    41	
+    42	  seen.add(value);
+    43	
+    44	  if (Array.isArray(value)) {
+    45	    return value.slice(0, 50).map((item) => serialize(item, depth + 1, seen));
+    46	  }
+    47	
+    48	  return Object.fromEntries(
+    49	    Object.entries(value as Record<string, unknown>)
+    50	      .slice(0, 50)
+    51	      .map(([key, item]) => [key, serialize(item, depth + 1, seen)])
+    52	  );
+    53	}
+    54	
+    55	function send(level: ClientLogLevel, message: string, context: ClientLogContext) {
+    56	  if (typeof window === "undefined") {
+    57	    return;
+    58	  }
+    59	
+    60	  const payload = JSON.stringify({
+    61	    level,
+    62	    message,
+    63	    context: serialize(context),
+    64	    sessionId,
+    65	    url: window.location.href,
+    66	    pathname: window.location.pathname,
+    67	    timestamp: new Date().toISOString(),
+    68	  });
+    69	
+    70	  if (navigator.sendBeacon) {
+    71	    const sent = navigator.sendBeacon(
+    72	      ENDPOINT,
+    73	      new Blob([payload], { type: "application/json" })
+    74	    );
+    75	    if (sent) {
+    76	      return;
+    77	    }
+    78	  }
+    79	
+    80	  fetch(ENDPOINT, {
+    81	    method: "POST",
+    82	    headers: { "content-type": "application/json" },
+    83	    body: payload,
+    84	    keepalive: true,
+    85	  }).catch(() => {
+    86	    // Client logging must never break the UI.
+    87	  });
+    88	}
+    89	
+    90	export function createClientLogger(bindings: ClientLogContext) {
+    91	  const log = (level: ClientLogLevel, context: ClientLogContext, message: string) => {
+    92	    send(level, message, { ...bindings, ...context });
+    93	  };
+    94	
+    95	  return {
+    96	    debug: (context: ClientLogContext, message: string) => log("debug", context, message),
+    97	    info: (context: ClientLogContext, message: string) => log("info", context, message),
+    98	    warn: (context: ClientLogContext, message: string) => log("warn", context, message),
+    99	    error: (context: ClientLogContext, message: string) => log("error", context, message),
+   100	  };
+   101	}
+
+codex
+**Incident Report**
+
+Most likely root cause: `/api/feedback` failed because the development environment did not have a usable Resend API key configured.
+
+The client error was logged through `/api/client-logs`, but the failed request itself was `axios.post("/api/feedback", data)` from `FeedbackForm`. At incident commit `9be250f`, `app/api/feedback/route.ts` initializes Resend before processing the feedback. `lib/resend.ts` throws when neither `RESEND_API_KEY` nor the `systemServices` `resend_smtp` key exists, and the route converts that into HTTP 500.
+
+Supporting evidence:
+
+- Incident environment is `development` on `localhost:3000`.
+- Local `.env.local` has `RESEND_API_KEY` present but blank.
+- The reported commit only changed sign-in files, not feedback code.
+- At `9be250f`, feedback submission depends on Resend for every successful submission and does not have the dev/test fallback used by auth OTP email sending.
+- The observed browser error is exactly consistent with `/api/feedback` returning 500 during Resend initialization or email send.
+
+Confidence: high. The most likely failure path is missing email-provider configuration in development, not the sign-in changes from the incident commit.
+tokens used
+31,921
+**Incident Report**
+
+Most likely root cause: `/api/feedback` failed because the development environment did not have a usable Resend API key configured.
+
+The client error was logged through `/api/client-logs`, but the failed request itself was `axios.post("/api/feedback", data)` from `FeedbackForm`. At incident commit `9be250f`, `app/api/feedback/route.ts` initializes Resend before processing the feedback. `lib/resend.ts` throws when neither `RESEND_API_KEY` nor the `systemServices` `resend_smtp` key exists, and the route converts that into HTTP 500.
+
+Supporting evidence:
+
+- Incident environment is `development` on `localhost:3000`.
+- Local `.env.local` has `RESEND_API_KEY` present but blank.
+- The reported commit only changed sign-in files, not feedback code.
+- At `9be250f`, feedback submission depends on Resend for every successful submission and does not have the dev/test fallback used by auth OTP email sending.
+- The observed browser error is exactly consistent with `/api/feedback` returning 500 during Resend initialization or email send.
+
+Confidence: high. The most likely failure path is missing email-provider configuration in development, not the sign-in changes from the incident commit.

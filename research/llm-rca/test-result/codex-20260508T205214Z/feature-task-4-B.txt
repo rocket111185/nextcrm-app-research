@@ -1,0 +1,1009 @@
+run_name: feature-task-4-B
+case_name: feature-task-4
+variant: B
+target_branch: feature/task-4
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:02:59Z
+elapsed_seconds: 65
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-4/B/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: an incomplete footer metadata refactor in commit `4ef0d23` (`Refactor footer link metadata`, May 1, 2026).
+
+The failing build is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) importing `footerBadgeLabels` from [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1), but `footer-links.ts` only exports `footerLinks` and `footerMeta`. That directly explains:
+
+`TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.`
+
+The same refactor also introduced this expression at [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript/JavaScript disallows mixing `??` with `||` without explicit parentheses, which directly explains:
+
+`TS5076: '??' and '||' operations cannot be mixed without parentheses.`
+
+The repeated `"Build logging finished"` entries are terminal build wrapper events, not the underlying failure. The actionable failure is the `Footer.tsx` compile error introduced by the footer refactor.
+
+Confidence: high. Current source matches both incident errors, and git history shows both problematic changes were introduced together in `4ef0d23` on branch `feature/task-4`. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0966-9b26-7672-a829-4346ecbbf391
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T20:12:29.375Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    },
+    {
+      "time": "2026-05-04T20:11:49.374Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "scripts.build-with-logs",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Build logging finished",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": null,
+        "spanId": null,
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the two files named in the build errors and any nearby history that explains how they got out of sync. I’ll keep this read-only and return a textual incident report.
+exec
+/usr/bin/bash -lc "rg -n \"footerBadgeLabels|badgeLabel|Footer\" app '["'^'"']'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+/usr/bin/bash: -c: line 1: unexpected EOF while looking for matching `''
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/footer-links.ts' | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	export const footerLinks = [
+     2	  {
+     3	    href: "https://ui.shadcn.com/",
+     4	    label: "shadcnUI",
+     5	  },
+     6	  {
+     7	    href: "https://www.vercel.com",
+     8	    label: "Vercel",
+     9	  },
+    10	];
+    11	
+    12	export const footerMeta = {
+    13	  poweredBy: "powered by Next.js",
+    14	  hostedBy: "hosted by:",
+    15	};
+
+ succeeded in 0ms:
+     1	import getNextVersion from "@/actions/system/get-next-version";
+     2	import Link from "next/link";
+     3	import { version } from "@/package.json";
+     4	import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+     5	
+     6	const Footer = async () => {
+     7	  const nextVersion = await getNextVersion();
+     8	
+     9	  return (
+    10	    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+    11	      <div className="hidden md:flex pr-5">
+    12	        <Link href="/">
+    13	          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+    14	            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+    15	          </h1>
+    16	        </Link>
+    17	      </div>
+    18	      <div className="hidden md:flex space-x-2 pr-2">
+    19	        {footerMeta.poweredBy}
+    20	        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+    21	          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+    22	        </span>
+    23	        +
+    24	        <Link href={footerLinks[0].href}>
+    25	          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+    26	            {footerLinks[0].label}
+    27	          </span>
+    28	        </Link>
+    29	        {footerMeta.hostedBy}
+    30	        <span className="text-bold underline hover:text-foreground transition-colors">
+    31	          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+    32	        </span>
+    33	      </div>
+    34	    </footer>
+    35	  );
+    36	};
+    37	
+    38	export default Footer;
+
+codex
+The live files reproduce both compiler failures: `Footer.tsx` imports `footerBadgeLabels`, but `footer-links.ts` only exports `footerLinks` and `footerMeta`; the fallback expression at line 21 also has an illegal `??`/`||` mix. I’m checking whether this came from a recent footer-related edit.
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'rg -n "footerBadgeLabels|footerLinks|footerMeta|NEXT_PUBLIC_NEXT_VERSION|nextVersion.substring" app' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/[locale]/(routes)/components/footer-links.ts:1:export const footerLinks = [
+app/[locale]/(routes)/components/footer-links.ts:12:export const footerMeta = {
+app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+app/[locale]/(routes)/components/Footer.tsx:19:        {footerMeta.poweredBy}
+app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+app/[locale]/(routes)/components/Footer.tsx:24:        <Link href={footerLinks[0].href}>
+app/[locale]/(routes)/components/Footer.tsx:26:            {footerLinks[0].label}
+app/[locale]/(routes)/components/Footer.tsx:29:        {footerMeta.hostedBy}
+app/[locale]/(routes)/components/Footer.tsx:31:          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+
+exec
+/usr/bin/bash -lc "git log --oneline --decorate -n 12 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+003a728 feat(footer): read app version from package.json instead of env var
+2cd7ebb chore: cleanup sidebar, footer, and add inngest proxy passthrough
+3ffff2a feat: PostgreSQL migration and Next.js 16 upgrade
+5922dde Update - getNextVersion - get next version from package.json - disabled fetching build count from github - api limit issue
+022fc4c Update - Build count info - added 2 actions for fetching data from Github - added build info counter to Sidebar component - updated .env.local.example - new strings for Github
+a7364dd Cypress and i18n integration
+
+exec
+/usr/bin/bash -lc 'git show --format=medium --no-patch 4ef0d23' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+exec
+/usr/bin/bash -lc "git show --stat --oneline --decorate -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --unified=40 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts' | sed -n '1,180p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+ app/[locale]/(routes)/components/Footer.tsx      | 18 +++++++++---------
+ app/[locale]/(routes)/components/footer-links.ts | 15 +++++++++++++++
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,38 +1,38 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+         <Link href="/">
+           <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+             {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+           </h1>
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+     </footer>
+   );
+ };
+ 
+ export default Footer;
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+codex
+The newest footer commit is the source of the breakage: it added `footer-links.ts` and rewired `Footer.tsx`, but the new import expects a third export that was never added. The same commit also introduced the unparenthesized fallback expression reported by TypeScript.
+exec
+/usr/bin/bash -lc "nl -ba scripts/build-with-logs.* | sed -n '1,160p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+nl: 'scripts/build-with-logs.*': No such file or directory
+
+exec
+/usr/bin/bash -lc 'rg -n "Build logging finished|build-with-logs|logger|error" scripts package.json' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+scripts/validation/validators.ts:47:    } catch (error) {
+scripts/validation/validators.ts:48:      console.error(`Error validating row count for table ${tableName}:`, error);
+scripts/validation/validators.ts:156:  } catch (error) {
+scripts/validation/validators.ts:157:    console.error(`Error validating sample records for table ${tableName}:`, error);
+scripts/validation/validators.ts:316:  } catch (error) {
+scripts/validation/validators.ts:317:    console.error(`Error validating referential integrity for table ${tableName}:`, error);
+scripts/validation/validators.ts:380:  } catch (error) {
+scripts/validation/validators.ts:381:    console.error(`Error validating junction table ${junctionTableName}:`, error);
+scripts/validation/validators.ts:431:                errorMessage: 'Invalid DateTime format',
+scripts/validation/validators.ts:444:                errorMessage: 'Value not in enum definition',
+scripts/validation/validators.ts:457:                errorMessage: 'JSONB field is not an object',
+scripts/validation/validators.ts:470:                errorMessage: 'Array field is not an array',
+scripts/validation/validators.ts:483:                errorMessage: 'Field is not a valid number',
+scripts/validation/validators.ts:496:                errorMessage: 'Field is not a boolean',
+scripts/validation/validators.ts:503:  } catch (error) {
+scripts/validation/validators.ts:504:    console.error(`Error validating data types for table ${tableName}:`, error);
+scripts/validation/types.ts:156:  /** List of type errors */
+scripts/validation/types.ts:161: * Data type validation error
+scripts/validation/types.ts:175:  errorMessage: string;
+scripts/validation/report-generator.ts:231:        `    - ${e.tableName}.${e.fieldName}: ${e.errorMessage} (Record: ${e.recordUuid})`
+scripts/validation/report-generator.ts:282:  } catch (error) {
+scripts/validation/report-generator.ts:283:    console.error('Error saving validation report:', error);
+scripts/validation/report-generator.ts:284:    throw error;
+scripts/validate-migration.ts:62:    console.error('  ✗ DATABASE_URL or DATABASE_URL_POSTGRES environment variable not set');
+scripts/validate-migration.ts:77:  } catch (error) {
+scripts/validate-migration.ts:78:    console.error('  ✗ Failed to connect to database:', error);
+scripts/validate-migration.ts:167:    } catch (error) {
+scripts/validate-migration.ts:168:      console.error(`  ✗ Error validating ${tableName}:`, error);
+scripts/validate-migration.ts:217:    } catch (error) {
+scripts/validate-migration.ts:218:      console.error(`  ✗ Error validating integrity for ${tableName}:`, error);
+scripts/validate-migration.ts:234:    } catch (error) {
+scripts/validate-migration.ts:235:      console.error(
+scripts/validate-migration.ts:237:        error
+scripts/validate-migration.ts:267:    } catch (error) {
+scripts/validate-migration.ts:268:      console.error(`  ✗ Error validating data types for ${tableName}:`, error);
+scripts/validate-migration.ts:275:    console.log(`  ✗ Found ${allTypeErrors.length} type conversion errors`);
+scripts/validate-migration.ts:331:  } catch (error) {
+scripts/validate-migration.ts:332:    console.error('  ✗ Failed to load checkpoint file. Migration may not be complete.');
+scripts/validate-migration.ts:333:    console.error('  Make sure migration-checkpoint.json exists.');
+scripts/validate-migration.ts:348:  } catch (error) {
+scripts/validate-migration.ts:356:runValidation().catch((error) => {
+scripts/validate-migration.ts:357:  console.error('\n');
+scripts/validate-migration.ts:358:  console.error('================================================================');
+scripts/validate-migration.ts:359:  console.error('              VALIDATION SCRIPT ERROR');
+scripts/validate-migration.ts:360:  console.error('================================================================');
+scripts/validate-migration.ts:361:  console.error('\n');
+scripts/validate-migration.ts:362:  console.error(error);
+scripts/validate-migration.ts:363:  console.error('\n');
+scripts/test-data/README.md:15:### 2. Bad Data Dataset (intentional errors)
+scripts/test-data/README.md:18:**Size:** ~1,000 records with various errors
+scripts/test-data/README.md:136:- Any warnings or errors
+scripts/migration/utils.ts:34:  } catch (error) {
+scripts/migration/utils.ts:35:    console.warn('Failed to convert date:', date, error);
+scripts/migration/utils.ts:213: * Safely parses JSON, returns null on error
+scripts/migration/utils.ts:218:  } catch (error) {
+scripts/migration/utils.ts:219:    console.error('Failed to parse JSON:', error);
+scripts/migration/types.ts:3: * Supports checkpoint/resume, error logging, and progress tracking
+scripts/migration/types.ts:26:  /** Total number of errors encountered */
+scripts/migration/types.ts:82:  /** Table name where error occurred */
+scripts/migration/types.ts:89:  errorMessage: string;
+scripts/migration/types.ts:90:  /** Full error stack trace */
+scripts/migration/types.ts:91:  errorStack?: string;
+scripts/migration/types.ts:94:  /** Timestamp when error occurred */
+scripts/migration/types.ts:96:  /** Batch number where error occurred */
+scripts/migration/types.ts:104:  /** Total errors across all tables */
+scripts/migration/types.ts:107:  errorsByTable: Record<string, number>;
+scripts/migration/types.ts:110:  /** Common error patterns */
+scripts/migration/types.ts:111:  errorPatterns: Array<{
+scripts/migration/types.ts:130:  /** Total errors */
+scripts/migration/types.ts:139:  errorSummary: ErrorSummary;
+scripts/migration/progress-tracker.ts:295:   * Displays error summary
+scripts/migration/progress-tracker.ts:299:      console.log('✓ No errors encountered during migration');
+scripts/migration/progress-tracker.ts:306:    console.log('  See migration-errors.log for details');
+scripts/migration/orchestrator.ts:10:import { ErrorLogger } from './error-logger';
+scripts/migration/orchestrator.ts:36:  private errorLogger: ErrorLogger;
+scripts/migration/orchestrator.ts:47:    errorLogger: ErrorLogger,
+scripts/migration/orchestrator.ts:57:    this.errorLogger = errorLogger;
+scripts/migration/orchestrator.ts:61:      errorLogger
+scripts/migration/orchestrator.ts:79:    } catch (error) {
+scripts/migration/orchestrator.ts:115:    } catch (error: any) {
+scripts/migration/orchestrator.ts:116:      console.error('\n❌ Migration failed:', error.message);
+scripts/migration/orchestrator.ts:117:      console.error('Checkpoint saved. You can resume the migration later.');
+scripts/migration/orchestrator.ts:118:      throw error;
+scripts/migration/orchestrator.ts:135:    } catch (error: any) {
+scripts/migration/orchestrator.ts:136:      throw new Error(`PostgreSQL validation failed: ${error.message}`);
+scripts/migration/orchestrator.ts:244:    } catch (error: any) {
+scripts/migration/orchestrator.ts:245:      console.error(`❌ Failed to migrate table ${tableName}:`, error.message);
+scripts/migration/orchestrator.ts:246:      throw error;
+scripts/migration/orchestrator.ts:264:    } catch (error: any) {
+scripts/migration/orchestrator.ts:265:      console.warn(`Failed to count records for ${tableName}:`, error.message);
+scripts/migration/orchestrator.ts:278:    } catch (error: any) {
+scripts/migration/orchestrator.ts:279:      console.error(`Failed to fetch records for ${tableName}:`, error.message);
+scripts/migration/orchestrator.ts:430:    const totalErrors = this.errorLogger.getErrorCount();
+scripts/migration/orchestrator.ts:443:      errorSummary: this.errorLogger.generateErrorSummary(),
+scripts/migration/error-logger.ts:3: * Captures and logs detailed error information for failed record migrations
+scripts/migration/error-logger.ts:12: * ErrorLogger class manages error logging and reporting
+scripts/migration/error-logger.ts:15:  private errorLogFile: string;
+scripts/migration/error-logger.ts:16:  private errors: MigrationError[] = [];
+scripts/migration/error-logger.ts:17:  private errorsByTable: Map<string, number> = new Map();
+scripts/migration/error-logger.ts:20:  constructor(errorLogFile?: string) {
+scripts/migration/error-logger.ts:21:    this.errorLogFile = errorLogFile || path.join(process.cwd(), 'migration-errors.log');
+scripts/migration/error-logger.ts:25:   * Initializes the error logger (opens log file)
+scripts/migration/error-logger.ts:30:      this.logFileHandle = await fs.open(this.errorLogFile, 'a');
+scripts/migration/error-logger.ts:34:        const stats = await fs.stat(this.errorLogFile);
+scripts/migration/error-logger.ts:43:      } catch (error) {
+scripts/migration/error-logger.ts:46:    } catch (error) {
+scripts/migration/error-logger.ts:47:      console.error('Failed to initialize error logger:', error);
+scripts/migration/error-logger.ts:48:      throw error;
+scripts/migration/error-logger.ts:53:   * Closes the error log file
+scripts/migration/error-logger.ts:60:      } catch (error) {
+scripts/migration/error-logger.ts:61:        console.error('Failed to close error log file:', error);
+scripts/migration/error-logger.ts:67:   * Clears the error log file
+scripts/migration/error-logger.ts:76:        await fs.unlink(this.errorLogFile);
+scripts/migration/error-logger.ts:77:      } catch (error) {
+scripts/migration/error-logger.ts:82:      this.errors = [];
+scripts/migration/error-logger.ts:83:      this.errorsByTable.clear();
+scripts/migration/error-logger.ts:86:    } catch (error) {
+scripts/migration/error-logger.ts:87:      console.error('Failed to clear error log:', error);
+scripts/migration/error-logger.ts:92:   * Logs an error for a failed record migration
+scripts/migration/error-logger.ts:97:    error: Error,
+scripts/migration/error-logger.ts:104:      errorMessage: error.message,
+scripts/migration/error-logger.ts:105:      errorStack: error.stack,
+scripts/migration/error-logger.ts:112:    this.errors.push(migrationError);
+scripts/migration/error-logger.ts:114:    // Update error count by table
+scripts/migration/error-logger.ts:115:    const currentCount = this.errorsByTable.get(tableName) || 0;
+scripts/migration/error-logger.ts:116:    this.errorsByTable.set(tableName, currentCount + 1);
+scripts/migration/error-logger.ts:122:    console.error(
+scripts/migration/error-logger.ts:123:      `\n[ERROR] ${tableName} - ${mongoId}: ${sanitizeForLog(error.message, 100)}`
+scripts/migration/error-logger.ts:128:   * Writes error details to log file
+scripts/migration/error-logger.ts:130:  private async writeErrorToFile(error: MigrationError): Promise<void> {
+scripts/migration/error-logger.ts:132:      const logEntry = this.formatErrorLogEntry(error);
+scripts/migration/error-logger.ts:135:      console.error('Failed to write error to log file:', err);
+scripts/migration/error-logger.ts:140:   * Formats error as log entry
+scripts/migration/error-logger.ts:142:  private formatErrorLogEntry(error: MigrationError): string {
+scripts/migration/error-logger.ts:143:    let entry = `[${error.timestamp}] ERROR in table "${error.tableName}"\n`;
+scripts/migration/error-logger.ts:144:    entry += `MongoDB ObjectId: ${error.mongoId}\n`;
+scripts/migration/error-logger.ts:146:    if (error.uuid) {
+scripts/migration/error-logger.ts:147:      entry += `PostgreSQL UUID: ${error.uuid}\n`;
+scripts/migration/error-logger.ts:150:    if (error.batchNumber !== undefined) {
+scripts/migration/error-logger.ts:151:      entry += `Batch Number: ${error.batchNumber}\n`;
+scripts/migration/error-logger.ts:154:    entry += `\nError Message:\n${error.errorMessage}\n`;
+scripts/migration/error-logger.ts:156:    if (error.errorStack) {
+scripts/migration/error-logger.ts:157:      entry += `\nStack Trace:\n${error.errorStack}\n`;
+scripts/migration/error-logger.ts:160:    entry += `\nOriginal Document:\n${JSON.stringify(error.originalDocument, null, 2)}\n`;
+scripts/migration/error-logger.ts:182:   * Generates error summary report
+scripts/migration/error-logger.ts:185:    // Count errors by table
+scripts/migration/error-logger.ts:186:    const errorsByTable: Record<string, number> = {};
+scripts/migration/error-logger.ts:187:    this.errorsByTable.forEach((count, tableName) => {
+scripts/migration/error-logger.ts:188:      errorsByTable[tableName] = count;
+scripts/migration/error-logger.ts:192:    const failedObjectIds = this.errors.map(e => e.mongoId);
+scripts/migration/error-logger.ts:194:    // Identify common error patterns
+scripts/migration/error-logger.ts:195:    const errorPatterns = this.identifyErrorPatterns();
+scripts/migration/error-logger.ts:198:      totalErrors: this.errors.length,
+scripts/migration/error-logger.ts:199:      errorsByTable,
+scripts/migration/error-logger.ts:201:      errorPatterns,
+scripts/migration/error-logger.ts:206:   * Identifies common error patterns
+scripts/migration/error-logger.ts:215:    for (const error of this.errors) {
+scripts/migration/error-logger.ts:216:      // Extract pattern from error message
+scripts/migration/error-logger.ts:217:      let pattern = error.errorMessage;
+scripts/migration/error-logger.ts:229:        pattern = 'Type conversion error';
+scripts/migration/error-logger.ts:241:          example: error.errorMessage,
+scripts/migration/error-logger.ts:258:   * Writes error summary to log file
+scripts/migration/error-logger.ts:269:    if (Object.keys(summary.errorsByTable).length > 0) {
+scripts/migration/error-logger.ts:271:      Object.entries(summary.errorsByTable)
+scripts/migration/error-logger.ts:279:    if (summary.errorPatterns.length > 0) {
+scripts/migration/error-logger.ts:281:      summary.errorPatterns.forEach((pattern, index) => {
+scripts/migration/error-logger.ts:289:    summaryText += '(See error entries above for specific ObjectIds)\n\n';
+scripts/migration/error-logger.ts:299:   * Displays error summary to console
+scripts/migration/error-logger.ts:305:      console.log('\n✓ No errors encountered during migration\n');
+scripts/migration/error-logger.ts:314:    if (Object.keys(summary.errorsByTable).length > 0) {
+scripts/migration/error-logger.ts:316:      Object.entries(summary.errorsByTable)
+scripts/migration/error-logger.ts:323:    if (summary.errorPatterns.length > 0) {
+scripts/migration/error-logger.ts:325:      summary.errorPatterns.slice(0, 5).forEach((pattern, index) => {
+scripts/migration/error-logger.ts:330:    console.log(`\nSee ${this.errorLogFile} for full error details`);
+scripts/migration/error-logger.ts:335:   * Gets total error count
+scripts/migration/error-logger.ts:338:    return this.errors.length;
+scripts/migration/error-logger.ts:342:   * Gets error count for specific table
+scripts/migration/error-logger.ts:345:    return this.errorsByTable.get(tableName) || 0;
+scripts/migration/error-logger.ts:349:   * Checks if table has errors
+scripts/migration/error-logger.ts:352:    return (this.errorsByTable.get(tableName) || 0) > 0;
+scripts/migration/error-logger.ts:356:   * Gets all errors for a specific table
+scripts/migration/error-logger.ts:359:    return this.errors.filter(e => e.tableName === tableName);
+scripts/migration/checkpoint-manager.ts:40:    } catch (error) {
+scripts/migration/checkpoint-manager.ts:41:      console.error('Failed to save checkpoint:', error);
+scripts/migration/checkpoint-manager.ts:42:      throw new Error(`Checkpoint save failed: ${error}`);
+scripts/migration/checkpoint-manager.ts:84:    } catch (error) {
+scripts/migration/checkpoint-manager.ts:85:      console.error('Error loading checkpoint:', error);
+scripts/migration/checkpoint-manager.ts:100:    } catch (error) {
+scripts/migration/checkpoint-manager.ts:101:      console.error('Failed to delete checkpoint file:', error);
+scripts/migration/checkpoint-manager.ts:102:      // Non-fatal error, don't throw
+scripts/migration/checkpoint-manager.ts:214:   * Increments error count in state
+scripts/migration/checkpoint-manager.ts:216:  incrementErrors(state: MigrationState, errorCount: number = 1): MigrationState {
+scripts/migration/checkpoint-manager.ts:219:      totalErrors: state.totalErrors + errorCount,
+scripts/migration/checkpoint-manager.ts:271:    } catch (error) {
+scripts/migration/checkpoint-manager.ts:272:      console.error('Failed to backup checkpoint:', error);
+scripts/migration/checkpoint-manager.ts:358:    } catch (error) {
+scripts/migration/checkpoint-manager.ts:359:      console.error('\n✗ Failed to save checkpoint:', error);
+scripts/migration/batch-processor.ts:7:import { ErrorLogger } from './error-logger';
+scripts/migration/batch-processor.ts:13:  private errorLogger: ErrorLogger;
+scripts/migration/batch-processor.ts:15:  constructor(batchSize: number, errorLogger: ErrorLogger) {
+scripts/migration/batch-processor.ts:17:    this.errorLogger = errorLogger;
+scripts/migration/batch-processor.ts:43:        } catch (error: any) {
+scripts/migration/batch-processor.ts:44:          this.errorLogger.logError(
+scripts/migration/batch-processor.ts:47:            error,
+scripts/migration/batch-processor.ts:63:    } catch (error: any) {
+scripts/migration/batch-processor.ts:64:      console.error(`Batch processing failed for table ${tableName}:`, error.message);
+scripts/migration/batch-processor.ts:67:        this.errorLogger.logError(
+scripts/migration/batch-processor.ts:70:          error,
+scripts/migration/batch-processor.ts:110:    } catch (error: any) {
+scripts/migration/batch-processor.ts:111:      console.error(`Failed to insert batch for table ${tableName}:`, error.message);
+scripts/migration/batch-processor.ts:112:      throw error;
+scripts/migration/batch-processor.ts:210:    } catch (error: any) {
+scripts/migration/batch-processor.ts:211:      console.error(`Junction batch processing failed for table ${tableName}:`, error.message);
+scripts/migration/batch-processor.ts:212:      this.errorLogger.logError(
+scripts/migration/batch-processor.ts:215:        error,
+scripts/migration/backfill-roles.ts:39:    console.error("Backfill failed:", e);
+scripts/migrate-openai-keys.ts:24:  .catch(console.error)
+scripts/migrate-mongo-to-postgres.ts:18:import { ErrorLogger } from './migration/error-logger';
+scripts/migrate-mongo-to-postgres.ts:32:const ERROR_LOG_FILE = path.join(process.cwd(), 'migration-errors.log');
+scripts/migrate-mongo-to-postgres.ts:68:    const errorLogger = new ErrorLogger(ERROR_LOG_FILE);
+scripts/migrate-mongo-to-postgres.ts:75:      await errorLogger.clearErrorLog();
+scripts/migrate-mongo-to-postgres.ts:102:      errorLogger,
+scripts/migrate-mongo-to-postgres.ts:114:  } catch (error: any) {
+scripts/migrate-mongo-to-postgres.ts:115:    console.error('\n❌ Migration failed:', error.message);
+scripts/migrate-mongo-to-postgres.ts:116:    console.error(error.stack);
+scripts/migrate-mongo-to-postgres.ts:145:    } catch (error: any) {
+scripts/migrate-mongo-to-postgres.ts:146:      console.error('❌ Failed to save checkpoint:', error.message);
+scripts/db-backup.sh:6:set -e  # Exit on error
+scripts/VALIDATION_README.md:116:- Zero type conversion errors
+scripts/VALIDATION_README.md:135:- Sample of errors (if any)
+scripts/VALIDATION_README.md:223:- Records failed to migrate (check migration error logs)
+scripts/VALIDATION_README.md:228:1. Review `migration-errors.log` for failed records
+scripts/VALIDATION_README.md:243:- Data transformation errors
+scripts/VALIDATION_README.md:250:2. Identify pattern in errors
+scripts/VALIDATION_README.md:290:1. Review specific type errors in JSON report
+scripts/VALIDATION_README.md:364:   - Watch application logs for errors
+scripts/VALIDATION_README.md:376:   - Identify patterns in errors
+scripts/VALIDATION_README.md:435:2. Check migration error logs
+scripts/VALIDATION_README.md:440:   - Migration error log
+scripts/VALIDATION_README.md:442:   - Specific error patterns
+scripts/VALIDATION_QUICK_START.md:109:   - Field mismatches → Data transformation errors
+scripts/VALIDATION_QUICK_START.md:111:   - Type errors → Data type conversion problems
+scripts/VALIDATION_QUICK_START.md:183:2. Check migration error logs
+scripts/VALIDATION_QUICK_START.md:187:   - Migration error log
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:57:- Created type error logging
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:91:   - `TypeValidationError` - Type conversion errors
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:158:- **Pass Criteria:** Zero type conversion errors
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:166:- Sample of errors (first 5 of each type)
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:175:- All discrepancies, mismatches, and errors
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:192:- Detailed error logging with context
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:270:- ✅ Type conversion errors logged
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md:328:- ✅ Comprehensive error handling
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:5:Phase 2 of the PostgreSQL migration focuses on building the migration script with robust pause/resume, error logging, and progress tracking capabilities.
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:14:- `/scripts/migration/types.ts` - Complete TypeScript interfaces for migration state, errors, progress
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:40:- Complete validation and error handling
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:97:- `/scripts/migration/error-logger.ts` - Complete error logging implementation
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:100:- `ErrorLogger` class with comprehensive error capture
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:102:- Error log file (`migration-errors.log`)
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:104:  - Total errors
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:107:  - Common error patterns (top 10)
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:108:- Console error display
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:109:- Detailed error log format with timestamps, stack traces, and original documents
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:110:- Error pattern identification (foreign key violations, type errors, etc.)
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:179:6. `/scripts/migration/error-logger.ts` (287 lines)
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:231:- Comprehensive error logging with full context
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:233:- Per-table error statistics
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:269:- Detailed error context
+scripts/PHASE2_IMPLEMENTATION_STATUS.md:272:- Actionable error summaries
+scripts/MIGRATION_README.md:9:- **Error Logging**: Comprehensive error capture with full context
+scripts/MIGRATION_README.md:11:- **Transaction Safety**: Batch processing with rollback on errors
+scripts/MIGRATION_README.md:17:1. **types.ts** - TypeScript interfaces for migration state, errors, and progress
+scripts/MIGRATION_README.md:22:6. **error-logger.ts** - Error logging and summary generation
+scripts/MIGRATION_README.md:31:   └─ Initialize UUID mapper, progress tracker, error logger
+scripts/MIGRATION_README.md:57:   ├─ Generate error report
+scripts/MIGRATION_README.md:154:- Total errors
+scripts/MIGRATION_README.md:160:Errors are logged with full context to `./migration-errors.log`:
+scripts/MIGRATION_README.md:169:The migration continues processing other records after errors.
+scripts/MIGRATION_README.md:271:### migration-errors.log
+scripts/MIGRATION_README.md:272:- Detailed error logs
+scripts/MIGRATION_README.md:305:1. Check error log: `migration-errors.log`
+
+exec
+/usr/bin/bash -lc "find scripts -maxdepth 2 -type f -name '*build*' -print" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "rg --files | rg 'build-with-logs|observability|logger|log' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+observability/otel-collector-config.yml
+observability/loki-config.yml
+observability/grafana/provisioning/datasources/loki.yml
+logs/.gitkeep
+scripts/migration/error-logger.ts
+prisma/migrations/20260328000002_add_crm_audit_log/migration.sql
+app/client-logger.ts
+docs/observability.md
+app/components/NoApiKeyDialog.tsx
+app/api/client-logs/route.ts
+docs/superpowers/specs/2026-03-27-crm-audit-log-design.md
+lib/logger.ts
+lib/audit-log.ts
+docs/superpowers/plans/2026-03-27-crm-audit-log.md
+lib/__tests__/audit-log.test.ts
+components/ui/dialog.tsx
+components/ui/dialog-document-view.tsx
+components/ui/alert-dialog.tsx
+components/reports/ScheduleDialog.tsx
+components/reports/SaveConfigDialog.tsx
+components/crm/audit-log/Timeline.tsx
+components/crm/audit-log/Entry.tsx
+components/crm/audit-log/AdminTable.tsx
+components/crm/audit-log/AdminPageClient.tsx
+components/crm/audit-log/AdminFilters.tsx
+actions/crm/audit-log/get-audit-log-by-entity.ts
+actions/crm/audit-log/get-audit-log-admin.ts
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx
+app/[locale]/(routes)/admin/audit-log/page.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx
+
+exec
+/usr/bin/bash -lc "nl -ba package.json | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	{
+     2	  "name": "nextcrm-app",
+     3	  "version": "0.6.1",
+     4	  "private": true,
+     5	  "engines": {
+     6	    "node": ">=22.12.0",
+     7	    "pnpm": ">=9.0.0"
+     8	  },
+     9	  "scripts": {
+    10	    "dev": "next dev",
+    11	    "build": "prisma generate && prisma migrate deploy && next build",
+    12	    "start": "next start",
+    13	    "lint": "eslint . --max-warnings=0",
+    14	    "migrate:mongo-to-postgres": "pnpm exec tsx scripts/migrate-mongo-to-postgres.ts",
+    15	    "validate:migration": "pnpm exec tsx scripts/validate-migration.ts",
+    16	    "test": "jest",
+    17	    "test:e2e": "playwright test",
+    18	    "test:e2e:ui": "playwright test --ui",
+    19	    "test:e2e:headed": "playwright test --headed",
+    20	    "test:e2e:debug": "playwright test --debug"
+    21	  },
+    22	  "prisma": {
+    23	    "seed": "ts-node ./prisma/seeds/seed.ts"
+    24	  },
+    25	  "dependencies": {
+    26	    "@aws-sdk/client-s3": "^3.1014.0",
+    27	    "@aws-sdk/s3-request-presigner": "^3.1014.0",
+    28	    "@aws-sdk/signature-v4-crt": "^3.997.0",
+    29	    "@dnd-kit/core": "^6.3.1",
+    30	    "@dnd-kit/modifiers": "^9.0.0",
+    31	    "@dnd-kit/sortable": "^10.0.0",
+    32	    "@dnd-kit/utilities": "^3.2.2",
+    33	    "@hookform/resolvers": "^5.2.2",
+    34	    "@mendable/firecrawl-js": "^1.29.3",
+    35	    "@modelcontextprotocol/sdk": "^1.26.0",
+    36	    "@openai/agents": "^0.8.0",
+    37	    "@opentelemetry/api": "^1.9.1",
+    38	    "@prisma/adapter-pg": "7.6.0",
+    39	    "@prisma/client": "7.6.0",
+    40	    "@radix-ui/react-avatar": "^1.1.11",
+    41	    "@radix-ui/react-checkbox": "^1.3.3",
+    42	    "@radix-ui/react-collapsible": "^1.1.12",
+    43	    "@radix-ui/react-dialog": "^1.1.15",
+    44	    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    45	    "@radix-ui/react-hover-card": "^1.1.15",
+    46	    "@radix-ui/react-icons": "^1.3.2",
+    47	    "@radix-ui/react-label": "^2.1.8",
+    48	    "@radix-ui/react-popover": "^1.1.15",
+    49	    "@radix-ui/react-scroll-area": "^1.2.10",
+    50	    "@radix-ui/react-select": "^2.2.6",
+    51	    "@radix-ui/react-separator": "^1.1.8",
+    52	    "@radix-ui/react-slot": "^1.2.4",
+    53	    "@radix-ui/react-switch": "^1.2.6",
+    54	    "@radix-ui/react-tabs": "^1.1.13",
+    55	    "@radix-ui/react-toast": "^1.2.15",
+    56	    "@radix-ui/react-tooltip": "^1.2.8",
+    57	    "@react-email/components": "^1.0.8",
+    58	    "@react-email/markdown": "0.0.18",
+    59	    "@react-email/render": "^2.0.4",
+    60	    "@react-pdf/renderer": "^4.3.2",
+    61	    "@tailwindcss/postcss": "^4.2.1",
+    62	    "@tanstack/react-table": "^8.21.3",
+    63	    "@tiptap/extension-link": "^3.20.5",
+    64	    "@tiptap/extension-underline": "^3.20.5",
+    65	    "@tiptap/pm": "^3.20.5",
+    66	    "@tiptap/react": "^3.20.5",
+    67	    "@tiptap/starter-kit": "^3.20.5",
+    68	    "@upstash/ratelimit": "^2.0.8",
+    69	    "@upstash/redis": "^1.37.0",
+    70	    "@vercel/otel": "^2.1.2",
+    71	    "ai": "^6.0.99",
+    72	    "autoprefixer": "^10.4.24",
+    73	    "aws-crt": "^1.29.0",
+    74	    "axios": "^1.13.5",
+    75	    "bcrypt": "^6.0.0",
+    76	    "bcryptjs": "^3.0.3",
+    77	    "better-auth": "^1.5.6",
+    78	    "class-variance-authority": "^0.7.1",
+    79	    "clsx": "^2.1.1",
+    80	    "cmdk": "^1.1.1",
+    81	    "date-fns": "^4.1.0",
+    82	    "dayjs": "^1.11.19",
+    83	    "e2b": "^2.18.0",
+    84	    "encoding": "^0.1.13",
+    85	    "entities": "^7.0.1",
+    86	    "eslint": "^9.39.3",
+    87	    "eslint-config-next": "16.1.6",
+    88	    "form-data": "^4.0.5",
+    89	    "geist": "^1.7.0",
+    90	    "imap": "^0.8.19",
+    91	    "inngest": "^4.0.2",
+    92	    "input-otp": "^1.4.2",
+    93	    "jotai": "^2.18.0",
+    94	    "lucide-react": "^0.574.0",
+    95	    "mailparser": "^3.9.3",
+    96	    "mammoth": "^1.12.0",
+    97	    "mcp-handler": "^1.1.0",
+    98	    "moment": "^2.30.1",
+    99	    "mongodb": "^7.1.0",
+   100	    "next": "^16.2.1",
+   101	    "next-intl": "^4.8.3",
+   102	    "next-themes": "^0.4.6",
+   103	    "nodemailer": "^8.0.4",
+   104	    "openai": "^6.25.0",
+   105	    "papaparse": "^5.5.3",
+   106	    "pdf-parse": "^2.4.5",
+   107	    "pg": "^8.18.0",
+   108	    "pino": "^10.3.1",
+   109	    "pino-pretty": "^13.1.3",
+   110	    "postcss": "^8.5.6",
+   111	    "primeicons": "^7.0.0",
+   112	    "primereact": "^10.9.7",
+   113	    "react": "19.2.4",
+   114	    "react-day-picker": "^9.13.2",
+   115	    "react-doc-viewer": "^0.1.15",
+   116	    "react-dom": "19.2.4",
+   117	    "react-dropzone": "^15.0.0",
+   118	    "react-hook-form": "^7.71.2",
+   119	    "react-hot-toast": "^2.6.0",
+   120	    "react-icons": "^5.5.0",
+
+exec
+/usr/bin/bash -lc "find . -maxdepth 3 -type f -iname '*log*' -o -iname '*build*' | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./CHANGELOG.md
+./app/components/NoApiKeyDialog.tsx
+./app/client-logger.ts
+./buildCount.json
+./components/reports/SaveConfigDialog.tsx
+./components/reports/ScheduleDialog.tsx
+./components/ui/alert-dialog.tsx
+./components/ui/dialog-document-view.tsx
+./components/ui/dialog.tsx
+./e2b/build.ts
+./lib/__tests__/audit-log.test.ts
+./lib/audit-log.ts
+./lib/logger.ts
+./scripts/migration/error-logger.ts
+./logs/nextcrm.log
+./logs/build.log
+./node_modules/.pnpm/@aws-sdk+xml-builder@3.972.15
+./node_modules/.pnpm/fast-xml-builder@1.1.5
+./node_modules/.pnpm/@smithy+querystring-builder@4.2.12
+./node_modules/.pnpm/@aws-sdk+xml-builder@3.972.11
+./node_modules/.pnpm/node-gyp-build@4.8.4
+./node_modules/.pnpm/@bufbuild+protobuf@2.11.0
+./node_modules/.pnpm/@connectrpc+connect@2.0.0-rc.3_@bufbuild+protobuf@2.11.0
+./node_modules/.pnpm/@connectrpc+connect-web@2.0.0-rc.3_@bufbuild+protobuf@2.11.0_@connectrpc+connect@2.0.0-rc.3_@bufbuild+protobuf@2.11.0_
+./node_modules/.pnpm/xmlbuilder@10.1.1
+./node_modules/.pnpm/xmlbuilder2@4.0.3
+./node_modules/.pnpm/esbuild@0.27.3
+./node_modules/.pnpm/@esbuild+linux-x64@0.27.3
+./node_modules/xmlbuilder2
+./.next/dev/build
+./.next/dev/build-manifest.json
+./.next/dev/fallback-build-manifest.json
+./.next/diagnostics/build-diagnostics.json
+./.next/build
+./.next/trace-build
+
+codex
+The repository does not contain a `scripts/build-with-logs` source file, so that module name appears to be from the external observability wrapper rather than application code. I’m checking the local build log only to confirm it matches the incident payload.
+exec
+/usr/bin/bash -lc 'tail -n 40 logs/build.log' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m22 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m23 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m24 |\u001b[0m ...nks[\u001b[35m0\u001b[0m].href}>","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Parsing ecmascript source code failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Server Component:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/layout.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Code generation for chunk item errored","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Caused by:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Debug info:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of <MergedEcmascriptModule as EcmascriptChunkPlaceable>::chunk_item_content failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of *EcmascriptChunkItemContent::new failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of EcmascriptModuleContent::new_merged failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component Browser:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component SSR:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    at <unknown> (./app/[locale]/(routes)/components/Footer.tsx:21:12)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging finished","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_failed","exit_code":1}
+
+exec
+/usr/bin/bash -lc "git show 003a728 --unified=20 -- 'app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,140p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 003a728b56429230d40058622e7d0f6fb925e150
+Author: Pavel Dovhomilja <pavel@dovhomilja.dev>
+Date:   Fri Apr 3 09:01:16 2026 +0200
+
+    feat(footer): read app version from package.json instead of env var
+    
+    Replace NEXT_PUBLIC_APP_V env variable with a direct import of `version`
+    from package.json so the footer version stays in sync with releases
+    automatically.
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index f209c8a..a19a0d8 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,33 +1,34 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+-import React from "react";
++import { version } from "@/package.json";
++
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+   //console.log(nextVersion, "nextVersion");
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+         <Link href="/">
+           <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+-            {process.env.NEXT_PUBLIC_APP_NAME} - {process.env.NEXT_PUBLIC_APP_V}
++            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+           </h1>
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+         powered by Next.js
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+           {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+         <Link href={"https://ui.shadcn.com/"}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+             shadcnUI
+           </span>
+         </Link>{" "}
+         hosted by:
+         <span className="text-bold underline hover:text-foreground transition-colors">
+           <Link href="https://www.vercel.com">Vercel</Link>
+         </span>
+       </div>
+     </footer>
+
+codex
+**Incident Report**
+
+Most likely root cause: an incomplete footer metadata refactor in commit `4ef0d23` (`Refactor footer link metadata`, May 1, 2026).
+
+The failing build is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) importing `footerBadgeLabels` from [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1), but `footer-links.ts` only exports `footerLinks` and `footerMeta`. That directly explains:
+
+`TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.`
+
+The same refactor also introduced this expression at [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript/JavaScript disallows mixing `??` with `||` without explicit parentheses, which directly explains:
+
+`TS5076: '??' and '||' operations cannot be mixed without parentheses.`
+
+The repeated `"Build logging finished"` entries are terminal build wrapper events, not the underlying failure. The actionable failure is the `Footer.tsx` compile error introduced by the footer refactor.
+
+Confidence: high. Current source matches both incident errors, and git history shows both problematic changes were introduced together in `4ef0d23` on branch `feature/task-4`. No code changes were made.
+tokens used
+26,526
+**Incident Report**
+
+Most likely root cause: an incomplete footer metadata refactor in commit `4ef0d23` (`Refactor footer link metadata`, May 1, 2026).
+
+The failing build is caused by [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4) importing `footerBadgeLabels` from [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1), but `footer-links.ts` only exports `footerLinks` and `footerMeta`. That directly explains:
+
+`TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.`
+
+The same refactor also introduced this expression at [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:21):
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript/JavaScript disallows mixing `??` with `||` without explicit parentheses, which directly explains:
+
+`TS5076: '??' and '||' operations cannot be mixed without parentheses.`
+
+The repeated `"Build logging finished"` entries are terminal build wrapper events, not the underlying failure. The actionable failure is the `Footer.tsx` compile error introduced by the footer refactor.
+
+Confidence: high. Current source matches both incident errors, and git history shows both problematic changes were introduced together in `4ef0d23` on branch `feature/task-4`. No code changes were made.

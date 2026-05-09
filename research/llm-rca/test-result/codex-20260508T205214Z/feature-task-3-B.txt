@@ -1,0 +1,2049 @@
+run_name: feature-task-3-B
+case_name: feature-task-3
+variant: B
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:01:08Z
+elapsed_seconds: 111
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/B/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment.
+
+The failing log message comes from `app/api/upload/presigned-url/route.ts`, inside the `catch` around presigned URL response generation. The route signs the MinIO PUT URL, then calls `buildPublicFileUrl(key)`, which does:
+
+```ts
+new URL(MINIO_PUBLIC_URL!)
+```
+
+`MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In `.env.local`, this is set to an empty value:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+An empty string passed to `new URL("")` throws `TypeError: Invalid URL`. That exception is caught and logged as:
+
+```text
+Presigned upload URL generation failed
+```
+
+So the most likely failure was not the S3/MinIO signing itself, but building the public `fileUrl` after signing.
+
+**Evidence**
+
+- Incident module matches the route logger: `api.upload.presigned-url`.
+- Incident message exactly matches the route catch block.
+- `lib/minio.ts` validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` empty.
+- `new URL("")` throws `TypeError: Invalid URL`.
+
+**Impact**
+
+Authenticated upload attempts for valid file types return HTTP 500 before the client receives `presignedUrl`, `fileUrl`, and `key`. The user-facing upload flow then fails at “Failed to get presigned URL” or “Failed to get upload URL.”
+
+**Note on Missing Error Details**
+
+The incident has `error.name`, `error.message`, and `error.stack` as `null`. The app logs the caught exception under `err`, while the incident normalization appears to expect an `error` object. That likely explains why the actual `TypeError: Invalid URL` was lost in the collected event.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0964-e6fd-7da1-9ecc-cbc7bef62458
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:44:22.320Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "api.upload.presigned-url",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Presigned upload URL generation failed",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+        "spanId": "8f0a9636dd20584e",
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the upload presigned-url path and surrounding config/error handling, keeping outputs constrained since the repo-specific context-mode tools are not available in this session. No files will be changed.
+exec
+/usr/bin/bash -lc 'rg -n "presigned|Presigned|upload URL|upload.presigned|presigned-url" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "rg -n \"api\\.upload\\.presigned-url|logger|createLogger|observability|correlation|traceId\" -S ." in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:100:| `crm_create_document` | Create record + get presigned upload URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:101:| `crm_get_upload_url` | Get presigned upload URL for existing doc |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:102:| `crm_get_download_url` | Get presigned download URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:186:| `reports_run` | Trigger report + get presigned URL to result |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:270:// Presigned URL (documents)
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:76:4. Request presigned URL from existing `/api/upload/presigned-url`
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:77:5. Upload directly to MinIO via presigned URL
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:222:| POST | `/api/upload/presigned-url` | Accept all supported MIME types in a single upload flow |
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:29:| `lib/mcp/tools/crm-documents.ts` | Create | Documents lifecycle + presigned URLs + entity linking (8 tools) |
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1668:    description: "Create a document record and get a presigned upload URL",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1711:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1716:    description: "Get a presigned upload URL for an existing document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1730:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1735:    description: "Get a presigned download URL for a document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1748:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1838:git commit -m "feat(mcp): add documents tools (8 tools, presigned URLs, entity linking)"
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:44:| `app/api/upload/presigned-url/route.ts` | Accept all MIME types in unified flow |
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1655:      // Get presigned URL
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1657:      const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1667:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1668:      const { presignedUrl, fileUrl, key } = await res.json();
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1673:      await fetch(presignedUrl, {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2470:## Task 15: Update Presigned URL Route for Unified Upload
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2473:- Modify: `app/api/upload/presigned-url/route.ts`
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2475:- [ ] **Step 1: Ensure the presigned URL route accepts all needed MIME types**
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2495:git add app/api/upload/presigned-url/route.ts
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2496:git commit -m "fix(upload): ensure all document MIME types are allowed in presigned URL route"
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1147:- Modify: `app/api/upload/presigned-url/route.ts`
+./components/ui/minio-uploader.tsx:34:      setProgress("Requesting upload URL...");
+./components/ui/minio-uploader.tsx:37:        // Step 1: Get presigned URL from our server
+./components/ui/minio-uploader.tsx:38:        const res = await fetch("/api/upload/presigned-url", {
+./components/ui/minio-uploader.tsx:48:        if (!res.ok) throw new Error("Failed to get upload URL");
+./components/ui/minio-uploader.tsx:49:        const { presignedUrl, fileUrl, key } = await res.json();
+./components/ui/minio-uploader.tsx:54:        const uploadRes = await fetch(presignedUrl, {
+./lib/mcp/tools/crm-documents.ts:105:    description: "Create a document record and get a presigned upload URL",
+./lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:148:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:153:    description: "Get a presigned upload URL for an existing document",
+./lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:167:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:172:    description: "Get a presigned download URL for a document",
+./lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./lib/mcp/tools/crm-documents.ts:185:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:59:  // Presigned URL valid for 10 minutes
+./app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./app/api/upload/presigned-url/route.ts:73:      "Presigned upload URL generated"
+./app/api/upload/presigned-url/route.ts:76:    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+./app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+./app/api/upload/presigned-url/route.ts:87:    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+./app/[locale]/(routes)/documents/components/modal-dropzone.tsx:38:        size: 0, // size not available from presigned URL flow
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:94:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:95:      const { presignedUrl, fileUrl, key } = await res.json();
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:99:      const uploadRes = await fetch(presignedUrl, {
+./CHANGELOG.md:32:* **mcp:** add documents tools (8 tools, presigned URLs, entity linking) ([756d2be](https://github.com/pdovhomilja/nextcrm-app/commit/756d2bea8630cbd1196df6e14884139fe22fa465))
+
+ succeeded in 0ms:
+./docker-compose.yml:26:      - ./observability/loki-config.yml:/etc/loki/local-config.yml:ro,z
+./docker-compose.yml:47:      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro,z
+./docker-compose.yml:67:      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,z
+./pnpm-lock.yaml:570:  '@aws-sdk/middleware-logger@3.972.8':
+./pnpm-lock.yaml:1914:  '@open-draft/logger@0.3.0':
+./pnpm-lock.yaml:4709:  bs-logger@0.2.6:
+./pnpm-lock.yaml:8883:      '@aws-sdk/middleware-logger': 3.972.8
+./pnpm-lock.yaml:9130:  '@aws-sdk/middleware-logger@3.972.8':
+./pnpm-lock.yaml:9212:      '@aws-sdk/middleware-logger': 3.972.8
+./pnpm-lock.yaml:10472:      '@open-draft/logger': 0.3.0
+./pnpm-lock.yaml:10653:  '@open-draft/logger@0.3.0':
+./pnpm-lock.yaml:13919:  bs-logger@0.2.6:
+./pnpm-lock.yaml:18051:      bs-logger: 0.2.6
+./instrumentation.ts:12:    void import("@/lib/logger").then(({ logger }) => {
+./instrumentation.ts:13:      logger.info({ serviceName }, "OpenTelemetry instrumentation registered");
+./instrumentation.ts:27:  const { logger } = await import("@/lib/logger");
+./instrumentation.ts:29:  logger.error(
+./README.md:296:Local OpenTelemetry, Pino, Loki, and Grafana setup is documented in [docs/observability.md](docs/observability.md).
+./scripts/PHASE2_IMPLEMENTATION_STATUS.md:97:- `/scripts/migration/error-logger.ts` - Complete error logging implementation
+./scripts/PHASE2_IMPLEMENTATION_STATUS.md:179:6. `/scripts/migration/error-logger.ts` (287 lines)
+./scripts/MIGRATION_README.md:22:6. **error-logger.ts** - Error logging and summary generation
+./scripts/MIGRATION_README.md:31:   └─ Initialize UUID mapper, progress tracker, error logger
+./scripts/migration/batch-processor.ts:7:import { ErrorLogger } from './error-logger';
+./scripts/migrate-mongo-to-postgres.ts:18:import { ErrorLogger } from './migration/error-logger';
+./scripts/migration/error-logger.ts:25:   * Initializes the error logger (opens log file)
+./scripts/migration/error-logger.ts:47:      console.error('Failed to initialize error logger:', error);
+./scripts/migration/orchestrator.ts:10:import { ErrorLogger } from './error-logger';
+./actions/user/update-profile.ts:2:import { createLogger } from "@/lib/logger";
+./actions/user/update-profile.ts:8:const logger = createLogger({ module: "actions.user.update-profile" });
+./actions/user/update-profile.ts:35:    logger.error({ err: error }, "UPDATE_PROFILE");
+./actions/user/set-language.ts:2:import { createLogger } from "@/lib/logger";
+./actions/user/set-language.ts:9:const logger = createLogger({ module: "actions.user.set-language" });
+./actions/user/set-language.ts:35:    logger.error({ err: error }, "SET_LANGUAGE");
+./actions/system/get-next-version.ts:1:import { createLogger } from "@/lib/logger";
+./actions/system/get-next-version.ts:4:const logger = createLogger({ module: "actions.system.get-next-version" });
+./actions/system/get-next-version.ts:17:      logger.error({ err: error }, "Error parsing package.json");
+./actions/system/get-next-version.ts:21:    logger.error({ err: error }, "Error reading package.json");
+./docs/observability.md:3:NextCRM ships local observability through Docker Compose:
+./docs/observability.md:14:Start the observability stack:
+./actions/projects/watch-project.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/watch-project.ts:9:const logger = createLogger({ module: "actions.projects.watch-project" });
+./actions/projects/watch-project.ts:27:    logger.error({ err: error }, "WATCH_PROJECT");
+./actions/projects/watch-project.ts:52:    logger.error({ err: error }, "UNWATCH_PROJECT");
+./actions/projects/update-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/update-task.ts:10:const logger = createLogger({ module: "actions.projects.update-task" });
+./actions/projects/update-task.ts:95:        logger.error({ err: emailError }, "UPDATE_TASK_EMAIL");
+./actions/projects/update-task.ts:102:    logger.error({ err: error }, "UPDATE_TASK");
+./actions/projects/update-section-title.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/update-section-title.ts:8:const logger = createLogger({ module: "actions.projects.update-section-title" });
+./actions/projects/update-section-title.ts:28:    logger.error({ err: error }, "UPDATE_SECTION_TITLE");
+./actions/projects/update-project.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/update-project.ts:8:const logger = createLogger({ module: "actions.projects.update-project" });
+./actions/projects/update-project.ts:37:    logger.error({ err: error }, "UPDATE_PROJECT");
+./actions/github/get-repo-stars.ts:1:import { createLogger } from "@/lib/logger";
+./actions/github/get-repo-stars.ts:5:const logger = createLogger({ module: "actions.github.get-repo-stars" });
+./actions/github/get-repo-stars.ts:23:    logger.error({ err: error }, "Error fetching commits");
+./actions/github/get-repo-commits.ts:1:import { createLogger } from "@/lib/logger";
+./actions/github/get-repo-commits.ts:6:const logger = createLogger({ module: "actions.github.get-repo-commits" });
+./actions/github/get-repo-commits.ts:45:    logger.error({ err: error }, "Error fetching commits");
+./actions/projects/update-kanban-position.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/update-kanban-position.ts:8:const logger = createLogger({ module: "actions.projects.update-kanban-position" });
+./actions/projects/update-kanban-position.ts:58:    logger.error({ err: error }, "UPDATE_KANBAN_POSITION");
+./actions/projects/mark-task-done.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/mark-task-done.ts:8:const logger = createLogger({ module: "actions.projects.mark-task-done" });
+./actions/projects/mark-task-done.ts:27:    logger.error({ err: error }, "MARK_TASK_DONE");
+./actions/projects/delete-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/delete-task.ts:8:const logger = createLogger({ module: "actions.projects.delete-task" });
+./actions/projects/delete-task.ts:52:    logger.error({ err: error }, "DELETE_TASK");
+./actions/projects/delete-section.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/delete-section.ts:8:const logger = createLogger({ module: "actions.projects.delete-section" });
+./actions/projects/delete-section.ts:27:    logger.error({ err: error }, "DELETE_SECTION");
+./actions/fulltext/unified-search.ts:2:import { createLogger } from "@/lib/logger";
+./actions/fulltext/unified-search.ts:11:const logger = createLogger({ module: "actions.fulltext.unified-search" });
+./actions/fulltext/unified-search.ts:63:    logger.warn({ err: e }, "[UNIFIED_SEARCH] embedding failed, falling back to keyword-only");
+./actions/fulltext/unified-search.ts:384:    logger.error({ err: error }, "UNIFIED_SEARCH");
+./actions/projects/delete-project.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/delete-project.ts:8:const logger = createLogger({ module: "actions.projects.delete-project" });
+./actions/projects/delete-project.ts:24:    logger.error({ err: error }, "DELETE_PROJECT");
+./actions/projects/create-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/create-task.ts:10:const logger = createLogger({ module: "actions.projects.create-task" });
+./actions/projects/create-task.ts:105:        logger.error({ err: emailError }, "CREATE_TASK_EMAIL");
+./actions/projects/create-task.ts:112:    logger.error({ err: error }, "CREATE_TASK");
+./actions/projects/create-task-in-board.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/create-task-in-board.ts:10:const logger = createLogger({ module: "actions.projects.create-task-in-board" });
+./actions/projects/create-task-in-board.ts:57:      logger.error({ err: error }, "CREATE_TASK_IN_BOARD_QUICK");
+./actions/projects/create-task-in-board.ts:133:        logger.error({ err: emailError }, "CREATE_TASK_IN_BOARD_EMAIL");
+./actions/projects/create-task-in-board.ts:140:    logger.error({ err: error }, "CREATE_TASK_IN_BOARD");
+./actions/projects/create-section.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/create-section.ts:8:const logger = createLogger({ module: "actions.projects.create-section" });
+./actions/projects/create-section.ts:37:    logger.error({ err: error }, "CREATE_SECTION");
+./actions/projects/create-project.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/create-project.ts:8:const logger = createLogger({ module: "actions.projects.create-project" });
+./actions/projects/create-project.ts:49:    logger.error({ err: error }, "CREATE_PROJECT");
+./actions/projects/assign-document-to-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/assign-document-to-task.ts:8:const logger = createLogger({ module: "actions.projects.assign-document-to-task" });
+./actions/projects/assign-document-to-task.ts:42:    logger.error({ err: error }, "ASSIGN_DOCUMENT_TO_TASK");
+./actions/projects/assign-document-to-task.ts:82:    logger.error({ err: error }, "DISCONNECT_DOCUMENT_FROM_TASK");
+./actions/projects/add-comment-to-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/projects/add-comment-to-task.ts:11:const logger = createLogger({ module: "actions.projects.add-comment-to-task" });
+./actions/projects/add-comment-to-task.ts:109:        logger.error({ err: emailError }, "ADD_COMMENT_EMAIL");
+./actions/projects/add-comment-to-task.ts:129:    logger.error({ err: error }, "ADD_COMMENT_TO_TASK");
+./lib/sendmail.ts:2:import { createLogger } from "@/lib/logger";
+./lib/sendmail.ts:4:const logger = createLogger({ module: "sendmail" });
+./lib/sendmail.ts:29:    logger.info(
+./lib/sendmail.ts:36:    logger.error(
+./lib/openai.ts:3:import { createLogger } from "@/lib/logger";
+./lib/openai.ts:5:const logger = createLogger({ module: "openai" });
+./lib/openai.ts:14:    logger.warn({ provider: "OPENAI", userId }, "API key not configured");
+./lib/logger.ts:18:    trace_id: spanContext.traceId,
+./lib/logger.ts:55:export const logger = pino(
+./lib/logger.ts:99:export function createLogger(bindings: pino.Bindings) {
+./lib/logger.ts:100:  return logger.child(bindings);
+./lib/audit-log.ts:2:import { createLogger } from "@/lib/logger";
+./lib/audit-log.ts:5:const logger = createLogger({ module: "audit-log" });
+./lib/audit-log.ts:81:    logger.error(
+./docs/superpowers/specs/2026-03-25-campaigns-module-design.md:157:  resend_message_id String?   // for webhook correlation
+./actions/crm/get-opportunities.ts:1:import { createLogger } from "@/lib/logger";
+./actions/crm/get-opportunities.ts:5:const logger = createLogger({ module: "actions.crm.get-opportunities" });
+./actions/crm/get-opportunities.ts:98:  logger.debug({ opportunityCount: opportunities.length }, "Loaded opportunities by stage");
+./actions/crm/tasks/delete-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/tasks/delete-task.ts:8:const logger = createLogger({ module: "actions.crm.tasks.delete-task" });
+./actions/crm/tasks/delete-task.ts:27:    logger.error({ err: error }, "DELETE_TASK");
+./actions/crm/tasks/add-comment.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/tasks/add-comment.ts:8:const logger = createLogger({ module: "actions.crm.tasks.add-comment" });
+./actions/crm/tasks/add-comment.ts:40:    logger.error({ err: error }, "ADD_COMMENT");
+./actions/crm/targets/suggest-mapping.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/targets/suggest-mapping.ts:7:const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+./actions/crm/targets/suggest-mapping.ts:137:      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+./actions/crm/targets/convert-target.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/targets/convert-target.ts:8:const logger = createLogger({ module: "actions.crm.targets.convert-target" });
+./actions/crm/targets/convert-target.ts:86:    logger.error({ err: error }, "[convertTarget] Error");
+./actions/crm/similarity/get-similar-opportunities.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/similarity/get-similar-opportunities.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-opportunities" });
+./actions/crm/similarity/get-similar-opportunities.ts:44:    logger.error({ err: error }, "GET_SIMILAR_OPPORTUNITIES");
+./actions/crm/similarity/get-similar-leads.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/similarity/get-similar-leads.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-leads" });
+./actions/crm/similarity/get-similar-leads.ts:43:    logger.error({ err: error }, "GET_SIMILAR_LEADS");
+./actions/crm/similarity/get-similar-contacts.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/similarity/get-similar-contacts.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-contacts" });
+./actions/crm/similarity/get-similar-contacts.ts:43:    logger.error({ err: error }, "GET_SIMILAR_CONTACTS");
+./actions/crm/similarity/get-similar-accounts.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/similarity/get-similar-accounts.ts:6:const logger = createLogger({ module: "actions.crm.similarity.get-similar-accounts" });
+./actions/crm/similarity/get-similar-accounts.ts:55:    logger.error({ err: error }, "GET_SIMILAR_ACCOUNTS");
+./app/client-error-listener.tsx:4:import { createClientLogger } from "@/app/client-logger";
+./app/client-error-listener.tsx:6:const logger = createClientLogger({ module: "app.client-error-listener" });
+./app/client-error-listener.tsx:11:      logger.error(
+./app/client-error-listener.tsx:25:      logger.error(
+./actions/crm/products/import-products.ts:3:import { createLogger } from "@/lib/logger";
+./actions/crm/products/import-products.ts:11:const logger = createLogger({ module: "actions.crm.products.import" });
+./actions/crm/products/import-products.ts:29:  logger.info({ rows: data.length, userId }, "Product import started");
+./actions/crm/products/import-products.ts:165:  logger.info(
+./actions/crm/products/update-product/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/products/update-product/index.ts:12:const logger = createLogger({ module: "actions.crm.products.update-product" });
+./actions/crm/products/update-product/index.ts:74:    logger.error({ err: error }, "UPDATE_PRODUCT");
+./actions/crm/products/delete-product/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/products/delete-product/index.ts:9:const logger = createLogger({ module: "actions.crm.products.delete-product" });
+./actions/crm/products/delete-product/index.ts:36:    logger.error({ err: error }, "DELETE_PRODUCT");
+./app/api/client-logs/route.ts:1:import { createLogger } from "@/lib/logger";
+./app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+./app/api/client-logs/route.ts:55:      logger.debug(payload, message);
+./app/api/client-logs/route.ts:58:      logger.warn(payload, message);
+./app/api/client-logs/route.ts:61:      logger.error(payload, message);
+./app/api/client-logs/route.ts:64:      logger.info(payload, message);
+./actions/crm/products/create-product/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/products/create-product/index.ts:12:const logger = createLogger({ module: "actions.crm.products.create-product" });
+./actions/crm/products/create-product/index.ts:68:    logger.error({ err: error }, "CREATE_PRODUCT");
+./app/api/upload/presigned-url/route.ts:6:import { createLogger } from "@/lib/logger";
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:66:    logger.info(
+./app/api/upload/presigned-url/route.ts:78:    logger.error(
+./actions/crm/opportunity/dashboard/set-inactive.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunity/dashboard/set-inactive.ts:7:const logger = createLogger({ module: "actions.crm.opportunity.dashboard.set-inactive" });
+./actions/crm/opportunity/dashboard/set-inactive.ts:14:  logger.debug({ opportunityId: id }, "Setting opportunity inactive");
+./actions/crm/opportunity/dashboard/set-inactive.ts:17:    logger.warn("Opportunity id is required");
+./actions/crm/opportunity/dashboard/set-inactive.ts:47:    logger.debug(
+./actions/crm/opportunity/dashboard/set-inactive.ts:52:    logger.info("Opportunity has been set to inactive");
+./actions/crm/opportunity/dashboard/set-inactive.ts:54:    logger.error({ err: error, opportunityId: id }, "Set opportunity inactive failed");
+./actions/crm/opportunity-line-items/update-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunity-line-items/update-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.opportunity-line-items.update-line-item" });
+./actions/crm/opportunity-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_OPPORTUNITY_LINE_ITEM");
+./actions/crm/opportunity-line-items/reorder-line-items/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunity-line-items/reorder-line-items/index.ts:8:const logger = createLogger({ module: "actions.crm.opportunity-line-items.reorder-line-items" });
+./actions/crm/opportunity-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_OPPORTUNITY_LINE_ITEMS");
+./app/api/feedback/route.ts:2:import { createLogger } from "@/lib/logger";
+./app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+./app/api/feedback/route.ts:45:    logger.info({ userId: session.user.id }, "Feedback email sent");
+./app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+./actions/crm/opportunity-line-items/remove-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunity-line-items/remove-line-item/index.ts:10:const logger = createLogger({ module: "actions.crm.opportunity-line-items.remove-line-item" });
+./actions/crm/opportunity-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_OPPORTUNITY_LINE_ITEM");
+./actions/crm/opportunity-line-items/add-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunity-line-items/add-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.opportunity-line-items.add-line-item" });
+./actions/crm/opportunity-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_OPPORTUNITY_LINE_ITEM");
+./actions/crm/opportunities/update-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunities/update-opportunity.ts:11:const logger = createLogger({ module: "actions.crm.opportunities.update-opportunity" });
+./actions/crm/opportunities/update-opportunity.ts:91:    logger.error({ err: error }, "UPDATE_OPPORTUNITY");
+./actions/crm/opportunities/restore-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunities/restore-opportunity.ts:9:const logger = createLogger({ module: "actions.crm.opportunities.restore-opportunity" });
+./actions/crm/opportunities/restore-opportunity.ts:32:    logger.error({ err: error }, "RESTORE_OPPORTUNITY");
+./actions/crm/opportunities/delete-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunities/delete-opportunity.ts:9:const logger = createLogger({ module: "actions.crm.opportunities.delete-opportunity" });
+./actions/crm/opportunities/delete-opportunity.ts:31:    logger.error({ err: error }, "DELETE_OPPORTUNITY");
+./actions/crm/opportunities/create-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/opportunities/create-opportunity.ts:12:const logger = createLogger({ module: "actions.crm.opportunities.create-opportunity" });
+./actions/crm/opportunities/create-opportunity.ts:108:    logger.error({ err: error }, "CREATE_OPPORTUNITY");
+./actions/crm/leads/update-lead.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/leads/update-lead.ts:11:const logger = createLogger({ module: "actions.crm.leads.update-lead" });
+./actions/crm/leads/update-lead.ts:110:    logger.error({ err: error }, "UPDATE_LEAD");
+./actions/crm/leads/restore-lead.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/leads/restore-lead.ts:9:const logger = createLogger({ module: "actions.crm.leads.restore-lead" });
+./actions/crm/leads/restore-lead.ts:32:    logger.error({ err: error }, "RESTORE_LEAD");
+./actions/crm/leads/delete-lead.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/leads/delete-lead.ts:9:const logger = createLogger({ module: "actions.crm.leads.delete-lead" });
+./actions/crm/leads/delete-lead.ts:31:    logger.error({ err: error }, "DELETE_LEAD");
+./actions/crm/leads/create-lead.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/leads/create-lead.ts:11:const logger = createLogger({ module: "actions.crm.leads.create-lead" });
+./actions/crm/leads/create-lead.ts:104:    logger.error({ err: error }, "CREATE_LEAD");
+./actions/crm/contracts/update-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contracts/update-contract/index.ts:14:const logger = createLogger({ module: "actions.crm.contracts.update-contract" });
+./actions/crm/contracts/update-contract/index.ts:104:    logger.error({ err: error, contractId: id }, "Update contract failed");
+./actions/crm/contracts/restore-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contracts/restore-contract/index.ts:9:const logger = createLogger({ module: "actions.crm.contracts.restore-contract" });
+./actions/crm/contracts/restore-contract/index.ts:32:    logger.error({ err: error }, "RESTORE_CONTRACT");
+./actions/crm/contracts/delete-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contracts/delete-contract/index.ts:13:const logger = createLogger({ module: "actions.crm.contracts.delete-contract" });
+./actions/crm/contracts/delete-contract/index.ts:56:    logger.error({ err: error, contractId: id }, "Delete contract failed");
+./app/api/crm/leads/create-lead-from-web/route.ts:1:import { createLogger } from "@/lib/logger";
+./app/api/crm/leads/create-lead-from-web/route.ts:5:const logger = createLogger({ module: "api.crm.leads.create-from-web" });
+./app/api/crm/leads/create-lead-from-web/route.ts:42:    logger.warn("Rejected lead creation with invalid token");
+./app/api/crm/leads/create-lead-from-web/route.ts:64:      logger.info({ leadSource: lead_source }, "Lead created from remote form");
+./app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+./actions/crm/contracts/create-new-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contracts/create-new-contract/index.ts:14:const logger = createLogger({ module: "actions.crm.contracts.create-new-contract" });
+./actions/crm/contracts/create-new-contract/index.ts:87:    logger.error({ err: error }, "Create contract failed");
+./app/api/crm/contacts/create-from-remote/route.ts:1:import { createLogger } from "@/lib/logger";
+./app/api/crm/contacts/create-from-remote/route.ts:5:const logger = createLogger({ module: "app.api.crm.contacts.create-from-remote" });
+./app/api/crm/contacts/create-from-remote/route.ts:43:    logger.info({ tag }, "Remote contact created");
+./app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+./actions/crm/contract-line-items/update-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contract-line-items/update-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.contract-line-items.update-line-item" });
+./actions/crm/contract-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_CONTRACT_LINE_ITEM");
+./actions/crm/contract-line-items/reorder-line-items/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contract-line-items/reorder-line-items/index.ts:8:const logger = createLogger({ module: "actions.crm.contract-line-items.reorder-line-items" });
+./actions/crm/contract-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_CONTRACT_LINE_ITEMS");
+./actions/crm/contract-line-items/remove-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contract-line-items/remove-line-item/index.ts:10:const logger = createLogger({ module: "actions.crm.contract-line-items.remove-line-item" });
+./actions/crm/contract-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_CONTRACT_LINE_ITEM");
+./app/[locale]/(routes)/emails/components/mail-display.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/emails/components/mail-display.tsx:49:const logger = createClientLogger({ module: "app.[locale].(routes).emails.components.mail-display" });
+./app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+./actions/crm/contract-line-items/copy-from-opportunity/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contract-line-items/copy-from-opportunity/index.ts:10:const logger = createLogger({ module: "actions.crm.contract-line-items.copy-from-opportunity" });
+./actions/crm/contract-line-items/copy-from-opportunity/index.ts:94:    logger.error({ err: error }, "COPY_LINE_ITEMS_FROM_OPPORTUNITY");
+./actions/crm/contract-line-items/add-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contract-line-items/add-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.contract-line-items.add-line-item" });
+./actions/crm/contract-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_CONTRACT_LINE_ITEM");
+./actions/crm/contacts/update-contact.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contacts/update-contact.ts:10:const logger = createLogger({ module: "actions.crm.contacts.update-contact" });
+./actions/crm/contacts/update-contact.ts:82:    logger.error({ err: error }, "UPDATE_CONTACT");
+./actions/crm/contacts/unlink-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contacts/unlink-opportunity.ts:8:const logger = createLogger({ module: "actions.crm.contacts.unlink-opportunity" });
+./actions/crm/contacts/unlink-opportunity.ts:33:    logger.error({ err: error }, "UNLINK_OPPORTUNITY");
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).crm.tasks.viewtask.[taskId].components.data-table-row-actions" });
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+./actions/crm/contacts/restore-contact.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contacts/restore-contact.ts:9:const logger = createLogger({ module: "actions.crm.contacts.restore-contact" });
+./actions/crm/contacts/restore-contact.ts:32:    logger.error({ err: error }, "RESTORE_CONTACT");
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.viewtask.[taskId].components.data-table-row-actions" });
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+./actions/crm/contacts/delete-contact.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contacts/delete-contact.ts:9:const logger = createLogger({ module: "actions.crm.contacts.delete-contact" });
+./actions/crm/contacts/delete-contact.ts:31:    logger.error({ err: error }, "DELETE_CONTACT");
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).crm.tasks.viewtask.[taskId].components.data-table-row-actions-tasks" });
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+./actions/crm/contacts/create-contact.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/contacts/create-contact.ts:11:const logger = createLogger({ module: "actions.crm.contacts.create-contact" });
+./actions/crm/contacts/create-contact.ts:99:    logger.error({ err: error }, "CREATE_CONTACT");
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:33:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.viewtask.[taskId].components.data-table-row-actions-tasks" });
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+./actions/crm/activities/update-activity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/activities/update-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.update-activity" });
+./actions/crm/activities/update-activity.ts:102:    logger.error({ err: error }, "updateActivity error");
+./actions/crm/activities/get-activities-by-entity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/activities/get-activities-by-entity.ts:6:const logger = createLogger({ module: "actions.crm.activities.get-activities-by-entity" });
+./actions/crm/activities/get-activities-by-entity.ts:77:    logger.error({ err: error }, "getActivitiesByEntity error");
+./actions/crm/activities/delete-activity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/activities/delete-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.delete-activity" });
+./actions/crm/activities/delete-activity.ts:42:    logger.error({ err: error }, "deleteActivity error");
+./actions/crm/activities/create-activity.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/activities/create-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.create-activity" });
+./actions/crm/activities/create-activity.ts:77:    logger.error({ err: error }, "createActivity error");
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:52:const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].dialogs.NewTaskInProject" });
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:85:    logger.debug({ section: data.section, title: data.title }, "Submitting task in project");
+./app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:25:const logger = createClientLogger({ module: "app.[locale].(routes).projects.tasks.components.data-table-row-actions" });
+./app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+./actions/crm/accounts/watch-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/watch-account.ts:8:const logger = createLogger({ module: "actions.crm.accounts.watch-account" });
+./actions/crm/accounts/watch-account.ts:24:    logger.error({ err: error }, "WATCH_ACCOUNT");
+./actions/crm/accounts/update-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/update-account.ts:10:const logger = createLogger({ module: "actions.crm.accounts.update-account" });
+./actions/crm/accounts/update-account.ts:68:    logger.error({ err: error }, "UPDATE_ACCOUNT");
+./actions/crm/accounts/unwatch-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/unwatch-account.ts:8:const logger = createLogger({ module: "actions.crm.accounts.unwatch-account" });
+./actions/crm/accounts/unwatch-account.ts:27:    logger.error({ err: error }, "UNWATCH_ACCOUNT");
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:79:const logger = createClientLogger({ module: "app.[locale].(routes).projects.boards.[boardId].components.Kanban" });
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+./actions/crm/accounts/restore-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/restore-account.ts:9:const logger = createLogger({ module: "actions.crm.accounts.restore-account" });
+./actions/crm/accounts/restore-account.ts:32:    logger.error({ err: error }, "RESTORE_ACCOUNT");
+./actions/crm/accounts/delete-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/delete-account.ts:9:const logger = createLogger({ module: "actions.crm.accounts.delete-account" });
+./actions/crm/accounts/delete-account.ts:30:    logger.error({ err: error }, "DELETE_ACCOUNT");
+./actions/crm/accounts/create-task.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/create-task.ts:11:const logger = createLogger({ module: "actions.crm.accounts.create-task" });
+./actions/crm/accounts/create-task.ts:79:        logger.error({ err: error, taskId: task.id, userId: user }, "Task assignee notification failed");
+./actions/crm/accounts/create-task.ts:115:      logger.error({ err: error, accountId: account, taskId: task.id }, "Task watcher notification failed");
+./actions/crm/accounts/create-task.ts:121:    logger.error({ err: error }, "CREATE_TASK");
+./app/[locale]/(routes)/projects/actions/get-task-done.ts:1:import { createLogger } from "@/lib/logger";
+./app/[locale]/(routes)/projects/actions/get-task-done.ts:4:const logger = createLogger({ module: "app.routes.projects.actions.get-task-done" });
+./app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+./actions/crm/accounts/create-account.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/accounts/create-account.ts:10:const logger = createLogger({ module: "actions.crm.accounts.create-account" });
+./actions/crm/accounts/create-account.ts:63:    logger.error({ err: error }, "CREATE_ACCOUNT");
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:42:const logger = createClientLogger({ module: "app.[locale].(routes).projects.table-components.data-table-row-actions" });
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+./actions/crm/account-products/update-assignment/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/account-products/update-assignment/index.ts:12:const logger = createLogger({ module: "actions.crm.account-products.update-assignment" });
+./actions/crm/account-products/update-assignment/index.ts:57:    logger.error({ err: error }, "UPDATE_ASSIGNMENT");
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:18:const logger = createClientLogger({ module: "app.[locale].(routes).profile.components.ProfilePhotoForm" });
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+./actions/crm/account-products/remove-assignment/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/account-products/remove-assignment/index.ts:9:const logger = createLogger({ module: "actions.crm.account-products.remove-assignment" });
+./actions/crm/account-products/remove-assignment/index.ts:32:    logger.error({ err: error }, "REMOVE_ASSIGNMENT");
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:45:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.UpdateTask" });
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:97:  logger.debug({ boardId }, "Rendering update task dialog");
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:53:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.NewTask" });
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx:97:    logger.debug({ title: data.title }, "Submitting task creation");
+./actions/crm/account-products/assign-product/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/crm/account-products/assign-product/index.ts:13:const logger = createLogger({ module: "actions.crm.account-products.assign-product" });
+./actions/crm/account-products/assign-product/index.ts:71:    logger.error({ err: error }, "ASSIGN_PRODUCT");
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx:43:const logger = createClientLogger({ module: "app.[locale].(routes).projects.dialogs.NewProject" });
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx:76:    logger.debug({ title: data.title }, "Submitting project creation");
+./actions/ai/projects/boards/getAiReport.tsx:3:import { createLogger } from "@/lib/logger";
+./actions/ai/projects/boards/getAiReport.tsx:12:const logger = createLogger({ module: "actions.ai.projects.boards.getAiReport" });
+./actions/ai/projects/boards/getAiReport.tsx:83:    logger.error("Error from OpenAI API");
+./actions/ai/projects/boards/getAiReport.tsx:100:      logger.error({ err: error }, "Error from get-user-ai-tasks");
+./app/[locale]/(routes)/crm/leads/page.tsx:10:import { createLogger } from "@/lib/logger";
+./app/[locale]/(routes)/crm/leads/page.tsx:13:const logger = createLogger({ module: "app.routes.crm.leads.page" });
+./app/[locale]/(routes)/crm/leads/page.tsx:20:  logger.debug({ leadCount: leads.length }, "Loaded leads page");
+./actions/admin/users/set-role.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/users/set-role.ts:8:const logger = createLogger({ module: "actions.admin.users.set-role" });
+./actions/admin/users/set-role.ts:42:    logger.error({ err: error }, "SET_USER_ROLE");
+./actions/admin/users/invite-user.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/users/invite-user.ts:11:const logger = createLogger({ module: "actions.admin.users.invite-user" });
+./actions/admin/users/invite-user.ts:81:    logger.error({ err: error }, "INVITE_USER");
+./actions/admin/users/delete-user.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/users/delete-user.ts:8:const logger = createLogger({ module: "actions.admin.users.delete-user" });
+./actions/admin/users/delete-user.ts:37:    logger.error({ err: error }, "DELETE_USER");
+./actions/admin/users/deactivate-user.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/users/deactivate-user.ts:8:const logger = createLogger({ module: "actions.admin.users.deactivate-user" });
+./actions/admin/users/deactivate-user.ts:23:    logger.error({ err: error }, "DEACTIVATE_USER");
+./actions/admin/users/activate-user.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/users/activate-user.ts:9:const logger = createLogger({ module: "actions.admin.users.activate-user" });
+./actions/admin/users/activate-user.ts:45:    logger.error({ err: error }, "ACTIVATE_USER");
+./actions/admin/send-mail-to-all/index.ts:2:import { createLogger } from "@/lib/logger";
+./actions/admin/send-mail-to-all/index.ts:17:const logger = createLogger({ module: "actions.admin.send-mail-to-all" });
+./actions/admin/send-mail-to-all/index.ts:100:    logger.error({ err: error }, "Send mail to all users failed");
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:57:const logger = createClientLogger({ module: "app.[locale].(routes).crm.dashboard._components.CRMKanban" });
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:36:const logger = createClientLogger({ module: "app.[locale].(routes).crm.accounts.table-components.data-table-row-actions" });
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:25:const logger = createClientLogger({ module: "app.[locale].(routes).crm.accounts.[accountId].tasks-data-table.components.data-table-row-actions" });
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+./app/[locale]/(routes)/components/FeedbackForm.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+./app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:3:import { createClientLogger } from "@/app/client-logger";
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:13:const logger = createClientLogger({ module: "app.[locale].(routes).fulltext-search.components.SearchResult" });
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+
+exec
+/usr/bin/bash -lc "rg --files -g 'AGENTS.md' -g '.claude/skills/**/SKILL.md' -g '.claude/commands/*.md'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+AGENTS.md
+
+codex
+The matching route is `app/api/upload/presigned-url/route.ts`, and the incident message is emitted from its catch block. I’m narrowing this to the code path that can throw before a response is returned, then I’ll compare that with local environment configuration.
+exec
+/usr/bin/bash -lc "sed -n '1,140p' lib/logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' app/api/upload/presigned-url/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' docker-compose.yml" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { context, trace } from "@opentelemetry/api";
+import { mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { dirname, resolve } from "node:path";
+import pino from "pino";
+
+const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+
+function getTraceBindings() {
+  const spanContext = trace.getSpan(context.active())?.spanContext();
+
+  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    return {};
+  }
+
+  return {
+    trace_id: spanContext.traceId,
+    span_id: spanContext.spanId,
+    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+  };
+}
+
+function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+  const streams: pino.StreamEntry[] = [];
+  const prettyLogs = process.env.PINO_PRETTY === "true";
+
+  streams.push({
+    level: logLevel as pino.Level,
+    stream: prettyLogs
+      ? pino.transport({
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            ignore: "pid,hostname",
+            translateTime: "SYS:standard",
+          },
+        })
+      : pino.destination({ dest: 1, sync: false }),
+  });
+
+  if (process.env.LOG_FILE_PATH) {
+    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    mkdirSync(dirname(logFilePath), { recursive: true });
+
+    streams.push({
+      level: logLevel as pino.Level,
+      stream: pino.destination({ dest: logFilePath, sync: false }),
+    });
+  }
+
+  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+}
+
+export const logger = pino(
+  {
+    base: {
+      service: serviceName,
+      environment: process.env.NODE_ENV || "development",
+      pid: process.pid,
+      hostname: hostname(),
+    },
+    formatters: {
+      level(label) {
+        return { level: label };
+      },
+    },
+    level: logLevel,
+    messageKey: "message",
+    mixin: getTraceBindings,
+    redact: {
+      censor: "[REDACTED]",
+      paths: [
+        "authorization",
+        "cookie",
+        "password",
+        "secret",
+        "token",
+        "apiKey",
+        "headers.authorization",
+        "headers.cookie",
+        "*.authorization",
+        "*.cookie",
+        "*.password",
+        "*.secret",
+        "*.token",
+        "*.apiKey",
+      ],
+    },
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  },
+  createLogStreams()
+);
+
+export function createLogger(bindings: pino.Bindings) {
+  return logger.child(bindings);
+}
+
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createLogger } from "@/lib/logger";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const logger = createLogger({ module: "api.upload.presigned-url" });
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = buildPublicFileUrl(key);
+
+    logger.info(
+      {
+        contentType,
+        folder,
+        key,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generated"
+    );
+
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        contentType,
+        folder,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generation failed"
+    );
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+ succeeded in 0ms:
+services:
+  postgres:
+    container_name: nextcrm_postgres
+    image: pgvector/pgvector:pg17-trixie
+    restart: always
+    environment:
+      POSTGRES_DB: nextcrm
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - nextcrm-net
+
+  loki:
+    container_name: nextcrm_loki
+    image: grafana/loki:3.5.12
+    restart: always
+    command: ["-config.file=/etc/loki/local-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/local-config.yml:ro,z
+      - loki_data:/loki
+    networks:
+      - nextcrm-net
+
+  otel-collector:
+    container_name: nextcrm_otel_collector
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    restart: always
+    user: "0:0"
+    command: ["--config=/etc/otelcol/config.yml"]
+    depends_on:
+      - loki
+    environment:
+      OTEL_SERVICE_NAME: nextcrm-app
+      DEPLOYMENT_ENVIRONMENT: local
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    volumes:
+      - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro,z
+      - ./logs:/var/log/nextcrm:ro,z
+      - otelcol_data:/var/lib/otelcol
+    networks:
+      - nextcrm-net
+
+  grafana:
+    container_name: nextcrm_grafana
+    image: grafana/grafana:12.2.1
+    restart: always
+    depends_on:
+      - loki
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro,z
+    networks:
+      - nextcrm-net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  loki_data:
+    driver: local
+  grafana_data:
+    driver: local
+  otelcol_data:
+    driver: local
+
+networks:
+  nextcrm-net:
+    driver: bridge
+
+exec
+/usr/bin/bash -lc 'rg -n "minioClient|MINIO_|S3_|BUCKET|endpoint|forcePathStyle|getSignedUrl|PutObjectCommand" lib app -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+lib/minio.ts:4:if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+lib/minio.ts:5:if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+lib/minio.ts:8:export const minioClient = new S3Client({
+lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+lib/minio.ts:12:    accessKeyId: process.env.MINIO_ACCESS_KEY,
+lib/minio.ts:13:    secretAccessKey: process.env.MINIO_SECRET_KEY,
+lib/minio.ts:15:  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+app/api/upload/presigned-url/route.ts:4:import { PutObjectCommand } from "@aws-sdk/client-s3";
+app/api/upload/presigned-url/route.ts:5:import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:17:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+app/api/upload/presigned-url/route.ts:53:  const command = new PutObjectCommand({
+app/api/upload/presigned-url/route.ts:54:    Bucket: MINIO_BUCKET,
+app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/reports.ts:37:      "Run a report by category and get the data. Returns raw report data (use format param for CSV/PDF via the /api/reports/export endpoint).",
+lib/mcp/tools/crm-documents.ts:3:import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+lib/mcp/tools/crm-documents.ts:4:import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+lib/mcp/tools/crm-documents.ts:141:      const command = new PutObjectCommand({
+lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:161:      const command = new PutObjectCommand({
+lib/mcp/tools/crm-documents.ts:162:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:181:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+lib/enrichment/rate-limit.ts:5:// Create a new ratelimiter that allows 50 requests per day per IP per endpoint
+lib/enrichment/rate-limit.ts:6:export const getRateLimiter = (endpoint: string) => {
+lib/enrichment/rate-limit.ts:22:    prefix: `ratelimit:${endpoint}`,
+lib/enrichment/rate-limit.ts:44:export const isRateLimited = async (request: NextRequest, endpoint: string) => {
+lib/enrichment/rate-limit.ts:45:  const limiter = getRateLimiter(endpoint);
+app/api/auth/test-otp/route.ts:4:// Test-only endpoint to retrieve captured OTPs for E2E testing
+
+exec
+/usr/bin/bash -lc "sed -n '1,80p' lib/minio.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { S3Client } from "@aws-sdk/client-s3";
+
+if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+
+export const minioClient = new S3Client({
+  endpoint: process.env.MINIO_ENDPOINT,
+  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  },
+  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+});
+
+export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc 'rg -n "minio|MINIO|s3|S3" docker-compose*.yml README.md docs -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+README.md:159:- [UploadThing](https://uploadthing.com/) + S3-compatible storage (DigitalOcean Spaces) – for document file storage
+docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:253:| `EXTERNAL_ERROR` | Enrichment API failure, S3 failure | INTERNAL_ERROR |
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:9:**Tech Stack:** TypeScript, Zod, Prisma ORM, `mcp-handler` + `@modelcontextprotocol/sdk`, AWS S3 (MinIO), Inngest (async jobs)
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1579:import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1580:import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:9:**Tech Stack:** Next.js 16, React 19, Prisma 7.5, pgvector (1536-dim, text-embedding-3-small), Inngest (step functions), MinIO/S3, OpenAI API, pdf-parse, mammoth, sharp, pdfjs-dist, shadcn/ui, TanStack Table.
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:595:import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:756:import { GetObjectCommand } from "@aws-sdk/client-s3";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:767:  const response = await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1009:import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1017:  const response = await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1058:    await minioClient.send(
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+
+exec
+/usr/bin/bash -lc "rg --files -g '.env*' -g '"'!node_modules'"' -g '"'!**/.next/**'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local
+.env
+.env.local.example
+.env.example
+
+exec
+/usr/bin/bash -lc 'rg -n "MINIO_|NEXT_PUBLIC_MINIO|S3_|AWS_|bucket" .env* README.md docs -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local.example:78:MINIO_ENDPOINT=
+.env.local.example:79:MINIO_PORT=
+.env.local.example:80:MINIO_BUCKET=
+.env.local.example:81:MINIO_USE_SSL="true"
+.env.local.example:82:MINIO_ACCESS_KEY=
+.env.local.example:83:MINIO_SECRET_KEY=
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:78:MINIO_ENDPOINT="https://your-minio-host"
+.env.local:79:MINIO_PORT="9000"
+.env.local:80:MINIO_BUCKET="your-bucket-name"
+.env.local:81:MINIO_USE_SSL="true"
+.env.local:82:MINIO_ACCESS_KEY="your-access-key"
+.env.local:83:MINIO_SECRET_KEY="your-secret-key"
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env.example:33:MINIO_ENDPOINT="https://your-minio-host"
+.env.example:34:MINIO_PORT="9000"
+.env.example:35:MINIO_BUCKET="your-bucket-name"
+.env.example:36:MINIO_USE_SSL="true"
+.env.example:37:MINIO_ACCESS_KEY="your-access-key"
+.env.example:38:MINIO_SECRET_KEY="your-secret-key"
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env:33:MINIO_ENDPOINT="https://your-minio-host"
+.env:34:MINIO_PORT="9000"
+.env:35:MINIO_BUCKET="your-bucket-name"
+.env:36:MINIO_USE_SSL="true"
+.env:37:MINIO_ACCESS_KEY="your-access-key"
+.env:38:MINIO_SECRET_KEY="your-secret-key"
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+
+codex
+The local env files have MinIO credentials/endpoint placeholders, but the public MinIO URL is explicitly empty in both `.env` and `.env.local`. That matters because this route validates server-side MinIO env vars but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT` before constructing the response URL.
+exec
+/usr/bin/bash -lc "nl -ba .env.local | sed -n '74,84p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '1,95p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '1,35p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    74	INNGEST_SIGNING_KEY=
+    75	
+    76	#MINIO
+    77	NEXT_PUBLIC_MINIO_ENDPOINT=
+    78	MINIO_ENDPOINT="https://your-minio-host"
+    79	MINIO_PORT="9000"
+    80	MINIO_BUCKET="your-bucket-name"
+    81	MINIO_USE_SSL="true"
+    82	MINIO_ACCESS_KEY="your-access-key"
+    83	MINIO_SECRET_KEY="your-secret-key"
+    84	
+
+ succeeded in 0ms:
+     1	import { S3Client } from "@aws-sdk/client-s3";
+     2	
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+ succeeded in 0ms:
+     1	import path from "path";
+     2	import { NextRequest, NextResponse } from "next/server";
+     3	import { getSession } from "@/lib/auth-server";
+     4	import { PutObjectCommand } from "@aws-sdk/client-s3";
+     5	import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+     6	import { createLogger } from "@/lib/logger";
+     7	import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+     8	import { randomUUID } from "crypto";
+     9	
+    10	const logger = createLogger({ module: "api.upload.presigned-url" });
+    11	
+    12	const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+    13	type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+    14	
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+    19	}
+    20	
+    21	export async function POST(req: NextRequest) {
+    22	  const session = await getSession();
+    23	  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    24	
+    25	  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+    26	
+    27	  // Sanitize: strip any path components to prevent path traversal
+    28	  const filename = path.basename(rawFilename ?? "");
+    29	  // Whitelist folder to only allow known upload destinations
+    30	  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    31	    ? (rawFolder as AllowedFolder)
+    32	    : "uploads";
+    33	
+    34	  if (!filename || !contentType) {
+    35	    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+    36	  }
+    37	
+    38	  const ALLOWED_CONTENT_TYPES = new Set([
+    39	    "image/jpeg", "image/png", "image/gif", "image/webp",
+    40	    "application/pdf", "application/msword",
+    41	    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    42	    "text/plain",
+    43	  ]);
+    44	  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    45	    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+    46	  }
+    47	
+    48	  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+    49	  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+    50	  const key = `${folder}/${randomUUID()}.${ext}`;
+    51	  const originalFilename = filename;
+    52	
+    53	  const command = new PutObjectCommand({
+    54	    Bucket: MINIO_BUCKET,
+    55	    Key: key,
+    56	    ContentType: contentType,
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+    89	}
+
+exec
+/usr/bin/bash -lc "node -e \"try { new URL('') } catch (e) { console.log(e.name + ': ' + e.message) }\"" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+TypeError: Invalid URL
+
+codex
+There is a second signal: the catch label says “presigned URL generation failed,” but the risky call immediately after signing is `buildPublicFileUrl`. With an empty public endpoint, the endpoint can sign successfully and still fail while building `fileUrl`, which would produce exactly this log message.
+exec
+/usr/bin/bash -lc "sed -n '1,180p' observability/otel-collector-config.yml" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,130p' components/ui/minio-uploader.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '70,115p' app/[locale]/'(routes)'/documents/components/bulk-upload-modal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use client";
+
+import { useCallback, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { cn } from "@/lib/utils";
+import { UploadCloud, Loader2 } from "lucide-react";
+
+interface MinioUploaderProps {
+  folder: "avatars" | "images" | "documents";
+  accept?: Record<string, string[]>;
+  maxSizeMB?: number;
+  onUploadComplete: (url: string, key: string) => void;
+  onUploadError?: (error: string) => void;
+}
+
+export function MinioUploader({
+  folder,
+  accept,
+  maxSizeMB = 64,
+  onUploadComplete,
+  onUploadError,
+}: MinioUploaderProps) {
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0];
+      if (!file) return;
+
+      setSelectedFileName(file.name);
+      setUploading(true);
+      setProgress("Requesting upload URL...");
+
+      try {
+        // Step 1: Get presigned URL from our server
+        const res = await fetch("/api/upload/presigned-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            folder,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to get upload URL");
+        const { presignedUrl, fileUrl, key } = await res.json();
+
+        setProgress("Uploading...");
+
+        // Step 2: PUT file directly to MinIO
+        const uploadRes = await fetch(presignedUrl, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type },
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload to storage failed");
+
+        setProgress(null);
+        onUploadComplete(fileUrl, key);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        setProgress(null);
+        onUploadError?.(msg);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [folder, onUploadComplete, onUploadError]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    maxFiles: 1,
+    maxSize: maxSizeMB * 1024 * 1024,
+    accept,
+    disabled: uploading,
+  });
+
+  return (
+    <div
+      {...getRootProps()}
+      className={cn(
+        "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center cursor-pointer transition-colors",
+        isDragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50",
+        uploading && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      <input {...getInputProps()} />
+      {uploading ? (
+        <>
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{progress}</p>
+        </>
+      ) : (
+        <>
+          <UploadCloud className="h-8 w-8 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            {isDragActive ? "Drop file here" : "Drag & drop or click to upload"}
+          </p>
+          {selectedFileName && (
+            <p className="text-xs text-muted-foreground/60">{selectedFileName}</p>
+          )}
+          <p className="text-xs text-muted-foreground/60">Max {maxSizeMB}MB</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+ succeeded in 0ms:
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  file_storage:
+    directory: /var/lib/otelcol/file_storage
+    create_directory: true
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  filelog/nextcrm:
+    include:
+      - /var/log/nextcrm/*.log
+    include_file_name: true
+    include_file_path: true
+    start_at: beginning
+    storage: file_storage
+    operators:
+      - id: parse_pino_json
+        type: json_parser
+        parse_from: body
+        parse_to: attributes
+        on_error: send
+      - id: promote_pino_message
+        type: move
+        from: attributes.message
+        to: body
+        if: 'attributes.message != nil'
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  resource/nextcrm:
+    attributes:
+      - key: service.name
+        value: ${env:OTEL_SERVICE_NAME:-nextcrm-app}
+        action: insert
+      - key: deployment.environment
+        value: ${env:DEPLOYMENT_ENVIRONMENT:-local}
+        action: insert
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+  debug:
+    verbosity: basic
+
+service:
+  extensions:
+    - health_check
+    - file_storage
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/nextcrm
+        - batch
+      exporters:
+        - debug
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/nextcrm
+        - batch
+      exporters:
+        - debug
+    logs:
+      receivers:
+        - otlp
+        - filelog/nextcrm
+      processors:
+        - memory_limiter
+        - resource/nextcrm
+        - batch
+      exporters:
+        - otlphttp/loki
+
+ succeeded in 0ms:
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: ACCEPTED_TYPES,
+    maxSize: 64 * 1024 * 1024,
+    multiple: true,
+  });
+
+  const uploadFile = async (index: number) => {
+    const item = queue[index];
+    updateFile(index, { status: "uploading", progress: 10 });
+
+    try {
+      const folder = item.file.type.startsWith("image/") ? "images" : "documents";
+      const res = await fetch("/api/upload/presigned-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: item.file.name,
+          contentType: item.file.type,
+          folder,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to get presigned URL");
+      const { presignedUrl, fileUrl, key } = await res.json();
+
+      updateFile(index, { progress: 30 });
+
+      const uploadRes = await fetch(presignedUrl, {
+        method: "PUT",
+        body: item.file,
+        headers: { "Content-Type": item.file.type },
+      });
+      if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+
+      updateFile(index, { progress: 70 });
+
+      await createDocument({
+        name: item.file.name,
+        url: fileUrl,
+        key,
+        size: item.file.size,
+        mimeType: item.file.type,
+        contentHash: item.hash,
+        accountId,
+
+exec
+/usr/bin/bash -lc "rg -n \"err\\.|\\.err|body\\.error|attributes.*error|exception|stack|message.*null|error\\.message|error.name|pino|loki|filelog\" observability lib app -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/sendmail.ts:36:    logger.error(
+observability/otel-collector-config.yml:16:  filelog/nextcrm:
+observability/otel-collector-config.yml:24:      - id: parse_pino_json
+observability/otel-collector-config.yml:29:      - id: promote_pino_message
+observability/otel-collector-config.yml:52:  otlphttp/loki:
+observability/otel-collector-config.yml:53:    endpoint: http://loki:3100/otlp
+observability/otel-collector-config.yml:83:        - filelog/nextcrm
+observability/otel-collector-config.yml:89:        - otlphttp/loki
+app/client-logger.ts:26:      stack: value.stack ? truncate(value.stack) : undefined,
+observability/loki-config.yml:8:  path_prefix: /loki
+observability/loki-config.yml:11:      chunks_directory: /loki/chunks
+observability/loki-config.yml:12:      rules_directory: /loki/rules
+observability/loki-config.yml:43:      directory: /loki/rules
+observability/loki-config.yml:44:  rule_path: /loki/rules-temp
+lib/logger.ts:5:import pino from "pino";
+lib/logger.ts:24:function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+lib/logger.ts:25:  const streams: pino.StreamEntry[] = [];
+lib/logger.ts:26:  const prettyLogs = process.env.PINO_PRETTY === "true";
+lib/logger.ts:29:    level: logLevel as pino.Level,
+lib/logger.ts:31:      ? pino.transport({
+lib/logger.ts:32:          target: "pino-pretty",
+lib/logger.ts:39:      : pino.destination({ dest: 1, sync: false }),
+lib/logger.ts:47:      level: logLevel as pino.Level,
+lib/logger.ts:48:      stream: pino.destination({ dest: logFilePath, sync: false }),
+lib/logger.ts:52:  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+lib/logger.ts:55:export const logger = pino(
+lib/logger.ts:91:      err: pino.stdSerializers.err,
+lib/logger.ts:92:      error: pino.stdSerializers.err,
+lib/logger.ts:94:    timestamp: pino.stdTimeFunctions.isoTime,
+lib/logger.ts:99:export function createLogger(bindings: pino.Bindings) {
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:13:          err: event.error ?? {
+app/client-error-listener.tsx:25:      logger.error(
+lib/audit-log.ts:81:    logger.error(
+observability/grafana/provisioning/datasources/loki.yml:4:  - name: Loki
+observability/grafana/provisioning/datasources/loki.yml:5:    type: loki
+observability/grafana/provisioning/datasources/loki.yml:7:    url: http://loki:3100
+lib/create-safe-action.ts:21:        fieldErrors: validationResult.error.flatten()
+app/api/client-logs/route.ts:61:      logger.error(payload, message);
+app/api/upload/presigned-url/route.ts:78:    logger.error(
+app/api/og/route.tsx:31:      : "NextCRM is an open source CRM build on top of NextJS. Technology stack: NextJS with Typescrtipt, MongoDB, TailwindCSS, React, Prisma, shadCN, resend.com, react.email and more. ";
+app/api/mcp/[transport]/route.ts:16:          const msg: string = err.message ?? "Unknown error";
+app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+lib/enrichment/utils/skip-list.ts:29:    console.error('Failed to load skip list:', error);
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:86:        console.error(`Failed to scrape ${url}:`, error);
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:88:          onProgress(`Failed to scrape ${url}: ${error instanceof Error ? error.message : 'Unknown error'}`, 'warning');
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:92:          error: error instanceof Error ? error.message : 'Unknown error',
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts:90:          console.error(`Search failed for query: ${query}`, error instanceof Error ? error.message : String(error));
+app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+app/api/crm/contacts/enrich/route.ts:91:          error: result.error,
+app/api/crm/contacts/enrich/route.ts:102:        const message = err instanceof Error ? err.message : "Unknown error";
+lib/enrichment/strategies/enrichment-strategy.ts:179:      console.error('Search error occurred');
+lib/enrichment/strategies/enrichment-strategy.ts:352:      console.error('Extraction error:', error);
+app/api/crm/targets/enrich/route.ts:106:          error: result.error,
+app/api/crm/targets/enrich/route.ts:117:        const message = err instanceof Error ? err.message : "Unknown error";
+app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+lib/enrichment/e2b/agent-script.ts:165:      process.stderr.write('No JSON in agent response\\n');
+lib/enrichment/e2b/agent-script.ts:184:  process.stderr.write('Max iterations reached\\n');
+lib/enrichment/e2b/agent-script.ts:188:main().catch(e => { process.stderr.write(e.message + '\\n'); process.exit(1); });
+lib/enrichment/agent-architecture/orchestrator.ts:103:      console.log(`[Orchestrator] Field categories: discovery=${fieldCategories.discovery.length}, profile=${fieldCategories.profile.length}, metrics=${fieldCategories.metrics.length}, funding=${fieldCategories.funding.length}, techStack=${fieldCategories.techStack.length}, other=${fieldCategories.other.length}`);
+lib/enrichment/agent-architecture/orchestrator.ts:111:      if (fieldCategories.techStack.length > 0) agentsToUse.push('tech-stack-agent');
+lib/enrichment/agent-architecture/orchestrator.ts:258:      // Tech Stack phase
+lib/enrichment/agent-architecture/orchestrator.ts:259:      if (fieldCategories.techStack.length > 0) {
+lib/enrichment/agent-architecture/orchestrator.ts:260:        console.log(`[Orchestrator] Activating TECH-STACK-AGENT for fields: ${fieldCategories.techStack.map(f => f.name).join(', ')}`);
+lib/enrichment/agent-architecture/orchestrator.ts:262:          onAgentProgress(`Tech Stack Agent: Detecting technologies`, 'agent');
+lib/enrichment/agent-architecture/orchestrator.ts:263:          onAgentProgress(`Target fields: ${fieldCategories.techStack.map(f => f.name).join(', ')}`, 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:265:        const techStackResults = await this.runTechStackPhase(
+lib/enrichment/agent-architecture/orchestrator.ts:267:          fieldCategories.techStack,
+lib/enrichment/agent-architecture/orchestrator.ts:270:        console.log(`[Orchestrator] TECH-STACK-AGENT completed, found ${Object.keys(techStackResults).length} values`);
+lib/enrichment/agent-architecture/orchestrator.ts:271:        if (onAgentProgress && Object.keys(techStackResults).length > 0) {
+lib/enrichment/agent-architecture/orchestrator.ts:272:          onAgentProgress(`Tech Stack complete: Found ${Object.keys(techStackResults).length} fields`, 'success');
+lib/enrichment/agent-architecture/orchestrator.ts:274:        Object.assign(enrichments, techStackResults);
+lib/enrichment/agent-architecture/orchestrator.ts:276:        for (const [field, value] of Object.entries(techStackResults)) {
+lib/enrichment/agent-architecture/orchestrator.ts:333:      console.error('Orchestrator error:', error);
+lib/enrichment/agent-architecture/orchestrator.ts:339:        error: error instanceof Error ? error.message : 'Unknown error',
+lib/enrichment/agent-architecture/orchestrator.ts:391:      techStack: [] as EnrichmentField[],
+lib/enrichment/agent-architecture/orchestrator.ts:418:      } else if (name.includes('tech') && name.includes('stack') || 
+lib/enrichment/agent-architecture/orchestrator.ts:423:                 desc.includes('tech stack') ||
+lib/enrichment/agent-architecture/orchestrator.ts:426:        categories.techStack.push(field);
+lib/enrichment/agent-architecture/orchestrator.ts:530:        const errorMessage = error instanceof Error ? error.message : String(error);
+lib/enrichment/agent-architecture/orchestrator.ts:1166:  private async runTechStackPhase(
+lib/enrichment/agent-architecture/orchestrator.ts:1171:    console.log('[AGENT-TECH-STACK] Starting Tech Stack Phase');
+lib/enrichment/agent-architecture/orchestrator.ts:1187:    console.log(`[AGENT-TECH-STACK] Company name: ${companyName || 'Not found'}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1188:    console.log(`[AGENT-TECH-STACK] Company domain: ${companyDomain || 'Not found'}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1189:    console.log(`[AGENT-TECH-STACK] Fields to enrich: ${fields.map(f => f.name).join(', ')}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1196:      console.log('[AGENT-TECH-STACK] No company name or domain available, skipping tech stack phase');
+lib/enrichment/agent-architecture/orchestrator.ts:1205:    console.log(`[AGENT-TECH-STACK] GitHub search query: ${githubQuery}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1230:      console.log(`[AGENT-TECH-STACK] Found ${githubResults.length} valid GitHub results`);
+lib/enrichment/agent-architecture/orchestrator.ts:1232:        console.log(`[AGENT-TECH-STACK] GitHub URLs: ${githubResults.map(r => r.url).join(', ')}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1235:      console.log(`[AGENT-TECH-STACK] GitHub search failed: ${error}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1239:    // Analyze HTML from company website for tech stack detection
+lib/enrichment/agent-architecture/orchestrator.ts:1245:        console.log(`[AGENT-TECH-STACK] Fetching HTML from company website for analysis`);
+lib/enrichment/agent-architecture/orchestrator.ts:1249:          console.log(`[AGENT-TECH-STACK] HTML fetched, length: ${websiteHtml.length}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1252:          detectedTechnologies = this.analyzeTechStackFromHtml(websiteHtml);
+lib/enrichment/agent-architecture/orchestrator.ts:1253:          console.log(`[AGENT-TECH-STACK] Detected technologies from HTML: ${detectedTechnologies.join(', ')}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1256:        console.log(`[AGENT-TECH-STACK] Failed to fetch HTML: ${error}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1260:    // Search for tech stack mentions
+lib/enrichment/agent-architecture/orchestrator.ts:1261:    const techSearchQuery = `"${companyName || companyDomain}" "tech stack" "built with" "powered by" technologies framework`;
+lib/enrichment/agent-architecture/orchestrator.ts:1262:    console.log(`[AGENT-TECH-STACK] Tech stack search query: ${techSearchQuery}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1265:      onAgentProgress(`Searching for technology stack information...`, 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:1272:    console.log(`[AGENT-TECH-STACK] Found ${techResults.length} tech stack results`);
+lib/enrichment/agent-architecture/orchestrator.ts:1275:      onAgentProgress(`Found ${techResults.length} sources with tech stack data`, techResults.length > 0 ? 'success' : 'info');
+lib/enrichment/agent-architecture/orchestrator.ts:1282:    let combinedContent = this.trimSearchResultsContent(allSearchResults, 200000); // Smaller limit for tech stack
+lib/enrichment/agent-architecture/orchestrator.ts:1298:      console.log('[AGENT-TECH-STACK] No valid tech stack information found, returning empty results');
+lib/enrichment/agent-architecture/orchestrator.ts:1314:      For tech stack fields:
+lib/enrichment/agent-architecture/orchestrator.ts:1318:      - If no tech stack information is found, return null
+lib/enrichment/agent-architecture/orchestrator.ts:1367:                console.log(`[AGENT-TECH-STACK] Removing hallucinated GitHub URL: ${ctx.url}`);
+lib/enrichment/agent-architecture/orchestrator.ts:1380:        // Additional validation for tech stack values
+lib/enrichment/agent-architecture/orchestrator.ts:1665:  private analyzeTechStackFromHtml(html: string): string[] {
+lib/enrichment/agent-architecture/orchestrator.ts:2145:      console.error('[AGENT-DISCOVERY] Failed to extract from search results:', error);
+lib/enrichment/strategies/agent-enrichment-strategy.ts:86:      console.error('[AgentEnrichmentStrategy] Enrichment error:', error);
+lib/enrichment/strategies/agent-enrichment-strategy.ts:92:        error: error instanceof Error ? error.message : 'Unknown error',
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:3:interface TechStackAgentContext {
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:12:interface TechStackAgentTools {
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:32:export class TechStackAgent {
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:33:  name = 'tech-stack-agent';
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:34:  description = 'Discovers technology stack, programming languages, and frameworks used by the company';
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:35:  private tools: TechStackAgentTools;
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:37:  constructor(tools: TechStackAgentTools) {
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:42:    context: TechStackAgentContext,
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:45:    console.log('[AGENT-TECH-STACK] Starting Tech Stack Phase');
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:53:    console.log(`[AGENT-TECH-STACK] Company name: ${companyName || 'Not found'}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:54:    console.log(`[AGENT-TECH-STACK] Company domain: ${companyDomain || 'Not found'}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:55:    console.log(`[AGENT-TECH-STACK] Fields to enrich: ${fields.map(f => f.name).join(', ')}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:58:      console.log('[AGENT-TECH-STACK] No company name or domain available, skipping tech stack phase');
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:70:      console.log(`[AGENT-TECH-STACK] GitHub search query: ${githubQuery}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:73:      console.log(`[AGENT-TECH-STACK] Found ${githubResults.length} GitHub results`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:75:      // Also search for tech stack information on their website
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:81:          console.log(`[AGENT-TECH-STACK] Scraping company website for tech info: https://${companyDomain}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:86:            console.log(`[AGENT-TECH-STACK] Website scrape successful, content length: ${websiteContent.length}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:89:          console.log(`[AGENT-TECH-STACK] Website scrape failed: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:93:      // Search for tech stack mentions
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:94:      const techSearchQuery = `"${companyName || companyDomain}" "tech stack" "built with" "powered by" "technologies" "programming languages" framework`;
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:95:      console.log(`[AGENT-TECH-STACK] Tech stack search query: ${techSearchQuery}`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:98:      console.log(`[AGENT-TECH-STACK] Found ${techResults.length} tech stack results`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:114:          instruction: 'Focus on extracting technology stack, programming languages, frameworks, and tools used by the company. Look for GitHub repositories, technology mentions, and development tools.'
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:144:      console.log(`[AGENT-TECH-STACK] Extracted ${Object.keys(results).length} tech stack fields`);
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:147:      console.error('[AGENT-TECH-STACK] Error during tech stack discovery:', error);
+lib/enrichment/agent-architecture/agents/general-agent.ts:84:          console.log(`[AGENT-GENERAL] Search failed for query "${query}": ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:113:              console.log(`[AGENT-GENERAL] Failed to scrape ${url}: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:117:          console.log(`[AGENT-GENERAL] Failed to scrape contact pages: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:144:              console.log(`[AGENT-GENERAL] Failed to scrape ${url}: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:148:          console.log(`[AGENT-GENERAL] Failed to scrape company website: ${error instanceof Error ? error.message : String(error)}`);
+lib/enrichment/agent-architecture/agents/general-agent.ts:206:      console.error('[AGENT-GENERAL] Error during general information extraction:', error);
+lib/enrichment/agent-architecture/core/agent-base.ts:134:        console.error('Failed to parse agent output:', error instanceof Error ? error.message : String(error));
+lib/enrichment/services/specialized-agents.ts:27:        console.error(`Search failed for query "${query}":`, error);
+lib/enrichment/services/specialized-agents.ts:155:    2. Technology stacks and platforms
+lib/enrichment/services/specialized-agents.ts:160:    - Look for product pages, technical blogs, job postings (for tech stack)
+lib/enrichment/services/specialized-agents.ts:167:      techStack: z.array(z.string()).optional(),
+lib/enrichment/services/specialized-agents.ts:356:        console.error(`Error getting field ${field.name}:`, error);
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:41:      toast.error("Something went wrong with Google sign-in.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:49:      toast.error("Please enter your email address.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:59:        toast.error(error.message || "Failed to send verification code.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:65:      toast.error("Failed to send verification code.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:73:      toast.error("Please enter the 6-digit code.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:83:        toast.error(error.message || "Invalid or expired code.");
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx:89:      toast.error("Verification failed.");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:64:      setError(err instanceof Error ? err.message : "AI generation failed");
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx:101:      setError(err instanceof Error ? err.message : "Failed to save template");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:68:      toast.error("Something went wrong while sending comment to the DB");
+lib/enrichment/services/openai.ts:328:      console.error('OpenAI extraction error:', error);
+lib/enrichment/services/openai.ts:591:              /dedicated to providing exceptional/i,
+lib/enrichment/services/openai.ts:700:            // Additional validation for tech stack fields
+lib/enrichment/services/openai.ts:701:            if (field.name.toLowerCase().includes('tech') || field.name.toLowerCase().includes('stack')) {
+lib/enrichment/services/openai.ts:718:              // Validate tech stack values
+lib/enrichment/services/openai.ts:753:      console.error('OpenAI corroborated extraction error:', error);
+lib/enrichment/services/openai.ts:811:        console.error('JSON parse error:', parseError);
+lib/enrichment/services/openai.ts:812:        console.error('Content that failed to parse:', content.substring(0, 500) + '...');
+lib/enrichment/services/openai.ts:827:      console.error('OpenAI extraction error:', error);
+lib/enrichment/services/openai.ts:867:      console.error('Query generation error:', error);
+lib/enrichment/services/openai.ts:914:      console.error('Search query generation error:', error);
+lib/enrichment/services/openai.ts:1001:      console.error('Table data analysis error:', error);
+lib/enrichment/services/openai.ts:1030:      console.error('Source selection error:', error);
+lib/enrichment/services/openai.ts:1079:      console.error('Response generation error:', error);
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx:21:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+lib/enrichment/services/firecrawl.ts:60:        console.error('Firecrawl search error:', error);
+lib/enrichment/services/firecrawl.ts:61:        console.error('Query:', query);
+lib/enrichment/services/firecrawl.ts:94:        console.error(`Failed to search for query "${query}":`, error);
+app/[locale]/(routes)/admin/users/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/emails/components/ComposeModal.tsx:70:      setError(err instanceof Error ? err.message : "Send failed");
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:3:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:52:      if (result.error) {
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:53:        toast.error(result.error);
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:59:      toast.error("Something went wrong: " + error + ". Please try again.");
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:70:      if (result.error) {
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:71:        toast.error(result.error);
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:77:      toast.error("Something went wrong while activating user. Please try again.");
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:87:      if (result.error) {
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:88:        toast.error(result.error);
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:94:      toast.error("Something went wrong while deactivating user. Please try again.");
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:104:      if (result.error) {
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:105:        toast.error(result.error);
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx:111:      toast.error("Something went wrong while changing role. Please try again.");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:106:      if (result?.error) {
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:107:        toast.error(result.error);
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:112:      toast.error(error?.message);
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:124:        <code>{JSON.stringify(form.formState.errors, null, 2)}</code>
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx:21:} from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/table-components/columns.tsx:5:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:45:    if (result.error) {
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx:46:      toast.error(result.error);
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      if (result?.error) {
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:59:        toast.success(result.error);
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:101:      if (result?.error) {
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:102:        toast.error(result.error);
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:107:      toast.error(error?.message);
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/modal-dropzone.tsx:45:      toast.error("Failed to save document");
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:110:                    {record.error && (
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:111:                      <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={record.error}>
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx:112:                        {record.error}
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      if (result?.error) {
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:59:        toast.success(result.error);
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:80:      if (result?.error) {
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:81:        toast.error(result.error);
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:86:      toast.error(error?.message);
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:35:      toast.error(error);
+app/[locale]/(routes)/documents/components/document-detail-panel.tsx:51:      toast.error("Failed to retry enrichment");
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx:37:        toast.error(err.error ?? "Failed to retry");
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:57:      if (result.error) {
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:58:        toast.error(result.error);
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:63:      toast.error(t("inviteForm.errorDesc"));
+app/[locale]/(routes)/crm/products/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:56:      if (result?.error) {
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:57:        toast.error(result.error);
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:62:      toast.error("Something went wrong while sending comment to the DB");
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table.tsx:32:import { Table as TanstackTable } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table.tsx:87:      <BatchActionsBar table={table as unknown as TanstackTable<DocumentRow>} accounts={accounts ?? []} />
+app/[locale]/(routes)/crm/products/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx:43:      toast.error(
+app/[locale]/(routes)/documents/components/data-table-toolbar.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:49:      toast.error(result.error);
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:114:    if (result?.error) {
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:115:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:377:        {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:379:            {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/products/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-row-actions.tsx:44:      toast.error("Something went wrong while deleting document.");
+app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:44:        toast.error("Failed to save key");
+app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx:55:        toast.error("Failed to remove key");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:76:      toast.error("Error");
+app/[locale]/(routes)/crm/products/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:77:    if (result?.error) {
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:78:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:341:        {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:343:            {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/products/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:41:        if (res.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:44:          toast.error(err.error ?? "Failed to start bulk enrichment");
+app/[locale]/(routes)/crm/opportunities/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx:34:      toast.error("Failed to update rate");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx:17:      toast.error("Failed to update ECB setting");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:125:      const message = err instanceof Error ? err.message : "Import failed";
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:224:              {result.errors.length > 0 && (
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:229:                      {result.errors.length} error(s)
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:233:                    {result.errors.map((err, i) => (
+app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx:28:      toast.error("Failed to update currency");
+app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx:37:      toast.error("Failed to set default currency");
+app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx:50:      toast.error(e.message || "Failed to add currency");
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:59:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:60:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:65:      toast.error(error?.message);
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:122:        error: err instanceof Error ? err.message : "Upload failed",
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:236:                  <span className="text-xs text-red-600">{item.error}</span>
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx:54:      if (result.error) {
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx:55:        toast.error(result.error);
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx:60:      toast.error("Something went wrong while deleting opportunity. Please try again.");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx:47:      toast.error("Error");
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx:46:      toast.error("Failed to delete documents");
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx:59:      toast.error("Failed to update type");
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx:69:      toast.error("Failed to link documents");
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:62:      toast.error(err instanceof Error ? err.message : "Failed to add contact");
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:79:      toast.error("Failed to start enrichment");
+app/[locale]/(routes)/crm/products/_forms/update-product.tsx:62:      toast.error(error);
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:97:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:98:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:103:      toast.error(error?.message);
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+app/[locale]/(routes)/crm/products/_forms/create-product.tsx:40:      toast.error(error);
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:70:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:71:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:76:      toast.error(error?.message);
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:107:      if (response.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:112:      toast.error(err.error ?? "Failed to start enrichment");
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:141:          toast.error(event.error);
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:178:      toast.error(err.error ?? "Failed to apply enrichment");
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx:26:      toast.error("Failed to start enrichment");
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:47:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:48:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:53:      toast.error("Something went wrong while deleting project. Please try again.");
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx:30:      toast.error(err.message ?? "Failed to update");
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:24:      toast.error("Select a replacement before deleting");
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx:33:      toast.error(err.message ?? "Failed to delete");
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx:30:      toast.error(err.message ?? "Failed to add");
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:54:      toast.error(t("photoErrorDescription"), { duration: 5000 });
+app/[locale]/(routes)/profile/components/OpenAiForm.tsx:61:      toast.error("Something went wrong while activating your notion integration.");
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:47:      if (result?.error) {
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:48:        toast.error(result.error);
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:54:      toast.error("Something went wrong, during deleting task");
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:108:    if (result?.error) {
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:109:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:419:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:421:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:34:      if (result.error) {
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:35:        toast.error(result.error);
+app/[locale]/(routes)/profile/components/LanguageForm.tsx:42:      toast.error(t("error"));
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:361:        toast.error("Failed to update task position");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:383:      toast.error("Failed to update task position");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:392:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:393:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:400:      toast.error("Something went wrong, during deleting section");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:440:      toast.error("Something went wrong, during creating task");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:453:      toast.error("Error");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:464:      toast.error("Invalid task. Please select a valid task to delete.");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:473:      if (result?.error) {
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:474:        toast.error(result.error);
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:480:      toast.error("Something went wrong, during deleting task");
+app/[locale]/(routes)/projects/tasks/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:86:      setDiscoverError(result.error ?? "Failed to list folders");
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx:103:    setTestResult(result.ok ? "✓ Connection successful" : `✗ ${result.error}`);
+app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx:47:      toast.error("Please enter an API key.");
+app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx:56:        toast.error(`Failed to save ${meta.label} API key.`);
+app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx:67:        toast.error(`Failed to remove ${meta.label} API key.`);
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:142:    if (result?.error) {
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:143:      form.setError("root.serverError", { message: result.error || t("createError") });
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:499:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:501:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/profile/components/ApiTokens.tsx:57:    if (res.error) { setError(res.error); return; }
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx:42:    if (result.error) {
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx:43:      toast.error(result.error);
+app/[locale]/(routes)/projects/tasks/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:63:      if (result?.error) {
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:64:        toast.error(result.error);
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:69:      toast.error(t("dataTable.deleteError"));
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:82:      if (result?.error) {
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:83:        toast.error(result.error);
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:88:      toast.error(t("dataTable.watchError"));
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:99:      if (result?.error) {
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:100:        toast.error(result.error);
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:105:      toast.error(t("dataTable.watchError"));
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:70:      if (result.error) {
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:71:        toast.error(result.error);
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:78:      toast.error("Something went wrong while activating your notion integration.");
+app/[locale]/(routes)/projects/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/projects/tasks/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:73:      if (result?.error) {
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:74:        toast.error(result.error);
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:79:      toast.error(error?.message);
+app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:16:  SquareStack,
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx:89:            <SquareStack className="mt-px h-5 w-5" />
+app/[locale]/(routes)/projects/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:38:    if (result.error) {
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx:39:      toast.error(result.error);
+app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:50:      toast.error("Something went wrong. Please try again later.");
+app/[locale]/(routes)/crm/contacts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:126:    if (result?.error) {
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:127:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:531:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:533:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/contacts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:5:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:56:      if (result.error) {
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:57:        toast.error(result.error);
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:62:      toast.error("Something went wrong while deleting account. Please try again.");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:74:      if (result.error) {
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:75:        toast.error("Error");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:80:      toast.error("Error");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:91:      if (result.error) {
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:92:        toast.error("Error");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:97:      toast.error("Error");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/contacts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:115:    if (result?.error) {
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:116:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:566:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:568:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/accounts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx:54:      if (result.error) {
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx:55:        toast.error(result.error);
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx:60:      toast.error("Something went wrong while deleting contact. Please try again.");
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:75:    if (result?.error) {
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:76:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:464:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:466:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/accounts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:6:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:52:      toast.error("Something went wrong, during deleting task");
+app/[locale]/(routes)/crm/contacts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:113:    if (result?.error) {
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:114:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:563:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:565:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/contacts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx:63:      if (result.error) {
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx:64:        toast.error(result.error);
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx:69:      toast.error("Something went wrong while deleting lead. Please try again.");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx:4:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/leads/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:104:                      {record.error && (
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:105:                        <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={record.error}>
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx:106:                          {record.error}
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:39:        if (res.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:42:          toast.error(err.error ?? "Failed to start bulk enrichment");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx:28:        toast.error(err.error ?? "Failed to retry");
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx:4:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:60:    if (result?.error) {
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:61:      toast.error(result.error);
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/components/line-items/EditLineItemForm.tsx:48:      toast.error(error);
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:22:  SquareStack,
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:89:    if (result?.error) {
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:90:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:365:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:367:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:88:      if (response.status === 402 || err.error === "NO_API_KEY") {
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:93:      toast.error(err.error ?? "Failed to start enrichment");
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:123:          toast.error(event.error);
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:160:      toast.error(err.error ?? "Failed to apply enrichment");
+app/[locale]/(routes)/crm/components/line-items/AddLineItemForm.tsx:48:      toast.error(error);
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:87:    if (result?.error) {
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:88:      form.setError("root.serverError", { message: result.error });
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:370:          {form.formState.errors.root?.serverError && (
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:372:              {form.formState.errors.root.serverError.message}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:57:    if (result?.error) {
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx:58:      toast.error(result.error);
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:83:      toast.error(error?.response?.data);
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:39:      toast.error(error);
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:339:      if (result?.error) {
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:340:        toast.error(result.error);
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:348:      toast.error("Something went wrong");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx:3:import { ColumnDef } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-pagination.tsx:7:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-column-header.tsx:7:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:68:      toast.error(error);
+app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx:4:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table.tsx:17:} from "@tanstack/react-table";
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:21:  SquareStack,
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:366:            <SquareStack className="mt-px h-5 w-5" />
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:59:      toast.error("Please select an opportunity");
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:68:      if (result?.error) {
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:69:        toast.error(result.error);
+app/[locale]/(routes)/crm/contracts/table-components/data-table-view-options.tsx:5:import { Table } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-faceted-filter.tsx:3:import { Column } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx:4:import { Row } from "@tanstack/react-table";
+app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx:45:      toast.error("Something went wrong while deleting contract. Please try again.");
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:47:      toast.error(error);
+
+codex
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment.
+
+The failing log message comes from `app/api/upload/presigned-url/route.ts`, inside the `catch` around presigned URL response generation. The route signs the MinIO PUT URL, then calls `buildPublicFileUrl(key)`, which does:
+
+```ts
+new URL(MINIO_PUBLIC_URL!)
+```
+
+`MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In `.env.local`, this is set to an empty value:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+An empty string passed to `new URL("")` throws `TypeError: Invalid URL`. That exception is caught and logged as:
+
+```text
+Presigned upload URL generation failed
+```
+
+So the most likely failure was not the S3/MinIO signing itself, but building the public `fileUrl` after signing.
+
+**Evidence**
+
+- Incident module matches the route logger: `api.upload.presigned-url`.
+- Incident message exactly matches the route catch block.
+- `lib/minio.ts` validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` empty.
+- `new URL("")` throws `TypeError: Invalid URL`.
+
+**Impact**
+
+Authenticated upload attempts for valid file types return HTTP 500 before the client receives `presignedUrl`, `fileUrl`, and `key`. The user-facing upload flow then fails at “Failed to get presigned URL” or “Failed to get upload URL.”
+
+**Note on Missing Error Details**
+
+The incident has `error.name`, `error.message`, and `error.stack` as `null`. The app logs the caught exception under `err`, while the incident normalization appears to expect an `error` object. That likely explains why the actual `TypeError: Invalid URL` was lost in the collected event.
+tokens used
+29,611
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in the development environment.
+
+The failing log message comes from `app/api/upload/presigned-url/route.ts`, inside the `catch` around presigned URL response generation. The route signs the MinIO PUT URL, then calls `buildPublicFileUrl(key)`, which does:
+
+```ts
+new URL(MINIO_PUBLIC_URL!)
+```
+
+`MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In `.env.local`, this is set to an empty value:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+An empty string passed to `new URL("")` throws `TypeError: Invalid URL`. That exception is caught and logged as:
+
+```text
+Presigned upload URL generation failed
+```
+
+So the most likely failure was not the S3/MinIO signing itself, but building the public `fileUrl` after signing.
+
+**Evidence**
+
+- Incident module matches the route logger: `api.upload.presigned-url`.
+- Incident message exactly matches the route catch block.
+- `lib/minio.ts` validates `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `MINIO_BUCKET`, but does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`.
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` empty.
+- `new URL("")` throws `TypeError: Invalid URL`.
+
+**Impact**
+
+Authenticated upload attempts for valid file types return HTTP 500 before the client receives `presignedUrl`, `fileUrl`, and `key`. The user-facing upload flow then fails at “Failed to get presigned URL” or “Failed to get upload URL.”
+
+**Note on Missing Error Details**
+
+The incident has `error.name`, `error.message`, and `error.stack` as `null`. The app logs the caught exception under `err`, while the incident normalization appears to expect an `error` object. That likely explains why the actual `TypeError: Invalid URL` was lost in the collected event.

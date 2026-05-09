@@ -1,0 +1,687 @@
+run_name: feature-task-3-C
+case_name: feature-task-3
+variant: C
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:31:25Z
+elapsed_seconds: 79
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/C/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is unset in the development environment.
+
+The failing path is `POST /api/upload/presigned-url`. After `getSignedUrl(...)` succeeds, the handler calls:
+
+`new URL(MINIO_PUBLIC_URL!)`
+
+where `MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In both local dev env files, that value is blank:
+
+- `.env`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+- `.env.local`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+
+`new URL("")` throws `TypeError: Invalid URL`, which is caught by the route’s `catch` block and logged as:
+
+`Presigned upload URL generation failed`
+
+That matches the incident module and message exactly.
+
+The empty/null error fields in observability are likely a logging-shape issue, not evidence that no exception existed. The route logs the caught exception under `err`, while the incident pipeline appears to read an `error` field. Since no `error` field was emitted by this log call, the pipeline reported `name`, `message`, and `stack` as null.
+
+Conclusion: this incident was most likely caused by missing `NEXT_PUBLIC_MINIO_ENDPOINT` in development, causing public file URL construction to fail after presigned URL creation.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0980-a194-7a52-81b7-6c2eb1c25a2c
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:dd675312fb402fed6a9ff838a3d9a064",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T18:44:22.320Z",
+      "lastSeen": "2026-05-04T18:44:22.320Z",
+      "events": [
+        {
+          "time": "2026-05-04T18:44:22.320Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "api.upload.presigned-url",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Presigned upload URL generation failed",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+            "spanId": "8f0a9636dd20584e",
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the upload presigned URL path and nearby logging/error handling to tie the observability event back to code. I won’t modify files.
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '.claude/skills/**/SKILL.md' -g '.claude/commands/write-plan.md' | head -50" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+AGENTS.md
+
+exec
+/usr/bin/bash -lc "rg -n \"Presigned upload URL generation failed|api\\.upload\\.presigned-url|presigned\" -S . | head -80" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./app/api/upload/presigned-url/route.ts:76:    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+./app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+./CHANGELOG.md:32:* **mcp:** add documents tools (8 tools, presigned URLs, entity linking) ([756d2be](https://github.com/pdovhomilja/nextcrm-app/commit/756d2bea8630cbd1196df6e14884139fe22fa465))
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:100:| `crm_create_document` | Create record + get presigned upload URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:101:| `crm_get_upload_url` | Get presigned upload URL for existing doc |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:102:| `crm_get_download_url` | Get presigned download URL |
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md:186:| `reports_run` | Trigger report + get presigned URL to result |
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:76:4. Request presigned URL from existing `/api/upload/presigned-url`
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:77:5. Upload directly to MinIO via presigned URL
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md:222:| POST | `/api/upload/presigned-url` | Accept all supported MIME types in a single upload flow |
+./app/[locale]/(routes)/documents/components/modal-dropzone.tsx:38:        size: 0, // size not available from presigned URL flow
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:29:| `lib/mcp/tools/crm-documents.ts` | Create | Documents lifecycle + presigned URLs + entity linking (8 tools) |
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1574:Documents have presigned URLs via MinIO/S3. Has `status` field. Junction tables for linking. Scoped to `created_by_user: userId`.
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1668:    description: "Create a document record and get a presigned upload URL",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1709:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1711:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1716:    description: "Get a presigned upload URL for an existing document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1729:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1730:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1735:    description: "Get a presigned download URL for a document",
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1747:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1748:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1838:git commit -m "feat(mcp): add documents tools (8 tools, presigned URLs, entity linking)"
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:94:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:95:      const { presignedUrl, fileUrl, key } = await res.json();
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:99:      const uploadRes = await fetch(presignedUrl, {
+./components/ui/minio-uploader.tsx:37:        // Step 1: Get presigned URL from our server
+./components/ui/minio-uploader.tsx:38:        const res = await fetch("/api/upload/presigned-url", {
+./components/ui/minio-uploader.tsx:49:        const { presignedUrl, fileUrl, key } = await res.json();
+./components/ui/minio-uploader.tsx:54:        const uploadRes = await fetch(presignedUrl, {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:44:| `app/api/upload/presigned-url/route.ts` | Accept all MIME types in unified flow |
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1655:      // Get presigned URL
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1657:      const res = await fetch("/api/upload/presigned-url", {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1667:      if (!res.ok) throw new Error("Failed to get presigned URL");
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1668:      const { presignedUrl, fileUrl, key } = await res.json();
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1673:      await fetch(presignedUrl, {
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2473:- Modify: `app/api/upload/presigned-url/route.ts`
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2475:- [ ] **Step 1: Ensure the presigned URL route accepts all needed MIME types**
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2495:git add app/api/upload/presigned-url/route.ts
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md:2496:git commit -m "fix(upload): ensure all document MIME types are allowed in presigned URL route"
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1147:- Modify: `app/api/upload/presigned-url/route.ts`
+./lib/mcp/tools/crm-documents.ts:105:    description: "Create a document record and get a presigned upload URL",
+./lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:148:      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:153:    description: "Get a presigned upload URL for an existing document",
+./lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:167:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 600 });
+./lib/mcp/tools/crm-documents.ts:172:    description: "Get a presigned download URL for a document",
+./lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+./lib/mcp/tools/crm-documents.ts:185:      return itemResponse({ id: doc.id, url: presignedUrl, expiresIn: 3600 });
+
+codex
+I found the exact log message in `app/api/upload/presigned-url/route.ts`. Next I’m checking that handler plus MinIO configuration and logger serialization, because the incident has an empty error object, which is itself a useful clue.
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '1,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import path from "path";
+     2	import { NextRequest, NextResponse } from "next/server";
+     3	import { getSession } from "@/lib/auth-server";
+     4	import { PutObjectCommand } from "@aws-sdk/client-s3";
+     5	import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+     6	import { createLogger } from "@/lib/logger";
+     7	import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+     8	import { randomUUID } from "crypto";
+     9	
+    10	const logger = createLogger({ module: "api.upload.presigned-url" });
+    11	
+    12	const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+    13	type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+    14	
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+    19	}
+    20	
+    21	export async function POST(req: NextRequest) {
+    22	  const session = await getSession();
+    23	  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    24	
+    25	  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+    26	
+    27	  // Sanitize: strip any path components to prevent path traversal
+    28	  const filename = path.basename(rawFilename ?? "");
+    29	  // Whitelist folder to only allow known upload destinations
+    30	  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    31	    ? (rawFolder as AllowedFolder)
+    32	    : "uploads";
+    33	
+    34	  if (!filename || !contentType) {
+    35	    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+    36	  }
+    37	
+    38	  const ALLOWED_CONTENT_TYPES = new Set([
+    39	    "image/jpeg", "image/png", "image/gif", "image/webp",
+    40	    "application/pdf", "application/msword",
+    41	    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    42	    "text/plain",
+    43	  ]);
+    44	  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    45	    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+    46	  }
+    47	
+    48	  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+    49	  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+    50	  const key = `${folder}/${randomUUID()}.${ext}`;
+    51	  const originalFilename = filename;
+    52	
+    53	  const command = new PutObjectCommand({
+    54	    Bucket: MINIO_BUCKET,
+    55	    Key: key,
+    56	    ContentType: contentType,
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+    89	}
+
+exec
+/usr/bin/bash -lc 'rg -n "minioClient|MINIO|S3|bucket" lib app components -S | head -120' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/minio.ts:1:import { S3Client } from "@aws-sdk/client-s3";
+lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+lib/minio.ts:4:if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+lib/minio.ts:5:if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+lib/minio.ts:8:export const minioClient = new S3Client({
+lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+lib/minio.ts:12:    accessKeyId: process.env.MINIO_ACCESS_KEY,
+lib/minio.ts:13:    secretAccessKey: process.env.MINIO_SECRET_KEY,
+lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:17:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+app/api/upload/presigned-url/route.ts:54:    Bucket: MINIO_BUCKET,
+app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:162:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:166:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:181:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:184:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 3600 });
+
+exec
+/usr/bin/bash -lc "rg -n \"function createLogger|const createLogger|createLogger|logger\\.error|error.*stack|JSON.stringify\" lib app -S | head -120" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/client-logger.ts:60:  const payload = JSON.stringify({
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:25:      logger.error(
+lib/sendmail.ts:2:import { createLogger } from "@/lib/logger";
+lib/sendmail.ts:4:const logger = createLogger({ module: "sendmail" });
+lib/sendmail.ts:36:    logger.error(
+lib/openai.ts:3:import { createLogger } from "@/lib/logger";
+lib/openai.ts:5:const logger = createLogger({ module: "openai" });
+lib/logger.ts:99:export function createLogger(bindings: pino.Bindings) {
+lib/audit-log.ts:2:import { createLogger } from "@/lib/logger";
+lib/audit-log.ts:5:const logger = createLogger({ module: "audit-log" });
+lib/audit-log.ts:51:    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+lib/audit-log.ts:81:    logger.error(
+app/api/client-logs/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+app/api/client-logs/route.ts:61:      logger.error(payload, message);
+app/api/upload/presigned-url/route.ts:6:import { createLogger } from "@/lib/logger";
+app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+app/api/upload/presigned-url/route.ts:78:    logger.error(
+app/api/mcp/[transport]/route.ts:13:            content: [{ type: "text" as const, text: JSON.stringify(result) }],
+app/api/mcp/[transport]/route.ts:25:            content: [{ type: "text" as const, text: JSON.stringify({ error: msg, code }) }],
+app/api/feedback/route.ts:2:import { createLogger } from "@/lib/logger";
+app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+app/api/crm/targets/enrich/route.ts:84:        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+lib/enrichment/services/specialized-agents.ts:343:          const result = await (agentToUse as any).run(`Find ${field.description} for: ${JSON.stringify(context)}`, {
+lib/enrichment/services/openai.ts:854:            content: `Context: ${JSON.stringify(context)}
+lib/enrichment/services/openai.ts:902:        content: `Question: ${question}\n\nContext: ${JSON.stringify(context || {})}\n\nGenerate the best search query:`
+lib/enrichment/services/openai.ts:1067:        content: `Question: ${question}\n\nContext: ${JSON.stringify(context || {})}\n\nContent from ${sourceUrl || 'source'}:\n${content.slice(0, 8000)}\n\nAnswer:`
+app/api/crm/leads/create-lead-from-web/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/crm/leads/create-lead-from-web/route.ts:5:const logger = createLogger({ module: "api.crm.leads.create-from-web" });
+app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+lib/enrichment/e2b/agent-script.ts:62:    return execSync('agent-browser --ignore-https-errors ' + args.map(a => JSON.stringify(a)).join(' '), {
+app/api/crm/contacts/enrich/route.ts:73:        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+app/api/crm/contacts/create-from-remote/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/crm/contacts/create-from-remote/route.ts:5:const logger = createLogger({ module: "app.api.crm.contacts.create-from-remote" });
+app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+lib/enrichment/agent-architecture/core/agent-base.ts:52:        content: JSON.stringify(context.input),
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts:147:      console.error('[AGENT-TECH-STACK] Error during tech stack discovery:', error);
+app/[locale]/(auth)/pending/page.tsx:26:        <code>{JSON.stringify(session, null, 2)}</code>
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:64:            <code>{JSON.stringify(task, null, 2)}</code>
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:166:          <code>{JSON.stringify(taskDocuments, null, 2)}</code>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:40:            <code>{JSON.stringify(task, null, 2)}</code>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx:106:          <code>{JSON.stringify(taskDocuments, null, 2)}</code>
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+app/[locale]/(routes)/emails/components/mail.tsx:65:          document.cookie = `react-resizable-panels:layout=${JSON.stringify(
+app/[locale]/(routes)/emails/components/mail.tsx:81:              document.cookie = `react-resizable-panels:collapsed=${JSON.stringify(
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:118:                <code>{JSON.stringify(comment, null, 2)}</code>
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:112:                <code>{JSON.stringify(comment, null, 2)}</code>
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:87:        body: JSON.stringify({
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:124:        <code>{JSON.stringify(form.formState.errors, null, 2)}</code>
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:128:          {JSON.stringify(
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:93:            <code>{JSON.stringify(dashboardData, null, 2)}</code>
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+app/[locale]/(routes)/projects/actions/get-task-done.ts:1:import { createLogger } from "@/lib/logger";
+app/[locale]/(routes)/projects/actions/get-task-done.ts:4:const logger = createLogger({ module: "app.routes.projects.actions.get-task-done" });
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx:22:        body: JSON.stringify({ contactIds: [contactId], fields: fields.map((name) => ({ name, displayName: name, description: `Find ${name}`, type: "string", required: false })) }),
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx:32:        body: JSON.stringify({ contactIds, fields }),
+app/[locale]/(routes)/crm/leads/page.tsx:10:import { createLogger } from "@/lib/logger";
+app/[locale]/(routes)/crm/leads/page.tsx:13:const logger = createLogger({ module: "app.routes.crm.leads.page" });
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:83:      body: JSON.stringify({ contactId, fields }),
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx:151:      body: JSON.stringify({ enrichmentFields: updates }),
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx:41:      {/*      <pre>{JSON.stringify(data, null, 2)}</pre> */}
+app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx:47:      {/*      <pre>{JSON.stringify(data, null, 2)}</pre> */}
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx:27:            <pre>{JSON.stringify(task, null, 2)}</pre>
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:43:      {/*      <pre>{JSON.stringify(data, null, 2)}</pre> */}
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx:351:        <pre>{JSON.stringify(data, null, 2)}</pre>
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx:22:        body: JSON.stringify({
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:53:        body: JSON.stringify(form),
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx:21:        body: JSON.stringify({ force: true }),
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:102:      body: JSON.stringify({ targetId, fields }),
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx:169:      body: JSON.stringify({ enrichmentFields: updates }),
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx:34:        body: JSON.stringify({ targetIds, fields }),
+
+exec
+/usr/bin/bash -lc "nl -ba lib/logger.ts | sed -n '1,140p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { context, trace } from "@opentelemetry/api";
+     2	import { mkdirSync } from "node:fs";
+     3	import { hostname } from "node:os";
+     4	import { dirname, resolve } from "node:path";
+     5	import pino from "pino";
+     6	
+     7	const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+     8	const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+     9	
+    10	function getTraceBindings() {
+    11	  const spanContext = trace.getSpan(context.active())?.spanContext();
+    12	
+    13	  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    14	    return {};
+    15	  }
+    16	
+    17	  return {
+    18	    trace_id: spanContext.traceId,
+    19	    span_id: spanContext.spanId,
+    20	    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+    21	  };
+    22	}
+    23	
+    24	function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+    25	  const streams: pino.StreamEntry[] = [];
+    26	  const prettyLogs = process.env.PINO_PRETTY === "true";
+    27	
+    28	  streams.push({
+    29	    level: logLevel as pino.Level,
+    30	    stream: prettyLogs
+    31	      ? pino.transport({
+    32	          target: "pino-pretty",
+    33	          options: {
+    34	            colorize: true,
+    35	            ignore: "pid,hostname",
+    36	            translateTime: "SYS:standard",
+    37	          },
+    38	        })
+    39	      : pino.destination({ dest: 1, sync: false }),
+    40	  });
+    41	
+    42	  if (process.env.LOG_FILE_PATH) {
+    43	    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    44	    mkdirSync(dirname(logFilePath), { recursive: true });
+    45	
+    46	    streams.push({
+    47	      level: logLevel as pino.Level,
+    48	      stream: pino.destination({ dest: logFilePath, sync: false }),
+    49	    });
+    50	  }
+    51	
+    52	  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+    53	}
+    54	
+    55	export const logger = pino(
+    56	  {
+    57	    base: {
+    58	      service: serviceName,
+    59	      environment: process.env.NODE_ENV || "development",
+    60	      pid: process.pid,
+    61	      hostname: hostname(),
+    62	    },
+    63	    formatters: {
+    64	      level(label) {
+    65	        return { level: label };
+    66	      },
+    67	    },
+    68	    level: logLevel,
+    69	    messageKey: "message",
+    70	    mixin: getTraceBindings,
+    71	    redact: {
+    72	      censor: "[REDACTED]",
+    73	      paths: [
+    74	        "authorization",
+    75	        "cookie",
+    76	        "password",
+    77	        "secret",
+    78	        "token",
+    79	        "apiKey",
+    80	        "headers.authorization",
+    81	        "headers.cookie",
+    82	        "*.authorization",
+    83	        "*.cookie",
+    84	        "*.password",
+    85	        "*.secret",
+    86	        "*.token",
+    87	        "*.apiKey",
+    88	      ],
+    89	    },
+    90	    serializers: {
+    91	      err: pino.stdSerializers.err,
+    92	      error: pino.stdSerializers.err,
+    93	    },
+    94	    timestamp: pino.stdTimeFunctions.isoTime,
+    95	  },
+    96	  createLogStreams()
+    97	);
+    98	
+    99	export function createLogger(bindings: pino.Bindings) {
+   100	  return logger.child(bindings);
+   101	}
+
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { S3Client } from "@aws-sdk/client-s3";
+     2	
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc 'rg -n "NEXT_PUBLIC_MINIO_ENDPOINT|MINIO_ENDPOINT|MINIO_PUBLIC|MINIO_BUCKET" -S .env* docker* compose* next.config* README* docs scripts package.json 2>/dev/null | head -120' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env.example:33:MINIO_ENDPOINT="https://your-minio-host"
+.env.example:35:MINIO_BUCKET="your-bucket-name"
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env:33:MINIO_ENDPOINT="https://your-minio-host"
+.env:35:MINIO_BUCKET="your-bucket-name"
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:78:MINIO_ENDPOINT="https://your-minio-host"
+.env.local:80:MINIO_BUCKET="your-bucket-name"
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local.example:78:MINIO_ENDPOINT=
+.env.local.example:80:MINIO_BUCKET=
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1581:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1688:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1705:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1725:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1744:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:596:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:611:        ? minioClient.send(new DeleteObjectCommand({ Bucket: MINIO_BUCKET, Key: doc.key }))
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:757:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:768:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1010:import { minioClient, MINIO_BUCKET } from "@/lib/minio";
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1018:    new GetObjectCommand({ Bucket: MINIO_BUCKET, Key: key })
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1060:        Bucket: MINIO_BUCKET,
+docs/superpowers/plans/2026-04-03-documents-module-refactor.md:1067:    const thumbnailUrl = `${process.env.NEXT_PUBLIC_MINIO_ENDPOINT}/${MINIO_BUCKET}/${thumbnailKey}`;
+
+codex
+The handler validates server-side MinIO variables, but it does not validate `NEXT_PUBLIC_MINIO_ENDPOINT`. In the local env files that public endpoint is blank, and the throw would happen inside the catch block after signing when building the returned public file URL.
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '53,88p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba lib/logger.ts | sed -n '89,94p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba .env | sed -n '30,36p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba .env.local | sed -n '75,81p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    30	
+    31	# MinIO Object Storage
+    32	NEXT_PUBLIC_MINIO_ENDPOINT=
+    33	MINIO_ENDPOINT="https://your-minio-host"
+    34	MINIO_PORT="9000"
+    35	MINIO_BUCKET="your-bucket-name"
+    36	MINIO_USE_SSL="true"
+
+ succeeded in 0ms:
+    89	    },
+    90	    serializers: {
+    91	      err: pino.stdSerializers.err,
+    92	      error: pino.stdSerializers.err,
+    93	    },
+    94	    timestamp: pino.stdTimeFunctions.isoTime,
+
+ succeeded in 0ms:
+    75	
+    76	#MINIO
+    77	NEXT_PUBLIC_MINIO_ENDPOINT=
+    78	MINIO_ENDPOINT="https://your-minio-host"
+    79	MINIO_PORT="9000"
+    80	MINIO_BUCKET="your-bucket-name"
+    81	MINIO_USE_SSL="true"
+
+ succeeded in 0ms:
+    53	  const command = new PutObjectCommand({
+    54	    Bucket: MINIO_BUCKET,
+    55	    Key: key,
+    56	    ContentType: contentType,
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '15,18p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '3,19p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc "node -e 'for (const v of [undefined, \"\"]) { try { new URL(v); console.log(\"ok\", v); } catch (e) { console.log(typeof v, JSON.stringify(String(v)), e.name + \": \" + e.message); }}'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+undefined "undefined" TypeError: Invalid URL
+string "" TypeError: Invalid URL
+
+codex
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is unset in the development environment.
+
+The failing path is `POST /api/upload/presigned-url`. After `getSignedUrl(...)` succeeds, the handler calls:
+
+`new URL(MINIO_PUBLIC_URL!)`
+
+where `MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In both local dev env files, that value is blank:
+
+- `.env`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+- `.env.local`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+
+`new URL("")` throws `TypeError: Invalid URL`, which is caught by the route’s `catch` block and logged as:
+
+`Presigned upload URL generation failed`
+
+That matches the incident module and message exactly.
+
+The empty/null error fields in observability are likely a logging-shape issue, not evidence that no exception existed. The route logs the caught exception under `err`, while the incident pipeline appears to read an `error` field. Since no `error` field was emitted by this log call, the pipeline reported `name`, `message`, and `stack` as null.
+
+Conclusion: this incident was most likely caused by missing `NEXT_PUBLIC_MINIO_ENDPOINT` in development, causing public file URL construction to fail after presigned URL creation.
+tokens used
+19,107
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is unset in the development environment.
+
+The failing path is `POST /api/upload/presigned-url`. After `getSignedUrl(...)` succeeds, the handler calls:
+
+`new URL(MINIO_PUBLIC_URL!)`
+
+where `MINIO_PUBLIC_URL` comes from `process.env.NEXT_PUBLIC_MINIO_ENDPOINT`. In both local dev env files, that value is blank:
+
+- `.env`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+- `.env.local`: `NEXT_PUBLIC_MINIO_ENDPOINT=`
+
+`new URL("")` throws `TypeError: Invalid URL`, which is caught by the route’s `catch` block and logged as:
+
+`Presigned upload URL generation failed`
+
+That matches the incident module and message exactly.
+
+The empty/null error fields in observability are likely a logging-shape issue, not evidence that no exception existed. The route logs the caught exception under `err`, while the incident pipeline appears to read an `error` field. Since no `error` field was emitted by this log call, the pipeline reported `name`, `message`, and `stack` as null.
+
+Conclusion: this incident was most likely caused by missing `NEXT_PUBLIC_MINIO_ENDPOINT` in development, causing public file URL construction to fail after presigned URL creation.

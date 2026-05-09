@@ -1,0 +1,589 @@
+run_name: feature-task-3-B
+case_name: feature-task-3
+variant: B
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:49:19Z
+elapsed_seconds: 68
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/B/context.md
+
+===== RESPONSE =====
+**Root Cause Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in `.env.local`, so the upload presigned-url route throws `TypeError: Invalid URL` while building the public file URL.
+
+Evidence:
+- Raw matching log exists for the same trace/span:
+  `trace_id=dd675312fb402fed6a9ff838a3d9a064`, `span_id=8f0a9636dd20584e`
+- Raw error: `TypeError: Invalid URL`, `code=ERR_INVALID_URL`, `input=""`.
+- Stack points to `buildPublicFileUrl()` in [app/api/upload/presigned-url/route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/upload/presigned-url/route.ts:15).
+- That function calls `new URL(MINIO_PUBLIC_URL!)`, where `MINIO_PUBLIC_URL` comes from `NEXT_PUBLIC_MINIO_ENDPOINT` in [lib/minio.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/lib/minio.ts:18).
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` blank at [line 77](/home/dmytro/Github/phd-work/nextcrm-app-update/.env.local:77).
+
+Important nuance: the log message says presigned URL generation failed, but the observed stack indicates signing had already completed. The failure happened immediately afterward when constructing `fileUrl`.
+
+The incident JSON shows null error fields because the app logs the exception under `err`, while the observability-normalized event appears to expose an `error` field. The raw application log contains the real exception details. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0991-046b-76e2-936a-25093bc5d091
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:44:22.320Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "api.upload.presigned-url",
+      "contextModule": null,
+      "route": null,
+      "clientUrl": null,
+      "message": "Presigned upload URL generation failed",
+      "error": {
+        "name": null,
+        "message": null,
+        "stack": null
+      },
+      "correlation": {
+        "traceId": "dd675312fb402fed6a9ff838a3d9a064",
+        "spanId": "8f0a9636dd20584e",
+        "clientSessionId": null
+      }
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc 'rg "Presigned upload URL generation failed" -n .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'rg "presigned-url|presigned" -n app src pages server | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '.claude/skills/**/SKILL.md' -g '.claude/commands/write-plan.md' | head -20" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+
+ succeeded in 0ms:
+rg: src: No such file or directory (os error 2)
+rg: pages: No such file or directory (os error 2)
+rg: server: No such file or directory (os error 2)
+app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+app/api/upload/presigned-url/route.ts:76:    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+app/[locale]/(routes)/documents/components/modal-dropzone.tsx:38:        size: 0, // size not available from presigned URL flow
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:84:      const res = await fetch("/api/upload/presigned-url", {
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:94:      if (!res.ok) throw new Error("Failed to get presigned URL");
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:95:      const { presignedUrl, fileUrl, key } = await res.json();
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx:99:      const uploadRes = await fetch(presignedUrl, {
+
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+AGENTS.md
+
+codex
+The failing log string is in `app/api/upload/presigned-url/route.ts`. I’m reading that route in small slices and then I’ll trace the storage client/config it depends on.
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '1,20p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '46,90p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/api/upload/presigned-url/route.ts | sed -n '21,45p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import path from "path";
+     2	import { NextRequest, NextResponse } from "next/server";
+     3	import { getSession } from "@/lib/auth-server";
+     4	import { PutObjectCommand } from "@aws-sdk/client-s3";
+     5	import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+     6	import { createLogger } from "@/lib/logger";
+     7	import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+     8	import { randomUUID } from "crypto";
+     9	
+    10	const logger = createLogger({ module: "api.upload.presigned-url" });
+    11	
+    12	const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+    13	type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+    14	
+    15	function buildPublicFileUrl(key: string) {
+    16	  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+    17	  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+    18	  return publicBaseUrl.toString();
+    19	}
+    20	
+
+ succeeded in 0ms:
+    46	  }
+    47	
+    48	  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+    49	  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+    50	  const key = `${folder}/${randomUUID()}.${ext}`;
+    51	  const originalFilename = filename;
+    52	
+    53	  const command = new PutObjectCommand({
+    54	    Bucket: MINIO_BUCKET,
+    55	    Key: key,
+    56	    ContentType: contentType,
+    57	  });
+    58	
+    59	  // Presigned URL valid for 10 minutes
+    60	  try {
+    61	    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+    62	
+    63	    // The public URL where the file will be accessible after upload
+    64	    const fileUrl = buildPublicFileUrl(key);
+    65	
+    66	    logger.info(
+    67	      {
+    68	        contentType,
+    69	        folder,
+    70	        key,
+    71	        userId: session.user.id,
+    72	      },
+    73	      "Presigned upload URL generated"
+    74	    );
+    75	
+    76	    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+    77	  } catch (err) {
+    78	    logger.error(
+    79	      {
+    80	        err,
+    81	        contentType,
+    82	        folder,
+    83	        userId: session.user.id,
+    84	      },
+    85	      "Presigned upload URL generation failed"
+    86	    );
+    87	    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+    88	  }
+    89	}
+
+ succeeded in 0ms:
+    21	export async function POST(req: NextRequest) {
+    22	  const session = await getSession();
+    23	  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    24	
+    25	  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+    26	
+    27	  // Sanitize: strip any path components to prevent path traversal
+    28	  const filename = path.basename(rawFilename ?? "");
+    29	  // Whitelist folder to only allow known upload destinations
+    30	  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    31	    ? (rawFolder as AllowedFolder)
+    32	    : "uploads";
+    33	
+    34	  if (!filename || !contentType) {
+    35	    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+    36	  }
+    37	
+    38	  const ALLOWED_CONTENT_TYPES = new Set([
+    39	    "image/jpeg", "image/png", "image/gif", "image/webp",
+    40	    "application/pdf", "application/msword",
+    41	    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    42	    "text/plain",
+    43	  ]);
+    44	  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    45	    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+
+exec
+/usr/bin/bash -lc "nl -ba lib/minio.ts | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { S3Client } from "@aws-sdk/client-s3";
+     2	
+     3	if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+     4	if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+     5	if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+     6	if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+     7	
+     8	export const minioClient = new S3Client({
+     9	  endpoint: process.env.MINIO_ENDPOINT,
+    10	  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+    11	  credentials: {
+    12	    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    13	    secretAccessKey: process.env.MINIO_SECRET_KEY,
+    14	  },
+    15	  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+    16	});
+    17	
+    18	export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+    19	export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+exec
+/usr/bin/bash -lc 'rg "MINIO_" -n .env* docker* compose* README* docs 2>/dev/null | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:78:MINIO_ENDPOINT="https://your-minio-host"
+.env.local:79:MINIO_PORT="9000"
+.env.local:80:MINIO_BUCKET="your-bucket-name"
+.env.local:81:MINIO_USE_SSL="true"
+.env.local:82:MINIO_ACCESS_KEY="your-access-key"
+.env.local:83:MINIO_SECRET_KEY="your-secret-key"
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local.example:78:MINIO_ENDPOINT=
+.env.local.example:79:MINIO_PORT=
+.env.local.example:80:MINIO_BUCKET=
+.env.local.example:81:MINIO_USE_SSL="true"
+.env.local.example:82:MINIO_ACCESS_KEY=
+.env.local.example:83:MINIO_SECRET_KEY=
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env.example:33:MINIO_ENDPOINT="https://your-minio-host"
+.env.example:34:MINIO_PORT="9000"
+.env.example:35:MINIO_BUCKET="your-bucket-name"
+.env.example:36:MINIO_USE_SSL="true"
+.env.example:37:MINIO_ACCESS_KEY="your-access-key"
+
+exec
+/usr/bin/bash -lc 'rg "MINIO_|minioClient|S3" -n lib app | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/minio.ts:1:import { S3Client } from "@aws-sdk/client-s3";
+lib/minio.ts:3:if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+lib/minio.ts:4:if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+lib/minio.ts:5:if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+lib/minio.ts:6:if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+lib/minio.ts:8:export const minioClient = new S3Client({
+lib/minio.ts:9:  endpoint: process.env.MINIO_ENDPOINT,
+lib/minio.ts:12:    accessKeyId: process.env.MINIO_ACCESS_KEY,
+lib/minio.ts:13:    secretAccessKey: process.env.MINIO_SECRET_KEY,
+lib/minio.ts:18:export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+app/api/upload/presigned-url/route.ts:17:  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+app/api/upload/presigned-url/route.ts:54:    Bucket: MINIO_BUCKET,
+app/api/upload/presigned-url/route.ts:61:    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+lib/mcp/tools/crm-documents.ts:142:        Bucket: MINIO_BUCKET,
+lib/mcp/tools/crm-documents.ts:146:      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+codex
+The route builds a public URL after signing, and `MINIO_PUBLIC_URL` is taken from `NEXT_PUBLIC_MINIO_ENDPOINT` without validation. I’m checking the logger and adjacent upload code to see whether the null error fields match that failure mode.
+exec
+/usr/bin/bash -lc "nl -ba lib/logger.ts | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/[locale]/\\(routes\\)/documents/components/bulk-upload-modal.tsx | sed -n '75,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    75	    multiple: true,
+    76	  });
+    77	
+    78	  const uploadFile = async (index: number) => {
+    79	    const item = queue[index];
+    80	    updateFile(index, { status: "uploading", progress: 10 });
+    81	
+    82	    try {
+    83	      const folder = item.file.type.startsWith("image/") ? "images" : "documents";
+    84	      const res = await fetch("/api/upload/presigned-url", {
+    85	        method: "POST",
+    86	        headers: { "Content-Type": "application/json" },
+    87	        body: JSON.stringify({
+    88	          filename: item.file.name,
+    89	          contentType: item.file.type,
+    90	          folder,
+    91	        }),
+    92	      });
+    93	
+    94	      if (!res.ok) throw new Error("Failed to get presigned URL");
+    95	      const { presignedUrl, fileUrl, key } = await res.json();
+    96	
+    97	      updateFile(index, { progress: 30 });
+    98	
+    99	      const uploadRes = await fetch(presignedUrl, {
+   100	        method: "PUT",
+   101	        body: item.file,
+   102	        headers: { "Content-Type": item.file.type },
+   103	      });
+   104	      if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+   105	
+   106	      updateFile(index, { progress: 70 });
+   107	
+   108	      await createDocument({
+   109	        name: item.file.name,
+   110	        url: fileUrl,
+
+ succeeded in 0ms:
+     1	import { context, trace } from "@opentelemetry/api";
+     2	import { mkdirSync } from "node:fs";
+     3	import { hostname } from "node:os";
+     4	import { dirname, resolve } from "node:path";
+     5	import pino from "pino";
+     6	
+     7	const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+     8	const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+     9	
+    10	function getTraceBindings() {
+    11	  const spanContext = trace.getSpan(context.active())?.spanContext();
+    12	
+    13	  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    14	    return {};
+    15	  }
+    16	
+    17	  return {
+    18	    trace_id: spanContext.traceId,
+    19	    span_id: spanContext.spanId,
+    20	    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+    21	  };
+    22	}
+    23	
+    24	function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+    25	  const streams: pino.StreamEntry[] = [];
+    26	  const prettyLogs = process.env.PINO_PRETTY === "true";
+    27	
+    28	  streams.push({
+    29	    level: logLevel as pino.Level,
+    30	    stream: prettyLogs
+    31	      ? pino.transport({
+    32	          target: "pino-pretty",
+    33	          options: {
+    34	            colorize: true,
+    35	            ignore: "pid,hostname",
+    36	            translateTime: "SYS:standard",
+    37	          },
+    38	        })
+    39	      : pino.destination({ dest: 1, sync: false }),
+    40	  });
+    41	
+    42	  if (process.env.LOG_FILE_PATH) {
+    43	    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    44	    mkdirSync(dirname(logFilePath), { recursive: true });
+    45	
+    46	    streams.push({
+    47	      level: logLevel as pino.Level,
+    48	      stream: pino.destination({ dest: logFilePath, sync: false }),
+    49	    });
+    50	  }
+    51	
+    52	  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+    53	}
+    54	
+    55	export const logger = pino(
+    56	  {
+    57	    base: {
+    58	      service: serviceName,
+    59	      environment: process.env.NODE_ENV || "development",
+    60	      pid: process.pid,
+    61	      hostname: hostname(),
+    62	    },
+    63	    formatters: {
+    64	      level(label) {
+    65	        return { level: label };
+    66	      },
+    67	    },
+    68	    level: logLevel,
+    69	    messageKey: "message",
+    70	    mixin: getTraceBindings,
+    71	    redact: {
+    72	      censor: "[REDACTED]",
+    73	      paths: [
+    74	        "authorization",
+    75	        "cookie",
+    76	        "password",
+    77	        "secret",
+    78	        "token",
+    79	        "apiKey",
+    80	        "headers.authorization",
+    81	        "headers.cookie",
+    82	        "*.authorization",
+    83	        "*.cookie",
+    84	        "*.password",
+    85	        "*.secret",
+    86	        "*.token",
+    87	        "*.apiKey",
+    88	      ],
+    89	    },
+    90	    serializers: {
+    91	      err: pino.stdSerializers.err,
+    92	      error: pino.stdSerializers.err,
+    93	    },
+    94	    timestamp: pino.stdTimeFunctions.isoTime,
+    95	  },
+    96	  createLogStreams()
+    97	);
+    98	
+    99	export function createLogger(bindings: pino.Bindings) {
+   100	  return logger.child(bindings);
+   101	}
+
+exec
+/usr/bin/bash -lc "nl -ba lib/mcp/tools/crm-documents.ts | sed -n '135,155p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+   135	          created_by_user: userId,
+   136	          createdBy: userId,
+   137	          processing_status: "PENDING",
+   138	        },
+   139	      });
+   140	
+   141	      const command = new PutObjectCommand({
+   142	        Bucket: MINIO_BUCKET,
+   143	        Key: key,
+   144	        ContentType: args.contentType,
+   145	      });
+   146	      const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+   147	
+   148	      return itemResponse({ ...doc, presignedUrl, expiresIn: 600 });
+   149	    },
+   150	  },
+   151	  {
+   152	    name: "crm_get_upload_url",
+   153	    description: "Get a presigned upload URL for an existing document",
+   154	    schema: z.object({ id: z.string().uuid() }),
+   155	    async handler(args: { id: string }, userId: string) {
+
+exec
+/usr/bin/bash -lc 'rg "contextModule|clientSessionId|traceId|error" -n lib app instrumentation* middleware* | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+rg: middleware*: No such file or directory (os error 2)
+instrumentation.ts:19:  error,
+instrumentation.ts:29:  logger.error(
+instrumentation.ts:31:      err: error,
+instrumentation.ts:44:    "Unhandled request error"
+app/client-logger.ts:3:type ClientLogLevel = "debug" | "info" | "warn" | "error";
+app/client-logger.ts:99:    error: (context: ClientLogContext, message: string) => log("error", context, message),
+lib/sendmail.ts:35:  } catch (error: any | Error) {
+lib/sendmail.ts:36:    logger.error(
+lib/sendmail.ts:38:        err: error,
+app/client-error-listener.tsx:6:const logger = createClientLogger({ module: "app.client-error-listener" });
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:13:          err: event.error ?? {
+app/client-error-listener.tsx:20:        "Unhandled client error"
+app/client-error-listener.tsx:25:      logger.error(
+app/client-error-listener.tsx:33:    window.addEventListener("error", handleError);
+app/client-error-listener.tsx:37:      window.removeEventListener("error", handleError);
+lib/logger.ts:18:    trace_id: spanContext.traceId,
+lib/logger.ts:92:      error: pino.stdSerializers.err,
+lib/audit-log.ts:81:    logger.error(
+lib/prisma.ts:17:    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+
+exec
+/usr/bin/bash -lc 'rg "stdSerializers|err:|error:" -n . | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'rg "PINO|LOG_|OTEL|observ" -n .env* instrumentation* lib app | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./pnpm-lock.yaml:14709:      zod-validation-error: 4.0.2(zod@4.3.6)
+./pnpm-lock.yaml:18057:      make-error: 1.3.6
+./pnpm-lock.yaml:18087:      make-error: 1.3.6
+./pnpm-lock.yaml:18359:      makeerror: 1.0.12
+./observability/otel-collector-config.yml:28:        on_error: send
+./instrumentation.ts:31:      err: error,
+./app/client-logger.ts:99:    error: (context: ClientLogContext, message: string) => log("error", context, message),
+./app/client-error-listener.tsx:13:          err: event.error ?? {
+./app/client-error-listener.tsx:27:          err: event.reason,
+./docs/superpowers/specs/2026-03-20-unified-search-design.md:22:3. Action verifies session via `getServerSession(authOptions)` — returns `{ error: "Unauthorized" }` if unauthenticated
+./docs/superpowers/specs/2026-03-20-unified-search-design.md:102:unifiedSearch(query: string): Promise<SearchResults | { error: string }>
+./docs/superpowers/specs/2026-03-20-unified-search-design.md:160:| Unauthenticated request | Return `{ error: "Unauthorized" }` |
+./app/api/client-logs/route.ts:29:    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+./app/api/client-logs/route.ts:37:    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:87:    { error: `Unknown fields: ${invalidFields.join(", ")}` },
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:132:- `lib/enrichment/strategies/agent-enrichment-strategy.ts` — add `withTimeout()`, wrap orchestrator call, catch timeout error and return `{ status: "error", enrichments: {}, error: "..." }`
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:264:if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:268:if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+./components/ui/minio-uploader.tsx:13:  onUploadError?: (error: string) => void;
+./docs/superpowers/specs/2026-03-23-target-enrichment-design.md:108:3. If not found: return 404 `{ error: 'Session not found or already complete' }` (idempotent)
+
+ succeeded in 0ms:
+instrumentation.ts:4:const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+.env.local.example:96:OTEL_SERVICE_NAME=nextcrm-app
+.env.local.example:97:OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+.env.local.example:98:OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+.env.local.example:99:OTEL_TRACES_SAMPLER=parentbased_always_on
+.env.local.example:100:LOG_LEVEL=debug
+.env.local.example:101:LOG_FILE_PATH=logs/nextcrm.log
+.env.local.example:102:PINO_PRETTY=false
+.env.local:96:OTEL_SERVICE_NAME=nextcrm-app
+.env.local:97:OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+.env.local:98:OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+.env.local:99:OTEL_TRACES_SAMPLER=parentbased_always_on
+.env.local:100:LOG_LEVEL=debug
+.env.local:101:LOG_FILE_PATH=logs/nextcrm.log
+.env.local:102:PINO_PRETTY=false
+.env.example:57:OTEL_SERVICE_NAME=nextcrm-app
+.env.example:58:OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+.env.example:59:OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+.env.example:60:OTEL_TRACES_SAMPLER=parentbased_always_on
+.env.example:61:LOG_LEVEL=debug
+
+exec
+/usr/bin/bash -lc "nl -ba .env.local | sed -n '73,85p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    73	INNGEST_EVENT_KEY=
+    74	INNGEST_SIGNING_KEY=
+    75	
+    76	#MINIO
+    77	NEXT_PUBLIC_MINIO_ENDPOINT=
+    78	MINIO_ENDPOINT="https://your-minio-host"
+    79	MINIO_PORT="9000"
+    80	MINIO_BUCKET="your-bucket-name"
+    81	MINIO_USE_SSL="true"
+    82	MINIO_ACCESS_KEY="your-access-key"
+    83	MINIO_SECRET_KEY="your-secret-key"
+    84	
+    85	
+
+exec
+/usr/bin/bash -lc 'ls -la logs 2>/dev/null | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+total 92
+drwxr-xr-x. 1 dmytro dmytro    56 May  4 23:11 .
+drwxr-xr-x. 1 dmytro dmytro  1274 May  4 23:51 ..
+-rw-r--r--. 1 dmytro dmytro     1 May  1 17:06 .gitkeep
+-rw-r--r--. 1 dmytro dmytro 51921 May  4 23:21 build.log
+-rw-r--r--. 1 dmytro dmytro 35919 May  4 22:04 nextcrm.log
+
+exec
+/usr/bin/bash -lc 'rg "Presigned upload URL generation failed|dd675312fb402fed|8f0a9636dd20584e" -n logs .next 2>/dev/null | head -20' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+logs/nextcrm.log:11:{"level":"error","time":"2026-05-04T18:44:22.247Z","service":"nextcrm-app","environment":"development","pid":89724,"hostname":"localhost","module":"api.upload.presigned-url","trace_id":"dd675312fb402fed6a9ff838a3d9a064","span_id":"8f0a9636dd20584e","trace_flags":"01","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:819:25)\n    at buildPublicFileUrl (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:817:27)\n    at POST (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:872:25)\n    at async AppRouteRouteModule.do (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40115)\n    at async AppRouteRouteModule.handle (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47321)\n    at async responseGenerator (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17690:38)\n    at async AppRouteRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:227216)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17753:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17804:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)","code":"ERR_INVALID_URL","input":""},"contentType":"application/pdf","folder":"documents","userId":"8c28cd6d-deca-4202-b776-ff7ca2b9b158","message":"Presigned upload URL generation failed"}
+.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js.map:14:    {"offset": {"line": 782, "column": 0}, "map": {"version":3,"sources":["file:///home/dmytro/Github/phd-work/nextcrm-app-update/app/api/upload/presigned-url/route.ts"],"sourcesContent":["import path from \"path\";\nimport { NextRequest, NextResponse } from \"next/server\";\nimport { getSession } from \"@/lib/auth-server\";\nimport { PutObjectCommand } from \"@aws-sdk/client-s3\";\nimport { getSignedUrl } from \"@aws-sdk/s3-request-presigner\";\nimport { createLogger } from \"@/lib/logger\";\nimport { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from \"@/lib/minio\";\nimport { randomUUID } from \"crypto\";\n\nconst logger = createLogger({ module: \"api.upload.presigned-url\" });\n\nconst ALLOWED_FOLDERS = [\"avatars\", \"images\", \"documents\", \"uploads\"] as const;\ntype AllowedFolder = (typeof ALLOWED_FOLDERS)[number];\n\nfunction buildPublicFileUrl(key: string) {\n  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);\n  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;\n  return publicBaseUrl.toString();\n}\n\nexport async function POST(req: NextRequest) {\n  const session = await getSession();\n  if (!session) return NextResponse.json({ error: \"Unauthorized\" }, { status: 401 });\n\n  const { filename: rawFilename, contentType, folder: rawFolder = \"uploads\" } = await req.json();\n\n  // Sanitize: strip any path components to prevent path traversal\n  const filename = path.basename(rawFilename ?? \"\");\n  // Whitelist folder to only allow known upload destinations\n  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)\n    ? (rawFolder as AllowedFolder)\n    : \"uploads\";\n\n  if (!filename || !contentType) {\n    return NextResponse.json({ error: \"filename and contentType are required\" }, { status: 400 });\n  }\n\n  const ALLOWED_CONTENT_TYPES = new Set([\n    \"image/jpeg\", \"image/png\", \"image/gif\", \"image/webp\",\n    \"application/pdf\", \"application/msword\",\n    \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n    \"text/plain\",\n  ]);\n  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {\n    return NextResponse.json({ error: \"Content type not allowed\" }, { status: 400 });\n  }\n\n  // Fall back to \"bin\" if filename has no extension or extension is empty (e.g., \".\")\n  const ext = filename.includes(\".\") ? filename.split(\".\").pop()?.trim() || \"bin\" : \"bin\";\n  const key = `${folder}/${randomUUID()}.${ext}`;\n  const originalFilename = filename;\n\n  const command = new PutObjectCommand({\n    Bucket: MINIO_BUCKET,\n    Key: key,\n    ContentType: contentType,\n  });\n\n  // Presigned URL valid for 10 minutes\n  try {\n    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });\n\n    // The public URL where the file will be accessible after upload\n    const fileUrl = buildPublicFileUrl(key);\n\n    logger.info(\n      {\n        contentType,\n        folder,\n        key,\n        userId: session.user.id,\n      },\n      \"Presigned upload URL generated\"\n    );\n\n    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });\n  } catch (err) {\n    logger.error(\n      {\n        err,\n        contentType,\n        folder,\n        userId: session.user.id,\n      },\n      \"Presigned upload URL generation failed\"\n    );\n    return NextResponse.json({ error: \"Failed to generate upload URL\" }, { status: 500 });\n  }\n}\n"],"names":["logger","module","ALLOWED_FOLDERS","buildPublicFileUrl","key","publicBaseUrl","URL","pathname","toString","POST","req","session","json","error","status","filename","rawFilename","contentType","folder","rawFolder","basename","includes","ALLOWED_CONTENT_TYPES","Set","has","ext","split","pop","trim","originalFilename","command","Bucket","Key","ContentType","presignedUrl","expiresIn","fileUrl","info","userId","user","id","err"],"mappings":";;;;AAAA;AACA;AACA;AACA;AACA;AACA;AACA;AACA;;;;;;;;;;;;;AAEA,MAAMA,SAAS,IAAA,+HAAY,EAAC;IAAEC,QAAQ;AAA2B;AAEjE,MAAMC,kBAAkB;IAAC;IAAW;IAAU;IAAa;CAAU;AAGrE,SAASC,mBAAmBC,GAAW;IACrC,MAAMC,gBAAgB,IAAIC,IAAI,kIAAgB;IAC9CD,cAAcE,QAAQ,GAAG,CAAC,CAAC,EAAE,8HAAY,CAAC,CAAC,EAAEH,KAAK;IAClD,OAAOC,cAAcG,QAAQ;AAC/B;AAEO,eAAeC,KAAKC,GAAgB;IACzC,MAAMC,UAAU,MAAM,IAAA,qIAAU;IAChC,IAAI,CAACA,SAAS,OAAO,+VAAY,CAACC,IAAI,CAAC;QAAEC,OAAO;IAAe,GAAG;QAAEC,QAAQ;IAAI;IAEhF,MAAM,EAAEC,UAAUC,WAAW,EAAEC,WAAW,EAAEC,QAAQC,YAAY,SAAS,EAAE,GAAG,MAAMT,IAAIE,IAAI;IAE5F,gEAAgE;IAChE,MAAMG,WAAW,4GAAI,CAACK,QAAQ,CAACJ,eAAe;IAC9C,2DAA2D;IAC3D,MAAME,SAAwBhB,gBAAgBmB,QAAQ,CAACF,aAClDA,YACD;IAEJ,IAAI,CAACJ,YAAY,CAACE,aAAa;QAC7B,OAAO,+VAAY,CAACL,IAAI,CAAC;YAAEC,OAAO;QAAwC,GAAG;YAAEC,QAAQ;QAAI;IAC7F;IAEA,MAAMQ,wBAAwB,IAAIC,IAAI;QACpC;QAAc;QAAa;QAAa;QACxC;QAAmB;QACnB;QACA;KACD;IACD,IAAI,CAACD,sBAAsBE,GAAG,CAACP,cAAc;QAC3C,OAAO,+VAAY,CAACL,IAAI,CAAC;YAAEC,OAAO;QAA2B,GAAG;YAAEC,QAAQ;QAAI;IAChF;IAEA,oFAAoF;IACpF,MAAMW,MAAMV,SAASM,QAAQ,CAAC,OAAON,SAASW,KAAK,CAAC,KAAKC,GAAG,IAAIC,UAAU,QAAQ;IAClF,MAAMxB,MAAM,GAAGc,OAAO,CAAC,EAAE,IAAA,mHAAU,IAAG,CAAC,EAAEO,KAAK;IAC9C,MAAMI,mBAAmBd;IAEzB,MAAMe,UAAU,IAAI,+UAAgB,CAAC;QACnCC,QAAQ,8HAAY;QACpBC,KAAK5B;QACL6B,aAAahB;IACf;IAEA,qCAAqC;IACrC,IAAI;QACF,MAAMiB,eAAe,MAAM,IAAA,oSAAY,EAAC,6HAAW,EAAEJ,SAAS;YAAEK,WAAW;QAAI;QAE/E,gEAAgE;QAChE,MAAMC,UAAUjC,mBAAmBC;QAEnCJ,OAAOqC,IAAI,CACT;YACEpB;YACAC;YACAd;YACAkC,QAAQ3B,QAAQ4B,IAAI,CAACC,EAAE;QACzB,GACA;QAGF,OAAO,+VAAY,CAAC5B,IAAI,CAAC;YAAEsB;YAAcE;YAAShC;YAAKyB;QAAiB;IAC1E,EAAE,OAAOY,KAAK;QACZzC,OAAOa,KAAK,CACV;YACE4B;YACAxB;YACAC;YACAoB,QAAQ3B,QAAQ4B,IAAI,CAACC,EAAE;QACzB,GACA;QAEF,OAAO,+VAAY,CAAC5B,IAAI,CAAC;YAAEC,OAAO;QAAgC,GAAG;YAAEC,QAAQ;QAAI;IACrF;AACF"}}]
+.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:891:        }, "Presigned upload URL generation failed");
+.next/server/chunks/[root-of-the-server]__0j_dtt4._.js:1:module.exports=[918622,(e,t,r)=>{t.exports=e.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))},556704,(e,t,r)=>{t.exports=e.x("next/dist/server/app-render/work-async-storage.external.js",()=>require("next/dist/server/app-render/work-async-storage.external.js"))},832319,(e,t,r)=>{t.exports=e.x("next/dist/server/app-render/work-unit-async-storage.external.js",()=>require("next/dist/server/app-render/work-unit-async-storage.external.js"))},324725,(e,t,r)=>{t.exports=e.x("next/dist/server/app-render/after-task-async-storage.external.js",()=>require("next/dist/server/app-render/after-task-async-storage.external.js"))},814747,(e,t,r)=>{t.exports=e.x("path",()=>require("path"))},224361,(e,t,r)=>{t.exports=e.x("util",()=>require("util"))},574289,(e,t,r)=>{t.exports=e.x("@prisma/client-d2f62a8102c700f6",()=>require("@prisma/client-d2f62a8102c700f6"))},141759,e=>e.a(async(t,r)=>{try{let t=await e.y("pg-6d75120e0d9fdbe9");e.n(t),r()}catch(e){r(e)}},!0),902157,(e,t,r)=>{t.exports=e.x("node:fs",()=>require("node:fs"))},660526,(e,t,r)=>{t.exports=e.x("node:os",()=>require("node:os"))},750227,(e,t,r)=>{t.exports=e.x("node:path",()=>require("node:path"))},64293,(e,t,r)=>{t.exports=e.x("pino-2e79642258e38174",()=>require("pino-2e79642258e38174"))},254799,(e,t,r)=>{t.exports=e.x("crypto",()=>require("crypto"))},688947,(e,t,r)=>{t.exports=e.x("stream",()=>require("stream"))},792509,(e,t,r)=>{t.exports=e.x("url",()=>require("url"))},427699,(e,t,r)=>{t.exports=e.x("events",()=>require("events"))},446786,(e,t,r)=>{t.exports=e.x("os",()=>require("os"))},522734,(e,t,r)=>{t.exports=e.x("fs",()=>require("fs"))},921517,(e,t,r)=>{t.exports=e.x("http",()=>require("http"))},524836,(e,t,r)=>{t.exports=e.x("https",()=>require("https"))},406461,(e,t,r)=>{t.exports=e.x("zlib",()=>require("zlib"))},504446,(e,t,r)=>{t.exports=e.x("net",()=>require("net"))},755004,(e,t,r)=>{t.exports=e.x("tls",()=>require("tls"))},666680,(e,t,r)=>{t.exports=e.x("node:crypto",()=>require("node:crypto"))},912714,(e,t,r)=>{t.exports=e.x("node:fs/promises",()=>require("node:fs/promises"))},679594,(e,t,r)=>{t.exports=e.x("dns",()=>require("dns"))},233405,(e,t,r)=>{t.exports=e.x("child_process",()=>require("child_process"))},193695,(e,t,r)=>{t.exports=e.x("next/dist/shared/lib/no-fallback-error.external.js",()=>require("next/dist/shared/lib/no-fallback-error.external.js"))},640911,e=>{"use strict";var t=e.i(539726),r=e.i(545364),s=e.i(902157),a=e.i(660526),n=e.i(750227),i=e.i(64293);let o=process.env.OTEL_SERVICE_NAME||"nextcrm-app",l=process.env.LOG_LEVEL||"info",p=(0,i.default)({base:{service:o,environment:"production",pid:process.pid,hostname:(0,a.hostname)()},formatters:{level:e=>({level:e})},level:l,messageKey:"message",mixin:function(){let e=r.trace.getSpan(t.context.active())?.spanContext();return e&&r.trace.isSpanContextValid(e)?{trace_id:e.traceId,span_id:e.spanId,trace_flags:e.traceFlags.toString(16).padStart(2,"0")}:{}},redact:{censor:"[REDACTED]",paths:["authorization","cookie","password","secret","token","apiKey","headers.authorization","headers.cookie","*.authorization","*.cookie","*.password","*.secret","*.token","*.apiKey"]},serializers:{err:i.default.stdSerializers.err,error:i.default.stdSerializers.err},timestamp:i.default.stdTimeFunctions.isoTime},function(){let e=[],t="true"===process.env.PINO_PRETTY;if(e.push({level:l,stream:t?i.default.transport({target:"pino-pretty",options:{colorize:!0,ignore:"pid,hostname",translateTime:"SYS:standard"}}):i.default.destination({dest:1,sync:!1})}),process.env.LOG_FILE_PATH){let t=(0,n.resolve)(process.cwd(),process.env.LOG_FILE_PATH);(0,s.mkdirSync)((0,n.dirname)(t),{recursive:!0}),e.push({level:l,stream:i.default.destination({dest:t,sync:!1})})}return 1===e.length?e[0].stream:i.default.multistream(e,{dedupe:!0})}());e.s(["createLogger",0,function(e){return p.child(e)}])},709203,e=>{"use strict";e.s(["DialectAdapterBase",0,class{get supportsCreateIfNotExists(){return!0}get supportsTransactionalDdl(){return!1}get supportsReturning(){return!1}get supportsOutput(){return!1}}])},529176,e=>{"use strict";var t=e.i(336496);let r=/"/g;class s extends t.DefaultQueryCompiler{visitOrAction(e){this.append("or "),this.append(e.action)}getCurrentParameterPlaceholder(){return"?"}getLeftExplainOptionsWrapper(){return""}getRightExplainOptionsWrapper(){return""}getLeftIdentifierWrapper(){return'"'}getRightIdentifierWrapper(){return'"'}getAutoIncrement(){return"autoincrement"}sanitizeIdentifier(e){return e.replace(r,'""')}visitDefaultInsertValue(e){this.append("null")}}e.s(["SqliteQueryCompiler",0,s])},622626,e=>{"use strict";var t=e.i(709203);class r extends t.DialectAdapterBase{get supportsTransactionalDdl(){return!1}get supportsReturning(){return!0}async acquireMigrationLock(e,t){}async releaseMigrationLock(e,t){}}e.s(["SqliteAdapter",0,r])},809843,e=>e.a(async(t,r)=>{try{var s=e.i(368105),a=e.i(884092),n=t([s]);async function i(){return s.auth.api.getSession({headers:await (0,a.headers)()})}[s]=n.then?(await n)():n,e.s(["getSession",0,i]),r()}catch(e){r(e)}},!1),500874,(e,t,r)=>{t.exports=e.x("buffer",()=>require("buffer"))},21663,(e,t,r)=>{t.exports=e.x("@aws-sdk/client-s3-f7e5279858a157e6",()=>require("@aws-sdk/client-s3-f7e5279858a157e6"))},171548,e=>{"use strict";var t=e.i(21663);if(!process.env.MINIO_ENDPOINT)throw Error("MINIO_ENDPOINT is not defined");if(!process.env.MINIO_ACCESS_KEY)throw Error("MINIO_ACCESS_KEY is not defined");if(!process.env.MINIO_SECRET_KEY)throw Error("MINIO_SECRET_KEY is not defined");if(!process.env.MINIO_BUCKET)throw Error("MINIO_BUCKET is not defined");let r=new t.S3Client({endpoint:process.env.MINIO_ENDPOINT,region:"us-east-1",credentials:{accessKeyId:process.env.MINIO_ACCESS_KEY,secretAccessKey:process.env.MINIO_SECRET_KEY},forcePathStyle:!0}),s=process.env.MINIO_BUCKET;e.s(["MINIO_BUCKET",0,s,"MINIO_PUBLIC_URL",0,"","minioClient",0,r])},487821,e=>e.a(async(t,r)=>{try{var s=e.i(814747),a=e.i(465648),n=e.i(809843),i=e.i(21663),o=e.i(131558),l=e.i(640911),p=e.i(171548),d=e.i(254799),u=t([n]);[n]=u.then?(await u)():u;let h=(0,l.createLogger)({module:"api.upload.presigned-url"}),x=["avatars","images","documents","uploads"];async function c(e){let t=await (0,n.getSession)();if(!t)return a.NextResponse.json({error:"Unauthorized"},{status:401});let{filename:r,contentType:l,folder:u="uploads"}=await e.json(),c=s.default.basename(r??""),m=x.includes(u)?u:"uploads";if(!c||!l)return a.NextResponse.json({error:"filename and contentType are required"},{status:400});if(!new Set(["image/jpeg","image/png","image/gif","image/webp","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"]).has(l))return a.NextResponse.json({error:"Content type not allowed"},{status:400});let f=c.includes(".")&&c.split(".").pop()?.trim()||"bin",_=`${m}/${(0,d.randomUUID)()}.${f}`,v=new i.PutObjectCommand({Bucket:p.MINIO_BUCKET,Key:_,ContentType:l});try{let e=await (0,o.getSignedUrl)(p.minioClient,v,{expiresIn:600}),r=`${p.MINIO_PUBLIC_URL}/${p.MINIO_BUCKET}/${_}`;return h.info({contentType:l,folder:m,key:_,userId:t.user.id},"Presigned upload URL generated"),a.NextResponse.json({presignedUrl:e,fileUrl:r,key:_})}catch(e){return h.error({err:e,contentType:l,folder:m,userId:t.user.id},"Presigned upload URL generation failed"),a.NextResponse.json({error:"Failed to generate upload URL"},{status:500})}}e.s(["POST",0,c]),r()}catch(e){r(e)}},!1),186930,e=>e.a(async(t,r)=>{try{var s=e.i(318200),a=e.i(671865),n=e.i(224201),i=e.i(430162),o=e.i(196971),l=e.i(532106),p=e.i(467071),d=e.i(745110),u=e.i(150576),c=e.i(364634),h=e.i(54349),x=e.i(551058),m=e.i(469082),f=e.i(48227),_=e.i(207384),v=e.i(193695);e.i(919877);var g=e.i(557036),E=e.i(487821),R=t([E]);[E]=R.then?(await R)():R;let I=new s.AppRouteRouteModule({definition:{kind:a.RouteKind.APP_ROUTE,page:"/api/upload/presigned-url/route",pathname:"/api/upload/presigned-url",filename:"route",bundlePath:""},distDir:".next",relativeProjectDir:"",resolvedPagePath:"[project]/app/api/upload/presigned-url/route.ts",nextConfigOutput:"",userland:E,...{}}),{workAsyncStorage:w,workUnitAsyncStorage:C,serverHooks:N}=I;async function y(e,t,r){r.requestMeta&&(0,i.setRequestMeta)(e,r.requestMeta),I.isDev&&(0,i.addRequestMeta)(e,"devRequestTimingInternalsEnd",process.hrtime.bigint());let s="/api/upload/presigned-url/route";s=s.replace(/\/index$/,"")||"/";let n=await I.prepare(e,t,{srcPage:s,multiZoneDraftMode:!1});if(!n)return t.statusCode=400,t.end("Bad Request"),null==r.waitUntil||r.waitUntil.call(r,Promise.resolve()),null;let{buildId:E,params:R,nextConfig:y,parsedUrl:w,isDraftMode:C,prerenderManifest:N,routerServerContext:q,isOnDemandRevalidate:O,revalidateOnlyGenerated:S,resolvedPathname:T,clientReferenceManifest:k,serverActionsManifest:P}=n,b=(0,p.normalizeAppPath)(s),A=!!(N.dynamicRoutes[b]||N.routes[T]),j=async()=>((null==q?void 0:q.render404)?await q.render404(e,t,w,!1):t.end("This page could not be found"),null);if(A&&!C){let e=!!N.routes[T],t=N.dynamicRoutes[b];if(t&&!1===t.fallback&&!e){if(y.adapterPath)return await j();throw new v.NoFallbackError}}let M=null;!A||I.isDev||C||(M=T,M="/index"===M?"/":M);let U=!0===I.isDev||!A,L=A&&!U;P&&k&&(0,l.setManifestsSingleton)({page:s,clientReferenceManifest:k,serverActionsManifest:P});let K=e.method||"GET",D=(0,o.getTracer)(),H=D.getActiveScopeSpan(),B=!!(null==q?void 0:q.isWrappedByNextServer),$=!!(0,i.getRequestMeta)(e,"minimalMode"),z=(0,i.getRequestMeta)(e,"incrementalCache")||await I.getIncrementalCache(e,y,N,$);null==z||z.resetRequestCache(),globalThis.__incrementalCache=z;let F={params:R,previewProps:N.preview,renderOpts:{experimental:{authInterrupts:!!y.experimental.authInterrupts},cacheComponents:!!y.cacheComponents,supportsDynamicResponse:U,incrementalCache:z,cacheLifeProfiles:y.cacheLife,waitUntil:r.waitUntil,onClose:e=>{t.on("close",e)},onAfterTaskError:void 0,onInstrumentationRequestError:(t,r,s,a)=>I.onRequestError(e,t,s,a,q)},sharedContext:{buildId:E}},Y=new d.NodeNextRequest(e),W=new d.NodeNextResponse(t),V=u.NextRequestAdapter.fromNodeNextRequest(Y,(0,u.signalFromNodeResponse)(t));try{let n,i=async e=>I.handle(V,F).finally(()=>{if(!e)return;e.setAttributes({"http.status_code":t.statusCode,"next.rsc":!1});let r=D.getRootSpanAttributes();if(!r)return;if(r.get("next.span_type")!==c.BaseServerSpan.handleRequest)return void console.warn(`Unexpected root span type '${r.get("next.span_type")}'. Please report this Next.js issue https://github.com/vercel/next.js`);let a=r.get("next.route");if(a){let t=`${K} ${a}`;e.setAttributes({"next.route":a,"http.route":a,"next.span_name":t}),e.updateName(t),n&&n!==e&&(n.setAttribute("http.route",a),n.updateName(t))}else e.updateName(`${K} ${s}`)}),l=async n=>{var o,l;let p=async({previousCacheEntry:a})=>{try{if(!$&&O&&S&&!a)return t.statusCode=404,t.setHeader("x-nextjs-cache","REVALIDATED"),t.end("This page could not be found"),null;let s=await i(n);e.fetchMetrics=F.renderOpts.fetchMetrics;let o=F.renderOpts.pendingWaitUntil;o&&r.waitUntil&&(r.waitUntil(o),o=void 0);let l=F.renderOpts.collectedTags;if(!A)return await (0,x.sendResponse)(Y,W,s,F.renderOpts.pendingWaitUntil),null;{let e=await s.blob(),t=(0,m.toNodeOutgoingHttpHeaders)(s.headers);l&&(t[_.NEXT_CACHE_TAGS_HEADER]=l),!t["content-type"]&&e.type&&(t["content-type"]=e.type);let r=void 0!==F.renderOpts.collectedRevalidate&&!(F.renderOpts.collectedRevalidate>=_.INFINITE_CACHE)&&F.renderOpts.collectedRevalidate,a=void 0===F.renderOpts.collectedExpire||F.renderOpts.collectedExpire>=_.INFINITE_CACHE?void 0:F.renderOpts.collectedExpire;return{value:{kind:g.CachedRouteKind.APP_ROUTE,status:s.status,body:Buffer.from(await e.arrayBuffer()),headers:t},cacheControl:{revalidate:r,expire:a}}}}catch(t){throw(null==a?void 0:a.isStale)&&await I.onRequestError(e,t,{routerKind:"App Router",routePath:s,routeType:"route",revalidateReason:(0,h.getRevalidateReason)({isStaticGeneration:L,isOnDemandRevalidate:O})},!1,q),t}},d=await I.handleResponse({req:e,nextConfig:y,cacheKey:M,routeKind:a.RouteKind.APP_ROUTE,isFallback:!1,prerenderManifest:N,isRoutePPREnabled:!1,isOnDemandRevalidate:O,revalidateOnlyGenerated:S,responseGenerator:p,waitUntil:r.waitUntil,isMinimalMode:$});if(!A)return null;if((null==d||null==(o=d.value)?void 0:o.kind)!==g.CachedRouteKind.APP_ROUTE)throw Object.defineProperty(Error(`Invariant: app-route received invalid cache entry ${null==d||null==(l=d.value)?void 0:l.kind}`),"__NEXT_ERROR_CODE",{value:"E701",enumerable:!1,configurable:!0});$||t.setHeader("x-nextjs-cache",O?"REVALIDATED":d.isMiss?"MISS":d.isStale?"STALE":"HIT"),C&&t.setHeader("Cache-Control","private, no-cache, no-store, max-age=0, must-revalidate");let u=(0,m.fromNodeOutgoingHttpHeaders)(d.value.headers);return $&&A||u.delete(_.NEXT_CACHE_TAGS_HEADER),!d.cacheControl||t.getHeader("Cache-Control")||u.get("Cache-Control")||u.set("Cache-Control",(0,f.getCacheControlHeader)(d.cacheControl)),await (0,x.sendResponse)(Y,W,new Response(d.value.body,{headers:u,status:d.value.status||200})),null};B&&H?await l(H):(n=D.getActiveScopeSpan(),await D.withPropagatedContext(e.headers,()=>D.trace(c.BaseServerSpan.handleRequest,{spanName:`${K} ${s}`,kind:o.SpanKind.SERVER,attributes:{"http.method":K,"http.target":e.url}},l),void 0,!B))}catch(t){if(t instanceof v.NoFallbackError||await I.onRequestError(e,t,{routerKind:"App Router",routePath:b,routeType:"route",revalidateReason:(0,h.getRevalidateReason)({isStaticGeneration:L,isOnDemandRevalidate:O})},!1,q),A)throw t;return await (0,x.sendResponse)(Y,W,new Response(null,{status:500})),null}}e.s(["handler",0,y,"patchFetch",0,function(){return(0,n.patchFetch)({workAsyncStorage:w,workUnitAsyncStorage:C})},"routeModule",0,I,"serverHooks",0,N,"workAsyncStorage",0,w,"workUnitAsyncStorage",0,C]),r()}catch(e){r(e)}},!1),500655,e=>{e.v(t=>Promise.all(["server/chunks/0jur_@better-auth_memory-adapter_dist_index_mjs_0k2ljp2._.js"].map(t=>e.l(t))).then(()=>t(538420)))},480060,e=>{e.v(t=>Promise.all(["server/chunks/0ul0_better-auth_dist_adapters_kysely-adapter_index_mjs_0v60g5z._.js"].map(t=>e.l(t))).then(()=>t(302429)))},925775,e=>{e.v(t=>Promise.all(["server/chunks/0_3k_@better-auth_kysely-adapter_dist_bun-sqlite-dialect-C8OaCWSL_mjs_0kt61qj._.js"].map(t=>e.l(t))).then(()=>t(862858)))},396074,e=>{e.v(t=>Promise.all(["server/chunks/0_3k_@better-auth_kysely-adapter_dist_node-sqlite-dialect_mjs_0-_4axd._.js"].map(t=>e.l(t))).then(()=>t(84189)))},330734,e=>{e.v(t=>Promise.all(["server/chunks/0_3k_@better-auth_kysely-adapter_dist_d1-sqlite-dialect-sYHNqBte_mjs_0i_wmh9._.js"].map(t=>e.l(t))).then(()=>t(317017)))},947342,e=>{e.v(t=>Promise.all(["server/chunks/[root-of-the-server]__0fw_u-z._.js","server/chunks/node_modules__pnpm_0atwja_._.js"].map(t=>e.l(t))).then(()=>t(676254)))}];
+.next/server/chunks/[root-of-the-server]__0j_dtt4._.js.map:1:{"version":3,"sources":["../../../lib/logger.ts","../../../node_modules/.pnpm/kysely%400.28.15/node_modules/kysely/dist/esm/dialect/dialect-adapter-base.js","../../../node_modules/.pnpm/kysely%400.28.15/node_modules/kysely/dist/esm/dialect/sqlite/sqlite-query-compiler.js","../../../node_modules/.pnpm/kysely%400.28.15/node_modules/kysely/dist/esm/dialect/sqlite/sqlite-adapter.js","../../../lib/auth-server.ts","../../../lib/minio.ts","../../../app/api/upload/presigned-url/route.ts","../../../node_modules/.pnpm/next%4016.2.4_%40babel%2Bcore%407.29.0_%40opentelemetry%2Bapi%401.9.1_%40playwright%2Btest%401.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/src/build/templates/app-route.ts"],"sourcesContent":["import { context, trace } from \"@opentelemetry/api\";\nimport { mkdirSync } from \"node:fs\";\nimport { hostname } from \"node:os\";\nimport { dirname, resolve } from \"node:path\";\nimport pino from \"pino\";\n\nconst serviceName = process.env.OTEL_SERVICE_NAME || \"nextcrm-app\";\nconst logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === \"production\" ? \"info\" : \"debug\");\n\nfunction getTraceBindings() {\n  const spanContext = trace.getSpan(context.active())?.spanContext();\n\n  if (!spanContext || !trace.isSpanContextValid(spanContext)) {\n    return {};\n  }\n\n  return {\n    trace_id: spanContext.traceId,\n    span_id: spanContext.spanId,\n    trace_flags: spanContext.traceFlags.toString(16).padStart(2, \"0\"),\n  };\n}\n\nfunction createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {\n  const streams: pino.StreamEntry[] = [];\n  const prettyLogs = process.env.PINO_PRETTY === \"true\";\n\n  streams.push({\n    level: logLevel as pino.Level,\n    stream: prettyLogs\n      ? pino.transport({\n          target: \"pino-pretty\",\n          options: {\n            colorize: true,\n            ignore: \"pid,hostname\",\n            translateTime: \"SYS:standard\",\n          },\n        })\n      : pino.destination({ dest: 1, sync: false }),\n  });\n\n  if (process.env.LOG_FILE_PATH) {\n    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);\n    mkdirSync(dirname(logFilePath), { recursive: true });\n\n    streams.push({\n      level: logLevel as pino.Level,\n      stream: pino.destination({ dest: logFilePath, sync: false }),\n    });\n  }\n\n  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });\n}\n\nexport const logger = pino(\n  {\n    base: {\n      service: serviceName,\n      environment: process.env.NODE_ENV || \"development\",\n      pid: process.pid,\n      hostname: hostname(),\n    },\n    formatters: {\n      level(label) {\n        return { level: label };\n      },\n    },\n    level: logLevel,\n    messageKey: \"message\",\n    mixin: getTraceBindings,\n    redact: {\n      censor: \"[REDACTED]\",\n      paths: [\n        \"authorization\",\n        \"cookie\",\n        \"password\",\n        \"secret\",\n        \"token\",\n        \"apiKey\",\n        \"headers.authorization\",\n        \"headers.cookie\",\n        \"*.authorization\",\n        \"*.cookie\",\n        \"*.password\",\n        \"*.secret\",\n        \"*.token\",\n        \"*.apiKey\",\n      ],\n    },\n    serializers: {\n      err: pino.stdSerializers.err,\n      error: pino.stdSerializers.err,\n    },\n    timestamp: pino.stdTimeFunctions.isoTime,\n  },\n  createLogStreams()\n);\n\nexport function createLogger(bindings: pino.Bindings) {\n  return logger.child(bindings);\n}\n","/// <reference types=\"./dialect-adapter-base.d.ts\" />\n/**\n * A basic implementation of `DialectAdapter` with sensible default values.\n * Third-party dialects can extend this instead of implementing the `DialectAdapter`\n * interface from scratch. That way all new settings will get default values when\n * they are added and there will be less breaking changes.\n */\nexport class DialectAdapterBase {\n    get supportsCreateIfNotExists() {\n        return true;\n    }\n    get supportsTransactionalDdl() {\n        return false;\n    }\n    get supportsReturning() {\n        return false;\n    }\n    get supportsOutput() {\n        return false;\n    }\n}\n","/// <reference types=\"./sqlite-query-compiler.d.ts\" />\nimport { DefaultQueryCompiler } from '../../query-compiler/default-query-compiler.js';\nconst ID_WRAP_REGEX = /\"/g;\nexport class SqliteQueryCompiler extends DefaultQueryCompiler {\n    visitOrAction(node) {\n        this.append('or ');\n        this.append(node.action);\n    }\n    getCurrentParameterPlaceholder() {\n        return '?';\n    }\n    getLeftExplainOptionsWrapper() {\n        return '';\n    }\n    getRightExplainOptionsWrapper() {\n        return '';\n    }\n    getLeftIdentifierWrapper() {\n        return '\"';\n    }\n    getRightIdentifierWrapper() {\n        return '\"';\n    }\n    getAutoIncrement() {\n        return 'autoincrement';\n    }\n    sanitizeIdentifier(identifier) {\n        return identifier.replace(ID_WRAP_REGEX, '\"\"');\n    }\n    visitDefaultInsertValue(_) {\n        // sqlite doesn't support the `default` keyword in inserts.\n        this.append('null');\n    }\n}\n","/// <reference types=\"./sqlite-adapter.d.ts\" />\nimport { DialectAdapterBase } from '../dialect-adapter-base.js';\nexport class SqliteAdapter extends DialectAdapterBase {\n    get supportsTransactionalDdl() {\n        return false;\n    }\n    get supportsReturning() {\n        return true;\n    }\n    async acquireMigrationLock(_db, _opt) {\n        // SQLite only has one connection that's reserved by the migration system\n        // for the whole time between acquireMigrationLock and releaseMigrationLock.\n        // We don't need to do anything here.\n    }\n    async releaseMigrationLock(_db, _opt) {\n        // SQLite only has one connection that's reserved by the migration system\n        // for the whole time between acquireMigrationLock and releaseMigrationLock.\n        // We don't need to do anything here.\n    }\n}\n","import { auth } from \"@/lib/auth\";\nimport { headers } from \"next/headers\";\n\n// TODO: Add requireRole() helper for viewer restriction enforcement\n// when viewer role is first assigned to users\n\nexport async function getSession() {\n  return auth.api.getSession({\n    headers: await headers(),\n  });\n}\n","import { S3Client } from \"@aws-sdk/client-s3\";\n\nif (!process.env.MINIO_ENDPOINT) throw new Error(\"MINIO_ENDPOINT is not defined\");\nif (!process.env.MINIO_ACCESS_KEY) throw new Error(\"MINIO_ACCESS_KEY is not defined\");\nif (!process.env.MINIO_SECRET_KEY) throw new Error(\"MINIO_SECRET_KEY is not defined\");\nif (!process.env.MINIO_BUCKET) throw new Error(\"MINIO_BUCKET is not defined\");\n\nexport const minioClient = new S3Client({\n  endpoint: process.env.MINIO_ENDPOINT,\n  region: \"us-east-1\", // MinIO requires a region value; actual value doesn't matter\n  credentials: {\n    accessKeyId: process.env.MINIO_ACCESS_KEY,\n    secretAccessKey: process.env.MINIO_SECRET_KEY,\n  },\n  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks\n});\n\nexport const MINIO_BUCKET = process.env.MINIO_BUCKET;\nexport const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;\n","import path from \"path\";\nimport { NextRequest, NextResponse } from \"next/server\";\nimport { getSession } from \"@/lib/auth-server\";\nimport { PutObjectCommand } from \"@aws-sdk/client-s3\";\nimport { getSignedUrl } from \"@aws-sdk/s3-request-presigner\";\nimport { createLogger } from \"@/lib/logger\";\nimport { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from \"@/lib/minio\";\nimport { randomUUID } from \"crypto\";\n\nconst logger = createLogger({ module: \"api.upload.presigned-url\" });\n\nconst ALLOWED_FOLDERS = [\"avatars\", \"images\", \"documents\", \"uploads\"] as const;\ntype AllowedFolder = (typeof ALLOWED_FOLDERS)[number];\n\nexport async function POST(req: NextRequest) {\n  const session = await getSession();\n  if (!session) return NextResponse.json({ error: \"Unauthorized\" }, { status: 401 });\n\n  const { filename: rawFilename, contentType, folder: rawFolder = \"uploads\" } = await req.json();\n\n  // Sanitize: strip any path components to prevent path traversal\n  const filename = path.basename(rawFilename ?? \"\");\n  // Whitelist folder to only allow known upload destinations\n  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)\n    ? (rawFolder as AllowedFolder)\n    : \"uploads\";\n\n  if (!filename || !contentType) {\n    return NextResponse.json({ error: \"filename and contentType are required\" }, { status: 400 });\n  }\n\n  const ALLOWED_CONTENT_TYPES = new Set([\n    \"image/jpeg\", \"image/png\", \"image/gif\", \"image/webp\",\n    \"application/pdf\", \"application/msword\",\n    \"application/vnd.openxmlformats-officedocument.wordprocessingml.document\",\n    \"text/plain\",\n  ]);\n  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {\n    return NextResponse.json({ error: \"Content type not allowed\" }, { status: 400 });\n  }\n\n  // Fall back to \"bin\" if filename has no extension or extension is empty (e.g., \".\")\n  const ext = filename.includes(\".\") ? filename.split(\".\").pop()?.trim() || \"bin\" : \"bin\";\n  const key = `${folder}/${randomUUID()}.${ext}`;\n\n  const command = new PutObjectCommand({\n    Bucket: MINIO_BUCKET,\n    Key: key,\n    ContentType: contentType,\n  });\n\n  // Presigned URL valid for 10 minutes\n  try {\n    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });\n\n    // The public URL where the file will be accessible after upload\n    const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;\n\n    logger.info(\n      {\n        contentType,\n        folder,\n        key,\n        userId: session.user.id,\n      },\n      \"Presigned upload URL generated\"\n    );\n\n    return NextResponse.json({ presignedUrl, fileUrl, key });\n  } catch (err) {\n    logger.error(\n      {\n        err,\n        contentType,\n        folder,\n        userId: session.user.id,\n      },\n      \"Presigned upload URL generation failed\"\n    );\n    return NextResponse.json({ error: \"Failed to generate upload URL\" }, { status: 500 });\n  }\n}\n","import {\n  AppRouteRouteModule,\n  type AppRouteRouteHandlerContext,\n  type AppRouteRouteModuleOptions,\n  type AppRouteUserlandModule,\n} from '../../server/route-modules/app-route/module.compiled'\nimport { RouteKind } from '../../server/route-kind'\nimport { patchFetch as _patchFetch } from '../../server/lib/patch-fetch'\nimport type { IncomingMessage, ServerResponse } from 'node:http'\nimport {\n  addRequestMeta,\n  getRequestMeta,\n  setRequestMeta,\n  type RequestMeta,\n} from '../../server/request-meta'\nimport { getTracer, type Span, SpanKind } from '../../server/lib/trace/tracer'\nimport { setManifestsSingleton } from '../../server/app-render/manifests-singleton'\nimport { normalizeAppPath } from '../../shared/lib/router/utils/app-paths'\nimport { NodeNextRequest, NodeNextResponse } from '../../server/base-http/node'\nimport {\n  NextRequestAdapter,\n  signalFromNodeResponse,\n} from '../../server/web/spec-extension/adapters/next-request'\nimport { BaseServerSpan } from '../../server/lib/trace/constants'\nimport { getRevalidateReason } from '../../server/instrumentation/utils'\nimport { sendResponse } from '../../server/send-response'\nimport {\n  fromNodeOutgoingHttpHeaders,\n  toNodeOutgoingHttpHeaders,\n} from '../../server/web/utils'\nimport { getCacheControlHeader } from '../../server/lib/cache-control'\nimport { INFINITE_CACHE, NEXT_CACHE_TAGS_HEADER } from '../../lib/constants'\nimport { NoFallbackError } from '../../shared/lib/no-fallback-error.external'\nimport {\n  CachedRouteKind,\n  type ResponseCacheEntry,\n  type ResponseGenerator,\n} from '../../server/response-cache'\nimport * as userland from 'VAR_USERLAND'\n\n// These are injected by the loader afterwards. This is injected as a variable\n// instead of a replacement because this could also be `undefined` instead of\n// an empty string.\ndeclare const nextConfigOutput: AppRouteRouteModuleOptions['nextConfigOutput']\n\n// We inject the nextConfigOutput here so that we can use them in the route\n// module.\n// INJECT:nextConfigOutput\n\nconst routeModule = new AppRouteRouteModule({\n  definition: {\n    kind: RouteKind.APP_ROUTE,\n    page: 'VAR_DEFINITION_PAGE',\n    pathname: 'VAR_DEFINITION_PATHNAME',\n    filename: 'VAR_DEFINITION_FILENAME',\n    bundlePath: 'VAR_DEFINITION_BUNDLE_PATH',\n  },\n  distDir: process.env.__NEXT_RELATIVE_DIST_DIR || '',\n  relativeProjectDir: process.env.__NEXT_RELATIVE_PROJECT_DIR || '',\n  resolvedPagePath: 'VAR_RESOLVED_PAGE_PATH',\n  nextConfigOutput,\n  // The static import is used for initialization (methods, dynamic, etc.).\n  userland: userland as AppRouteUserlandModule,\n  // In Turbopack dev mode, also provide a getter that calls require() on every\n  // request. This re-reads from devModuleCache so HMR updates are picked up,\n  // and the async wrapper unwraps async-module Promises (ESM-only\n  // serverExternalPackages) automatically.\n  ...(process.env.TURBOPACK && process.env.__NEXT_DEV_SERVER\n    ? {\n        getUserland: () => import('VAR_USERLAND'),\n      }\n    : {}),\n})\n\n// Pull out the exports that we need to expose from the module. This should\n// be eliminated when we've moved the other routes to the new format. These\n// are used to hook into the route.\nconst { workAsyncStorage, workUnitAsyncStorage, serverHooks } = routeModule\n\nfunction patchFetch() {\n  return _patchFetch({\n    workAsyncStorage,\n    workUnitAsyncStorage,\n  })\n}\n\nexport {\n  routeModule,\n  workAsyncStorage,\n  workUnitAsyncStorage,\n  serverHooks,\n  patchFetch,\n}\n\nexport async function handler(\n  req: IncomingMessage,\n  res: ServerResponse,\n  ctx: {\n    waitUntil?: (prom: Promise<void>) => void\n    requestMeta?: RequestMeta\n  }\n) {\n  if (ctx.requestMeta) {\n    setRequestMeta(req, ctx.requestMeta)\n  }\n  if (routeModule.isDev) {\n    addRequestMeta(req, 'devRequestTimingInternalsEnd', process.hrtime.bigint())\n  }\n  let srcPage = 'VAR_DEFINITION_PAGE'\n\n  // turbopack doesn't normalize `/index` in the page name\n  // so we need to to process dynamic routes properly\n  // TODO: fix turbopack providing differing value from webpack\n  if (process.env.TURBOPACK) {\n    srcPage = srcPage.replace(/\\/index$/, '') || '/'\n  } else if (srcPage === '/index') {\n    // we always normalize /index specifically\n    srcPage = '/'\n  }\n  const multiZoneDraftMode = process.env\n    .__NEXT_MULTI_ZONE_DRAFT_MODE as any as boolean\n\n  const prepareResult = await routeModule.prepare(req, res, {\n    srcPage,\n    multiZoneDraftMode,\n  })\n\n  if (!prepareResult) {\n    res.statusCode = 400\n    res.end('Bad Request')\n    ctx.waitUntil?.(Promise.resolve())\n    return null\n  }\n\n  const {\n    buildId,\n    params,\n    nextConfig,\n    parsedUrl,\n    isDraftMode,\n    prerenderManifest,\n    routerServerContext,\n    isOnDemandRevalidate,\n    revalidateOnlyGenerated,\n    resolvedPathname,\n    clientReferenceManifest,\n    serverActionsManifest,\n  } = prepareResult\n\n  const normalizedSrcPage = normalizeAppPath(srcPage)\n\n  let isIsr = Boolean(\n    prerenderManifest.dynamicRoutes[normalizedSrcPage] ||\n      prerenderManifest.routes[resolvedPathname]\n  )\n\n  const render404 = async () => {\n    // TODO: should route-module itself handle rendering the 404\n    if (routerServerContext?.render404) {\n      await routerServerContext.render404(req, res, parsedUrl, false)\n    } else {\n      res.end('This page could not be found')\n    }\n    return null\n  }\n\n  if (isIsr && !isDraftMode) {\n    const isPrerendered = Boolean(prerenderManifest.routes[resolvedPathname])\n    const prerenderInfo = prerenderManifest.dynamicRoutes[normalizedSrcPage]\n\n    if (prerenderInfo) {\n      if (prerenderInfo.fallback === false && !isPrerendered) {\n        if (nextConfig.adapterPath) {\n          return await render404()\n        }\n        throw new NoFallbackError()\n      }\n    }\n  }\n\n  let cacheKey: string | null = null\n\n  if (isIsr && !routeModule.isDev && !isDraftMode) {\n    cacheKey = resolvedPathname\n    // ensure /index and / is normalized to one key\n    cacheKey = cacheKey === '/index' ? '/' : cacheKey\n  }\n\n  const supportsDynamicResponse: boolean =\n    // If we're in development, we always support dynamic HTML\n    routeModule.isDev === true ||\n    // If this is not SSG or does not have static paths, then it supports\n    // dynamic HTML.\n    !isIsr\n\n  // This is a revalidation request if the request is for a static\n  // page and it is not being resumed from a postponed render and\n  // it is not a dynamic RSC request then it is a revalidation\n  // request.\n  const isStaticGeneration = isIsr && !supportsDynamicResponse\n\n  // Before rendering (which initializes component tree modules), we have to\n  // set the reference manifests to our global store so Server Action's\n  // encryption util can access to them at the top level of the page module.\n  if (serverActionsManifest && clientReferenceManifest) {\n    setManifestsSingleton({\n      page: srcPage,\n      clientReferenceManifest,\n      serverActionsManifest,\n    })\n  }\n\n  const method = req.method || 'GET'\n  const tracer = getTracer()\n  const activeSpan = tracer.getActiveScopeSpan()\n  const isWrappedByNextServer = Boolean(\n    routerServerContext?.isWrappedByNextServer\n  )\n  const isMinimalMode = Boolean(getRequestMeta(req, 'minimalMode'))\n\n  const incrementalCache =\n    getRequestMeta(req, 'incrementalCache') ||\n    (await routeModule.getIncrementalCache(\n      req,\n      nextConfig,\n      prerenderManifest,\n      isMinimalMode\n    ))\n\n  incrementalCache?.resetRequestCache()\n  ;(globalThis as any).__incrementalCache = incrementalCache\n\n  const context: AppRouteRouteHandlerContext = {\n    params,\n    previewProps: prerenderManifest.preview,\n    renderOpts: {\n      experimental: {\n        authInterrupts: Boolean(nextConfig.experimental.authInterrupts),\n      },\n      cacheComponents: Boolean(nextConfig.cacheComponents),\n      supportsDynamicResponse,\n      incrementalCache,\n      cacheLifeProfiles: nextConfig.cacheLife,\n      waitUntil: ctx.waitUntil,\n      onClose: (cb) => {\n        res.on('close', cb)\n      },\n      onAfterTaskError: undefined,\n      onInstrumentationRequestError: (\n        error,\n        _request,\n        errorContext,\n        silenceLog\n      ) =>\n        routeModule.onRequestError(\n          req,\n          error,\n          errorContext,\n          silenceLog,\n          routerServerContext\n        ),\n    },\n    sharedContext: {\n      buildId,\n    },\n  }\n  const nodeNextReq = new NodeNextRequest(req)\n  const nodeNextRes = new NodeNextResponse(res)\n\n  const nextReq = NextRequestAdapter.fromNodeNextRequest(\n    nodeNextReq,\n    signalFromNodeResponse(res)\n  )\n\n  try {\n    let parentSpan: Span | undefined\n    const invokeRouteModule = async (span?: Span) => {\n      return routeModule.handle(nextReq, context).finally(() => {\n        if (!span) return\n\n        span.setAttributes({\n          'http.status_code': res.statusCode,\n          'next.rsc': false,\n        })\n\n        const rootSpanAttributes = tracer.getRootSpanAttributes()\n        // We were unable to get attributes, probably OTEL is not enabled\n        if (!rootSpanAttributes) {\n          return\n        }\n\n        if (\n          rootSpanAttributes.get('next.span_type') !==\n          BaseServerSpan.handleRequest\n        ) {\n          console.warn(\n            `Unexpected root span type '${rootSpanAttributes.get(\n              'next.span_type'\n            )}'. Please report this Next.js issue https://github.com/vercel/next.js`\n          )\n          return\n        }\n\n        const route = rootSpanAttributes.get('next.route')\n        if (route) {\n          const name = `${method} ${route}`\n\n          span.setAttributes({\n            'next.route': route,\n            'http.route': route,\n            'next.span_name': name,\n          })\n          span.updateName(name)\n\n          // Propagate http.route to the parent span if one exists (e.g.\n          // a platform-created HTTP span in adapter deployments).\n          if (parentSpan && parentSpan !== span) {\n            parentSpan.setAttribute('http.route', route)\n            parentSpan.updateName(name)\n          }\n        } else {\n          span.updateName(`${method} ${srcPage}`)\n        }\n      })\n    }\n\n    const handleResponse = async (currentSpan?: Span) => {\n      const responseGenerator: ResponseGenerator = async ({\n        previousCacheEntry,\n      }) => {\n        try {\n          if (\n            !isMinimalMode &&\n            isOnDemandRevalidate &&\n            revalidateOnlyGenerated &&\n            !previousCacheEntry\n          ) {\n            res.statusCode = 404\n            // on-demand revalidate always sets this header\n            res.setHeader('x-nextjs-cache', 'REVALIDATED')\n            res.end('This page could not be found')\n            return null\n          }\n\n          const response = await invokeRouteModule(currentSpan)\n\n          ;(req as any).fetchMetrics = (context.renderOpts as any).fetchMetrics\n          let pendingWaitUntil = context.renderOpts.pendingWaitUntil\n\n          // Attempt using provided waitUntil if available\n          // if it's not we fallback to sendResponse's handling\n          if (pendingWaitUntil) {\n            if (ctx.waitUntil) {\n              ctx.waitUntil(pendingWaitUntil)\n              pendingWaitUntil = undefined\n            }\n          }\n          const cacheTags = context.renderOpts.collectedTags\n\n          // If the request is for a static response, we can cache it so long\n          // as it's not edge.\n          if (isIsr) {\n            const blob = await response.blob()\n\n            // Copy the headers from the response.\n            const headers = toNodeOutgoingHttpHeaders(response.headers)\n\n            if (cacheTags) {\n              headers[NEXT_CACHE_TAGS_HEADER] = cacheTags\n            }\n\n            if (!headers['content-type'] && blob.type) {\n              headers['content-type'] = blob.type\n            }\n\n            const revalidate =\n              typeof context.renderOpts.collectedRevalidate === 'undefined' ||\n              context.renderOpts.collectedRevalidate >= INFINITE_CACHE\n                ? false\n                : context.renderOpts.collectedRevalidate\n\n            const expire =\n              typeof context.renderOpts.collectedExpire === 'undefined' ||\n              context.renderOpts.collectedExpire >= INFINITE_CACHE\n                ? undefined\n                : context.renderOpts.collectedExpire\n\n            // Create the cache entry for the response.\n            const cacheEntry: ResponseCacheEntry = {\n              value: {\n                kind: CachedRouteKind.APP_ROUTE,\n                status: response.status,\n                body: Buffer.from(await blob.arrayBuffer()),\n                headers,\n              },\n              cacheControl: { revalidate, expire },\n            }\n\n            return cacheEntry\n          } else {\n            // send response without caching if not ISR\n            await sendResponse(\n              nodeNextReq,\n              nodeNextRes,\n              response,\n              context.renderOpts.pendingWaitUntil\n            )\n            return null\n          }\n        } catch (err) {\n          // if this is a background revalidate we need to report\n          // the request error here as it won't be bubbled\n          if (previousCacheEntry?.isStale) {\n            const silenceLog = false\n            await routeModule.onRequestError(\n              req,\n              err,\n              {\n                routerKind: 'App Router',\n                routePath: srcPage,\n                routeType: 'route',\n                revalidateReason: getRevalidateReason({\n                  isStaticGeneration,\n                  isOnDemandRevalidate,\n                }),\n              },\n              silenceLog,\n              routerServerContext\n            )\n          }\n          throw err\n        }\n      }\n\n      const cacheEntry = await routeModule.handleResponse({\n        req,\n        nextConfig,\n        cacheKey,\n        routeKind: RouteKind.APP_ROUTE,\n        isFallback: false,\n        prerenderManifest,\n        isRoutePPREnabled: false,\n        isOnDemandRevalidate,\n        revalidateOnlyGenerated,\n        responseGenerator,\n        waitUntil: ctx.waitUntil,\n        isMinimalMode,\n      })\n\n      // we don't create a cacheEntry for ISR\n      if (!isIsr) {\n        return null\n      }\n\n      if (cacheEntry?.value?.kind !== CachedRouteKind.APP_ROUTE) {\n        throw new Error(\n          `Invariant: app-route received invalid cache entry ${cacheEntry?.value?.kind}`\n        )\n      }\n\n      if (!isMinimalMode) {\n        res.setHeader(\n          'x-nextjs-cache',\n          isOnDemandRevalidate\n            ? 'REVALIDATED'\n            : cacheEntry.isMiss\n              ? 'MISS'\n              : cacheEntry.isStale\n                ? 'STALE'\n                : 'HIT'\n        )\n      }\n\n      // Draft mode should never be cached\n      if (isDraftMode) {\n        res.setHeader(\n          'Cache-Control',\n          'private, no-cache, no-store, max-age=0, must-revalidate'\n        )\n      }\n\n      const headers = fromNodeOutgoingHttpHeaders(cacheEntry.value.headers)\n\n      if (!(isMinimalMode && isIsr)) {\n        headers.delete(NEXT_CACHE_TAGS_HEADER)\n      }\n\n      // If cache control is already set on the response we don't\n      // override it to allow users to customize it via next.config\n      if (\n        cacheEntry.cacheControl &&\n        !res.getHeader('Cache-Control') &&\n        !headers.get('Cache-Control')\n      ) {\n        headers.set(\n          'Cache-Control',\n          getCacheControlHeader(cacheEntry.cacheControl)\n        )\n      }\n\n      await sendResponse(\n        nodeNextReq,\n        nodeNextRes,\n        // @ts-expect-error - Argument of type 'Buffer<ArrayBufferLike>' is not assignable to parameter of type 'BodyInit | null | undefined'.\n        new Response(cacheEntry.value.body, {\n          headers,\n          status: cacheEntry.value.status || 200,\n        })\n      )\n      return null\n    }\n\n    // TODO: activeSpan code path is for when wrapped by\n    // next-server can be removed when this is no longer used\n    if (isWrappedByNextServer && activeSpan) {\n      await handleResponse(activeSpan)\n    } else {\n      parentSpan = tracer.getActiveScopeSpan()\n      await tracer.withPropagatedContext(\n        req.headers,\n        () =>\n          tracer.trace(\n            BaseServerSpan.handleRequest,\n            {\n              spanName: `${method} ${srcPage}`,\n              kind: SpanKind.SERVER,\n              attributes: {\n                'http.method': method,\n                'http.target': req.url,\n              },\n            },\n            handleResponse\n          ),\n        undefined,\n        !isWrappedByNextServer\n      )\n    }\n  } catch (err) {\n    if (!(err instanceof NoFallbackError)) {\n      const silenceLog = false\n      await routeModule.onRequestError(\n        req,\n        err,\n        {\n          routerKind: 'App Router',\n          routePath: normalizedSrcPage,\n          routeType: 'route',\n          revalidateReason: getRevalidateReason({\n            isStaticGeneration,\n            isOnDemandRevalidate,\n          }),\n        },\n        silenceLog,\n        routerServerContext\n      )\n    }\n\n    // rethrow so that we can handle serving error page\n\n    // If this is during static generation, throw the error again.\n    if (isIsr) throw err\n\n    // Otherwise, send a 500 response.\n    await sendResponse(\n      nodeNextReq,\n      nodeNextRes,\n      new Response(null, { status: 500 })\n    )\n    return null\n  }\n}\n"],"names":["serviceName","process","env","OTEL_SERVICE_NAME","logLevel","LOG_LEVEL","getTraceBindings","spanContext","getSpan","active","isSpanContextValid","trace_id","traceId","span_id","spanId","trace_flags","traceFlags","toString","padStart","createLogStreams","streams","prettyLogs","PINO_PRETTY","push","level","stream","transport","target","options","colorize","ignore","translateTime","destination","dest","sync","LOG_FILE_PATH","logFilePath","cwd","recursive","length","multistream","dedupe","logger","base","service","environment","pid","hostname","formatters","label","messageKey","mixin","redact","censor","paths","serializers","err","stdSerializers","error","timestamp","stdTimeFunctions","isoTime","createLogger","bindings","child","DialectAdapterBase","supportsCreateIfNotExists","supportsTransactionalDdl","supportsReturning","supportsOutput","ID_WRAP_REGEX","SqliteQueryCompiler","visitOrAction","node","append","action","getCurrentParameterPlaceholder","getLeftExplainOptionsWrapper","getRightExplainOptionsWrapper","getLeftIdentifierWrapper","getRightIdentifierWrapper","getAutoIncrement","sanitizeIdentifier","identifier","replace","visitDefaultInsertValue","_","SqliteAdapter","acquireMigrationLock","_db","_opt","releaseMigrationLock","getSession","api","headers","MINIO_ENDPOINT","Error","MINIO_ACCESS_KEY","MINIO_SECRET_KEY","MINIO_BUCKET","minioClient","endpoint","region","credentials","accessKeyId","secretAccessKey","forcePathStyle","MINIO_PUBLIC_URL","module","ALLOWED_FOLDERS","POST","req","session","json","status","filename","rawFilename","contentType","folder","rawFolder","basename","includes","ALLOWED_CONTENT_TYPES","Set","has","ext","split","pop","trim","key","command","Bucket","Key","ContentType","presignedUrl","expiresIn","fileUrl","info","userId","user","id","AppRouteRouteModule","RouteKind","patchFetch","_patchFetch","addRequestMeta","getRequestMeta","setRequestMeta","getTracer","SpanKind","setManifestsSingleton","normalizeAppPath","NodeNextRequest","NodeNextResponse","NextRequestAdapter","signalFromNodeResponse","BaseServerSpan","getRevalidateReason","sendResponse","fromNodeOutgoingHttpHeaders","toNodeOutgoingHttpHeaders","getCacheControlHeader","INFINITE_CACHE","NEXT_CACHE_TAGS_HEADER","NoFallbackError","CachedRouteKind","userland","routeModule","definition","kind","APP_ROUTE","page","pathname","bundlePath","distDir","__NEXT_RELATIVE_DIST_DIR","relativeProjectDir","__NEXT_RELATIVE_PROJECT_DIR","resolvedPagePath","nextConfigOutput","TURBOPACK","__NEXT_DEV_SERVER","getUserland","workAsyncStorage","workUnitAsyncStorage","serverHooks","handler","res","ctx","requestMeta","isDev","hrtime","bigint","srcPage","multiZoneDraftMode","__NEXT_MULTI_ZONE_DRAFT_MODE","prepareResult","prepare","statusCode","end","waitUntil","Promise","resolve","buildId","params","nextConfig","parsedUrl","isDraftMode","prerenderManifest","routerServerContext","isOnDemandRevalidate","revalidateOnlyGenerated","resolvedPathname","clientReferenceManifest","serverActionsManifest","normalizedSrcPage","isIsr","Boolean","dynamicRoutes","routes","render404","isPrerendered","prerenderInfo","fallback","adapterPath","cacheKey","supportsDynamicResponse","isStaticGeneration","method","tracer","activeSpan","getActiveScopeSpan","isWrappedByNextServer","isMinimalMode","incrementalCache","getIncrementalCache","resetRequestCache","globalThis","__incrementalCache","context","previewProps","preview","renderOpts","experimental","authInterrupts","cacheComponents","cacheLifeProfiles","cacheLife","onClose","cb","on","onAfterTaskError","undefined","onInstrumentationRequestError","_request","errorContext","silenceLog","onRequestError","sharedContext","nodeNextReq","nodeNextRes","nextReq","fromNodeNextRequest","parentSpan","invokeRouteModule","span","handle","finally","setAttributes","rootSpanAttributes","getRootSpanAttributes","get","handleRequest","console","warn","route","name","updateName","setAttribute","handleResponse","currentSpan","cacheEntry","responseGenerator","previousCacheEntry","setHeader","response","fetchMetrics","pendingWaitUntil","cacheTags","collectedTags","blob","type","revalidate","collectedRevalidate","expire","collectedExpire","value","body","Buffer","from","arrayBuffer","cacheControl","isStale","routerKind","routePath","routeType","revalidateReason","routeKind","isFallback","isRoutePPREnabled","isMiss","delete","getHeader","set","Response","withPropagatedContext","trace","spanName","SERVER","attributes","url"],"mappings":"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","ignoreList":[1,2,3,7]}
+
+codex
+**Root Cause Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in `.env.local`, so the upload presigned-url route throws `TypeError: Invalid URL` while building the public file URL.
+
+Evidence:
+- Raw matching log exists for the same trace/span:
+  `trace_id=dd675312fb402fed6a9ff838a3d9a064`, `span_id=8f0a9636dd20584e`
+- Raw error: `TypeError: Invalid URL`, `code=ERR_INVALID_URL`, `input=""`.
+- Stack points to `buildPublicFileUrl()` in [app/api/upload/presigned-url/route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/upload/presigned-url/route.ts:15).
+- That function calls `new URL(MINIO_PUBLIC_URL!)`, where `MINIO_PUBLIC_URL` comes from `NEXT_PUBLIC_MINIO_ENDPOINT` in [lib/minio.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/lib/minio.ts:18).
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` blank at [line 77](/home/dmytro/Github/phd-work/nextcrm-app-update/.env.local:77).
+
+Important nuance: the log message says presigned URL generation failed, but the observed stack indicates signing had already completed. The failure happened immediately afterward when constructing `fileUrl`.
+
+The incident JSON shows null error fields because the app logs the exception under `err`, while the observability-normalized event appears to expose an `error` field. The raw application log contains the real exception details. No code changes were made.
+tokens used
+23,322
+**Root Cause Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in `.env.local`, so the upload presigned-url route throws `TypeError: Invalid URL` while building the public file URL.
+
+Evidence:
+- Raw matching log exists for the same trace/span:
+  `trace_id=dd675312fb402fed6a9ff838a3d9a064`, `span_id=8f0a9636dd20584e`
+- Raw error: `TypeError: Invalid URL`, `code=ERR_INVALID_URL`, `input=""`.
+- Stack points to `buildPublicFileUrl()` in [app/api/upload/presigned-url/route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/upload/presigned-url/route.ts:15).
+- That function calls `new URL(MINIO_PUBLIC_URL!)`, where `MINIO_PUBLIC_URL` comes from `NEXT_PUBLIC_MINIO_ENDPOINT` in [lib/minio.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/lib/minio.ts:18).
+- `.env.local` has `NEXT_PUBLIC_MINIO_ENDPOINT=` blank at [line 77](/home/dmytro/Github/phd-work/nextcrm-app-update/.env.local:77).
+
+Important nuance: the log message says presigned URL generation failed, but the observed stack indicates signing had already completed. The failure happened immediately afterward when constructing `fileUrl`.
+
+The incident JSON shows null error fields because the app logs the exception under `err`, while the observability-normalized event appears to expose an `error` field. The raw application log contains the real exception details. No code changes were made.

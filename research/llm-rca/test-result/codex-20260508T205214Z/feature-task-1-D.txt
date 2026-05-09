@@ -1,0 +1,822 @@
+run_name: feature-task-1-D
+case_name: feature-task-1
+variant: D
+target_branch: feature/task-1
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:11:39Z
+elapsed_seconds: 104
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-1/D/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+Feedback submission failed because the `/api/feedback` backend depends on Resend email delivery and returned HTTP 500 during email setup or send. In the incident commit `9be250f`, the feedback route initializes Resend before processing the request, and it returns 500 if `RESEND_API_KEY` is missing or the Resend send call fails.
+
+**Evidence**
+
+- The client error is an Axios 500 from submitting feedback on `/en`.
+- At incident commit `9be250f`, `FeedbackForm` posts directly to `/api/feedback`.
+- `/api/feedback` returns 500 in two places only:
+  - `resendHelper()` fails, most likely because no Resend API key is configured.
+  - `resend.emails.send()` fails, likely due to invalid Resend credentials or sender configuration.
+- The incident happened in `development` at `http://localhost:3000/en`.
+- The local/example environment configuration has `RESEND_API_KEY` blank in `.env.local.example`, and the helper explicitly throws when neither `RESEND_API_KEY` nor the DB `systemServices.name = "resend_smtp"` key exists.
+
+**Conclusion**
+
+The most likely root cause is missing or invalid Resend configuration in the local development environment, especially `RESEND_API_KEY` or the stored `resend_smtp` service key. A secondary possibility is that Resend rejected the configured sender address from `EMAIL_FROM`.
+
+The repository changes listed for `feature/task-2` are unrelated to feedback submission, so they are unlikely to be causal.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e096e-8773-7330-a442-74c1007fcec2
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:e2980506f723a88135d38840469ec308",
+      "eventCount": 1,
+      "firstSeen": "2026-05-02T18:34:29.669Z",
+      "lastSeen": "2026-05-02T18:34:29.669Z",
+      "events": [
+        {
+          "time": "2026-05-02T18:34:29.669Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "app.api.client-logs",
+          "contextModule": "app.[locale].(routes).components.FeedbackForm",
+          "route": "/en",
+          "clientUrl": "http://localhost:3000/en",
+          "message": "Feedback submission failed",
+          "error": {
+            "name": "AxiosError",
+            "message": "Request failed with status code 500",
+            "stack": "AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n"
+          },
+          "correlation": {
+            "traceId": "e2980506f723a88135d38840469ec308",
+            "spanId": "f184cde15745e45a",
+            "clientSessionId": "4f335a33-9f27-425f-8755-32b3bc9b3859"
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-2",
+    "commit": "9be250f3b729ab946e5f722fcf5c443d9e9ab516",
+    "changedFiles": [
+      "app/[locale]/(auth)/sign-in/components/LoginComponent.tsx",
+      "app/[locale]/(auth)/sign-in/page.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx",
+      "app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx"
+    ],
+    "diffStat": ".../(auth)/sign-in/components/LoginComponent.tsx   | 17 ++++++++++----\n app/[locale]/(auth)/sign-in/page.tsx               |  4 +++-\n .../boards/[boardId]/components/Kanban.tsx         | 27 ++++++++++------------\n .../projects/boards/[boardId]/forms/NewSection.tsx |  5 ++++\n 4 files changed, 33 insertions(+), 20 deletions(-)"
+  }
+}
+```
+
+exec
+/usr/bin/bash -lc "pwd && rg --files | rg 'FeedbackForm|feedback|client-logs|api'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+prisma/migrations/20260320000001_add_api_tokens/migration.sql
+prisma/migrations/20260323000001_add_api_keys/migration.sql
+lib/api-tokens.ts
+lib/api-keys.ts
+__tests__/lib/api-tokens.test.ts
+__tests__/lib/api-keys.test.ts
+app/api/client-logs/route.ts
+app/api/upload/presigned-url/route.ts
+app/api/reports/export/route.ts
+app/api/og/route.tsx
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md
+__tests__/campaigns/api/webhooks-resend.test.ts
+__tests__/campaigns/api/unsubscribe.test.ts
+app/api/mcp/[transport]/route.ts
+app/api/inngest/route.ts
+app/api/feedback/route.ts
+docs/superpowers/plans/2026-03-23-llm-api-keys.md
+app/api/crm/targets/enrich/validate.ts
+app/api/crm/targets/enrich/route.ts
+app/api/crm/targets/enrich-bulk/route.ts
+app/api/crm/targets/[id]/route.ts
+app/api/crm/targets/[id]/enrich/route.ts
+app/api/crm/targets/[id]/contacts/route.ts
+app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts
+app/api/crm/leads/create-lead-from-web/route.ts
+app/api/crm/contacts/enrich/validate.ts
+app/api/crm/contacts/enrich/route.ts
+app/api/crm/contacts/enrich-bulk/route.ts
+app/api/crm/contacts/create-from-remote/route.ts
+app/api/crm/contacts/[id]/route.ts
+app/[locale]/(routes)/admin/actions/api-keys.ts
+app/api/campaigns/webhooks/resend/route.ts
+app/api/campaigns/unsubscribe/route.ts
+app/[locale]/(routes)/profile/actions/api-keys.ts
+app/api/campaigns/targets/enrich/route.ts
+app/api/campaigns/targets/enrich-bulk/route.ts
+app/api/campaigns/targets/[id]/route.ts
+app/api/campaigns/targets/[id]/enrich/route.ts
+app/api/auth/[...all]/route.ts
+app/api/auth/test-otp/route.ts
+actions/api-tokens.ts
+app/[locale]/(routes)/components/FeedbackForm.tsx
+
+exec
+/usr/bin/bash -lc "sed -n '1,200p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,160p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/feedback/route.ts | sed -n '1,240p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/FeedbackForm.tsx' | sed -n '1,220p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/api/client-logs/route.ts | sed -n '1,220p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import { createClientLogger } from "@/app/client-logger";
+     4	import * as z from "zod";
+     5	import axios from "axios";
+     6	import { useState } from "react";
+     7	import { useForm } from "react-hook-form";
+     8	import { zodResolver } from "@hookform/resolvers/zod";
+     9	
+    10	import {
+    11	  Form,
+    12	  FormField,
+    13	  FormItem,
+    14	  FormLabel,
+    15	  FormControl,
+    16	  FormDescription,
+    17	  FormMessage,
+    18	} from "@/components/ui/form";
+    19	import { Button } from "@/components/ui/button";
+    20	
+    21	import { Textarea } from "@/components/ui/textarea";
+    22	import { toast } from "sonner";
+    23	import { Icons } from "@/components/ui/icons";
+    24	
+    25	
+    26	const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+    27	const formSchema = z.object({
+    28	  feedback: z.string().min(1, {
+    29	    message: "Feedback must be at least 1 character.",
+    30	  }),
+    31	});
+    32	
+    33	interface FeedbackFormProps {
+    34	  setOpen: (open: boolean) => void;
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	  const feedbackValue = form.watch("feedback") || "";
+    44	
+    45	  const onSubmit = async (data: any) => {
+    46	    setLoading(true);
+    47	    try {
+    48	      await axios.post("/api/feedback", {
+    49	        ...data,
+    50	        page: window.location.pathname,
+    51	        submittedAt: new Date().toISOString(),
+    52	      });
+    53	    } catch (error) {
+    54	      logger.error({ err: error }, "Feedback submission failed");
+    55	      toast.error("Something went wrong. Please try again later.");
+    56	    } finally {
+    57	      toast.success("Thank you for your feedback.");
+    58	      setOpen(false);
+    59	      setLoading(false);
+    60	    }
+    61	  };
+    62	
+    63	  return (
+    64	    <Form {...form}>
+    65	      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+    66	        <FormField
+    67	          control={form.control}
+    68	          name="feedback"
+    69	          render={({ field }) => (
+    70	            <FormItem>
+    71	              <FormLabel>Send us a feedback</FormLabel>
+    72	              <FormControl>
+    73	                <Textarea
+    74	                  placeholder="Your feedback"
+    75	                  disabled={loading}
+    76	                  maxLength={1000}
+    77	                  {...field}
+    78	                />
+    79	              </FormControl>
+    80	              <FormDescription className="text-xs text-muted-foreground">
+    81	                We appreciate every feedback. Thank you for helping us make this
+    82	                app better
+    83	              </FormDescription>
+    84	              <div className="text-right text-xs text-muted-foreground">
+    85	                {feedbackValue.length}/1000
+    86	              </div>
+    87	              <FormMessage />
+    88	            </FormItem>
+    89	          )}
+    90	        />
+    91	        <div className="flex justify-end space-x-2">
+    92	          <Button
+    93	            variant={"outline"}
+    94	            onClick={() => setOpen(false)}
+    95	            disabled={loading}
+    96	          >
+    97	            Cancel
+    98	          </Button>
+    99	          <Button type="submit" variant={"secondary"} disabled={loading}>
+   100	            {loading ? (
+   101	              <div className="flex space-x-2">
+   102	                <Icons.spinner className="h-4 w-4 animate-spin" />
+   103	                <span>Sending ...</span>
+   104	              </div>
+   105	            ) : (
+   106	              "Submit"
+   107	            )}
+   108	          </Button>
+   109	        </div>
+   110	      </form>
+   111	    </Form>
+   112	  );
+   113	};
+   114	
+   115	export default FeedbackForm;
+
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	function buildFeedbackSubject(sourcePath: string) {
+     8	  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+     9	}
+    10	
+    11	export async function POST(req: Request) {
+    12	  /*
+    13	  Resend.com function init - this is a helper function that will be used to send emails
+    14	  */
+    15	  let resend;
+    16	  try {
+    17	    resend = await resendHelper();
+    18	  } catch (error: any) {
+    19	    return NextResponse.json(
+    20	      { error: error?.message || "Resend API key is not configured" },
+    21	      { status: 500 }
+    22	    );
+    23	  }
+    24	  
+    25	  const session = await getSession();
+    26	  if (!session) {
+    27	    return new NextResponse("Unauthenticated", { status: 401 });
+    28	  }
+    29	  const body = await req.json();
+    30	  if (!body) {
+    31	    return new NextResponse("Missing body", { status: 400 });
+    32	  }
+    33	  const { feedback } = body;
+    34	  const normalizedFeedback =
+    35	    typeof feedback === "string" ? feedback.trim() : "";
+    36	  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+    37	
+    38	  if (!normalizedFeedback) {
+    39	    return new NextResponse("Missing feedback", { status: 400 });
+    40	  }
+    41	
+    42	  try {
+    43	    //Send mail via Resend to info@softbase.cz
+    44	    await resend.emails.send({
+    45	      from:
+    46	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    47	      to: "info@softbase.cz",
+    48	      subject: buildFeedbackSubject(sourcePath),
+    49	      text: normalizedFeedback,
+    50	    });
+    51	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    52	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    53	  } catch (error) {
+    54	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    55	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    56	  }
+    57	}
+
+ succeeded in 0ms:
+     1	import { createLogger } from "@/lib/logger";
+     2	import { NextResponse } from "next/server";
+     3	
+     4	const logger = createLogger({ module: "app.api.client-logs" });
+     5	const levels = new Set(["debug", "info", "warn", "error"]);
+     6	const MAX_BODY_BYTES = 64 * 1024;
+     7	
+     8	interface ClientLogBody {
+     9	  context?: unknown;
+    10	  level?: unknown;
+    11	  message?: unknown;
+    12	  pathname?: unknown;
+    13	  sessionId?: unknown;
+    14	  timestamp?: unknown;
+    15	  url?: unknown;
+    16	}
+    17	
+    18	function limitString(value: unknown, fallback: string) {
+    19	  if (typeof value !== "string" || value.trim() === "") {
+    20	    return fallback;
+    21	  }
+    22	
+    23	  return value.length > 1_000 ? `${value.slice(0, 1_000)}...[truncated]` : value;
+    24	}
+    25	
+    26	export async function POST(req: Request) {
+    27	  const contentLength = Number(req.headers.get("content-length") ?? 0);
+    28	  if (contentLength > MAX_BODY_BYTES) {
+    29	    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+    30	  }
+    31	
+    32	  let body: ClientLogBody;
+    33	  try {
+    34	    const parsed = await req.json();
+    35	    body = parsed && typeof parsed === "object" ? (parsed as ClientLogBody) : {};
+    36	  } catch {
+    37	    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    38	  }
+    39	
+    40	  const level = typeof body.level === "string" && levels.has(body.level) ? body.level : "info";
+    41	  const message = limitString(body?.message, "Client log");
+    42	  const payload = {
+    43	    client: {
+    44	      sessionId: limitString(body?.sessionId, "unknown"),
+    45	      pathname: limitString(body?.pathname, "unknown"),
+    46	      url: limitString(body?.url, "unknown"),
+    47	      timestamp: limitString(body?.timestamp, "unknown"),
+    48	      userAgent: limitString(req.headers.get("user-agent"), "unknown"),
+    49	    },
+    50	    context: body.context && typeof body.context === "object" ? body.context : {},
+    51	  };
+    52	
+    53	  switch (level) {
+    54	    case "debug":
+    55	      logger.debug(payload, message);
+    56	      break;
+    57	    case "warn":
+    58	      logger.warn(payload, message);
+    59	      break;
+    60	    case "error":
+    61	      logger.error(payload, message);
+    62	      break;
+    63	    default:
+    64	      logger.info(payload, message);
+    65	  }
+    66	
+    67	  return new NextResponse(null, { status: 204 });
+    68	}
+
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --name-only 9be250f3b729ab946e5f722fcf5c443d9e9ab516' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9be250f Polish sign-in copy and labels
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "rg -n \"body\\.context|/api/feedback|submittedAt|page:\" app lib __tests__" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/api/client-logs/route.ts:50:    context: body.context && typeof body.context === "object" ? body.context : {},
+app/api/feedback/route.ts:36:  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+app/[locale]/(routes)/emails/page.tsx:81:    : { emails: [], total: 0, page: 1, totalPages: 0 };
+app/[locale]/(routes)/emails/components/mail.tsx:29:  page: number;
+app/[locale]/(routes)/emails/components/mail-list.tsx:14:  page: number;
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/FeedbackForm.tsx:50:        page: window.location.pathname,
+app/[locale]/(routes)/components/FeedbackForm.tsx:51:        submittedAt: new Date().toISOString(),
+app/[locale]/(routes)/admin/audit-log/page.tsx:22:    page: currentPage,
+
+exec
+/usr/bin/bash -lc 'git log --oneline -8 --decorate' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git branch --show-current' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+feature/task-1
+
+ succeeded in 0ms:
+3fee71d (HEAD -> feature/task-1, origin/feature/task-1) Refine feedback submission flow
+80870cb (origin/develop, develop) FInalized improving telemetry techniques. Sweet!
+6d1b947 Provided project telemetry
+fe8a466 Self-hosted solution improvements
+366ce31 Merge pull request #154 from pdovhomilja/release-please--branches--main--components--nextcrm-app
+1eb31fa chore(main): release 0.6.1
+662e6bd Merge pull request #153 from pdovhomilja/dev
+8b414ac fix: allow null description in opportunities table schema
+
+exec
+/usr/bin/bash -lc "git blame -L 45,52 -- 'app/[locale]/(routes)/components/FeedbackForm.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 45)   const onSubmit = async (data: any) => {
+2fb0ca2d app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 08:24:51 +0200 46)     setLoading(true);
+ff4730c2 app/(routes)/components/FeedbackForm.tsx          (pdovhomilja         2023-09-04 00:32:42 +0200 47)     try {
+3fee71dc app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 48)       await axios.post("/api/feedback", {
+3fee71dc app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 49)         ...data,
+3fee71dc app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 50)         page: window.location.pathname,
+3fee71dc app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 51)         submittedAt: new Date().toISOString(),
+3fee71dc app/[locale]/(routes)/components/FeedbackForm.tsx (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 52)       });
+
+exec
+/usr/bin/bash -lc 'git blame -L 30,38 -- app/api/feedback/route.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 30)   if (!body) {
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 31)     return new NextResponse("Missing body", { status: 400 });
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 32)   }
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 33)   const { feedback } = body;
+3fee71dc (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 34)   const normalizedFeedback =
+3fee71dc (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 35)     typeof feedback === "string" ? feedback.trim() : "";
+3fee71dc (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 36)   const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+ff4730c2 (pdovhomilja         2023-09-04 00:32:42 +0200 37) 
+3fee71dc (Dmytro Rekechynskyi 2026-05-01 17:59:54 +0300 38)   if (!normalizedFeedback) {
+
+exec
+/usr/bin/bash -lc 'git branch --contains 9be250f3b729ab946e5f722fcf5c443d9e9ab516 --all' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+  feature/task-2
+  remotes/origin/feature/task-2
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:'app/api/feedback/route.ts' | nl -ba | sed -n '1,90p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:'app/[locale]/(routes)/components/FeedbackForm.tsx' | nl -ba | sed -n '35,65p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	
+    44	  const onSubmit = async (data: any) => {
+    45	    setLoading(true);
+    46	    try {
+    47	      await axios.post("/api/feedback", data);
+    48	    } catch (error) {
+    49	      logger.error({ err: error }, "Feedback submission failed");
+    50	      toast.error("Something went wrong. Please try again later.");
+    51	    } finally {
+    52	      toast.success("Thank you for your feedback.");
+    53	      setOpen(false);
+    54	      setLoading(false);
+    55	    }
+    56	  };
+    57	
+    58	  return (
+    59	    <Form {...form}>
+    60	      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+    61	        <FormField
+    62	          control={form.control}
+    63	          name="feedback"
+    64	          render={({ field }) => (
+    65	            <FormItem>
+
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	
+     8	export async function POST(req: Request) {
+     9	  /*
+    10	  Resend.com function init - this is a helper function that will be used to send emails
+    11	  */
+    12	  let resend;
+    13	  try {
+    14	    resend = await resendHelper();
+    15	  } catch (error: any) {
+    16	    return NextResponse.json(
+    17	      { error: error?.message || "Resend API key is not configured" },
+    18	      { status: 500 }
+    19	    );
+    20	  }
+    21	  
+    22	  const session = await getSession();
+    23	  if (!session) {
+    24	    return new NextResponse("Unauthenticated", { status: 401 });
+    25	  }
+    26	  const body = await req.json();
+    27	  if (!body) {
+    28	    return new NextResponse("Missing body", { status: 400 });
+    29	  }
+    30	  const { feedback } = body;
+    31	
+    32	  if (!feedback) {
+    33	    return new NextResponse("Missing feedback", { status: 400 });
+    34	  }
+    35	
+    36	  try {
+    37	    //Send mail via Resend to info@softbase.cz
+    38	    await resend.emails.send({
+    39	      from:
+    40	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    41	      to: "info@softbase.cz",
+    42	      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
+    43	      text: feedback, // Add this line to fix the types issue
+    44	    });
+    45	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    46	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    47	  } catch (error) {
+    48	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    49	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    50	  }
+    51	}
+
+exec
+/usr/bin/bash -lc "nl -ba lib/resend.ts | sed -n '1,160p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { Resend } from "resend";
+     2	import { prismadb } from "./prisma";
+     3	
+     4	export default async function resendHelper() {
+     5	  const resendKey = await prismadb.systemServices.findFirst({
+     6	    where: {
+     7	      name: "resend_smtp",
+     8	    },
+     9	  });
+    10	
+    11	  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+    12	
+    13	  if (!apiKey) {
+    14	    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+    15	  }
+    16	
+    17	  const resend = new Resend(apiKey);
+    18	
+    19	  return resend;
+    20	}
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:lib/resend.ts | nl -ba | sed -n '1,160p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { Resend } from "resend";
+     2	import { prismadb } from "./prisma";
+     3	
+     4	export default async function resendHelper() {
+     5	  const resendKey = await prismadb.systemServices.findFirst({
+     6	    where: {
+     7	      name: "resend_smtp",
+     8	    },
+     9	  });
+    10	
+    11	  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+    12	
+    13	  if (!apiKey) {
+    14	    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+    15	  }
+    16	
+    17	  const resend = new Resend(apiKey);
+    18	
+    19	  return resend;
+    20	}
+
+exec
+/usr/bin/bash -lc 'rg -n "RESEND|EMAIL_FROM|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_APP_NAME|feedback" .env* README.md docs app lib package.json' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env:19:RESEND_API_KEY="your-resend-api-key"
+.env:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+.env.local.example:18:EMAIL_FROM=info@domain.com
+.env.local.example:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local.example:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local.example:66:RESEND_API_KEY=
+.env.local.example:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.local:18:EMAIL_FROM=info@domain.com
+.env.local:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local:66:RESEND_API_KEY=
+.env.local:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.example:19:RESEND_API_KEY="your-resend-api-key"
+.env.example:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env.example:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+lib/auth.ts:10:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+lib/resend.ts:11:  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+lib/resend.ts:14:    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+lib/new-user-notify.ts:15:      from: process.env.EMAIL_FROM,
+lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+docs/superpowers/specs/2026-04-05-products-playwright-tests-design.md:136:- Duplicate SKU — error feedback expected
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:106:| Self-signup (demo: `NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io"`) | `ACTIVE` | `member` |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:231:| `RESEND_API_KEY` | Email delivery — now also used for OTP |
+docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:232:| `NEXT_PUBLIC_APP_URL` | Demo mode detection |
+app/api/og/route.tsx:10:const websiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:64:  reply_to     String?   // reply-to address if different from RESEND_FROM_EMAIL
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:259:- From name (optional, e.g. "Jane from Acme") — overrides `RESEND_FROM_EMAIL` display name
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:317:- Signature verified via `Resend-Signature` header using `RESEND_WEBHOOK_SECRET`
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:352:RESEND_API_KEY=            # Resend sending API key
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:353:RESEND_WEBHOOK_SECRET=     # Resend webhook signature verification
+docs/superpowers/specs/2026-03-25-campaigns-module-design.md:354:RESEND_FROM_EMAIL=         # Default "From" address (e.g. noreply@yourdomain.com)
+docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:266:- Note: bulk modals call `/enrich-bulk` routes — those routes only fire an Inngest event today and do not call enrichment directly. They must be updated to call `getApiKey` before sending the Inngest event and return `402 NO_API_KEY` early if no key is found, providing fast user feedback rather than a silent Inngest job failure.
+app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+app/api/feedback/route.ts:8:  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+app/api/feedback/route.ts:33:  const { feedback } = body;
+app/api/feedback/route.ts:35:    typeof feedback === "string" ? feedback.trim() : "";
+app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+app/api/feedback/route.ts:46:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:311:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:364:          from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:440:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:642:      from: process.env.EMAIL_FROM,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:645:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1145:- Modify: `app/api/feedback/route.ts`
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1330:      from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1332:      subject: `You have been invited to ${process.env.NEXT_PUBLIC_APP_NAME}`,
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1564:RESEND_API_KEY="your-resend-api-key"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1565:EMAIL_FROM="no-reply@example.com"
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1734:- [ ] Verify `RESEND_API_KEY` and `EMAIL_FROM` configured
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4566:const resend = new Resend(process.env.RESEND_API_KEY);
+docs/superpowers/plans/2026-03-31-reports-remaster.md:4663:          from: process.env.RESEND_FROM_EMAIL!,
+app/api/campaigns/webhooks/resend/route.ts:6:  if (!signature || !process.env.RESEND_WEBHOOK_SECRET) return false;
+app/api/campaigns/webhooks/resend/route.ts:7:  const expected = createHmac("sha256", process.env.RESEND_WEBHOOK_SECRET)
+lib/auth-client.ts:6:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:500:- [ ] Submit a form in each tab — toast feedback still works (no regressions)
+docs/deployment/better-auth-migration-runbook.md:8:- [ ] Verify `RESEND_API_KEY` and `EMAIL_FROM` configured
+app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+docs/superpowers/plans/2026-03-25-campaigns-module.md:84:.env.example                                  Add RESEND_* vars
+docs/superpowers/plans/2026-03-25-campaigns-module.md:115:RESEND_API_KEY=            # https://resend.com/api-keys
+docs/superpowers/plans/2026-03-25-campaigns-module.md:116:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+docs/superpowers/plans/2026-03-25-campaigns-module.md:117:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1299:const resend = new Resend(process.env.RESEND_API_KEY);
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1327:      ? `${sendRecord.campaign.from_name} <${process.env.RESEND_FROM_EMAIL}>`
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1328:      : process.env.RESEND_FROM_EMAIL!;
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1591:    from: process.env.RESEND_FROM_EMAIL ?? "test@example.com",
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1724:  if (!signature || !process.env.RESEND_WEBHOOK_SECRET) return false;
+docs/superpowers/plans/2026-03-25-campaigns-module.md:1725:  const expected = createHmac("sha256", process.env.RESEND_WEBHOOK_SECRET)
+app/[locale]/(auth)/sign-in/page.tsx:8:          Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
+app/[locale]/(auth)/pending/page.tsx:30:          {process.env.NEXT_PUBLIC_APP_NAME} - your account must be allowed by
+app/[locale]/(auth)/pending/page.tsx:34:          Hi, welcome to {process.env.NEXT_PUBLIC_APP_NAME}. Ask someone in your
+app/[locale]/(auth)/inactive/page.tsx:35:        Hi, your {process.env.NEXT_PUBLIC_APP_NAME} account has been disabled.
+app/[locale]/(routes)/layout.tsx:19:    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:169:                  : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/components/FeedbackForm.tsx:28:  feedback: z.string().min(1, {
+app/[locale]/(routes)/components/FeedbackForm.tsx:43:  const feedbackValue = form.watch("feedback") || "";
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/FeedbackForm.tsx:57:      toast.success("Thank you for your feedback.");
+app/[locale]/(routes)/components/FeedbackForm.tsx:68:          name="feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:71:              <FormLabel>Send us a feedback</FormLabel>
+app/[locale]/(routes)/components/FeedbackForm.tsx:74:                  placeholder="Your feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:81:                We appreciate every feedback. Thank you for helping us make this
+app/[locale]/(routes)/components/FeedbackForm.tsx:85:                {feedbackValue.length}/1000
+app/[locale]/(routes)/components/Footer.tsx:14:            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:38:                : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/components/app-sidebar.tsx:153:            {process.env.NEXT_PUBLIC_APP_NAME || "NextCRM"}
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:68:            {process.env.RESEND_API_KEY ? (
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:70:                keyValue={process.env.RESEND_API_KEY}
+
+exec
+/usr/bin/bash -lc "rg -n '\"resend\"|resend' package.json pnpm-lock.yaml package-lock.json yarn.lock" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: package-lock.json: No such file or directory (os error 2)
+rg: yarn.lock: No such file or directory (os error 2)
+package.json:124:    "resend": "6.9.2",
+pnpm-lock.yaml:351:      resend:
+pnpm-lock.yaml:7815:  resend@6.9.2:
+pnpm-lock.yaml:17439:  resend@6.9.2(@react-email/render@2.0.4(react-dom@19.2.4(react@19.2.4))(react@19.2.4)):
+
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:.env.local.example | nl -ba | sed -n '12,36p;60,72p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show 9be250f3b729ab946e5f722fcf5c443d9e9ab516:.env.example | nl -ba | sed -n '15,23p;50,56p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    12	# Google OAuth (optional for local dev — Email OTP works without it)
+    13	GOOGLE_ID=
+    14	GOOGLE_SECRET=
+    15	
+    16	#SMTP
+    17	EMAIL_HOST=smtp.resend.com
+    18	EMAIL_FROM=info@domain.com
+    19	EMAIL_USERNAME=smtp@domain.com
+    20	EMAIL_PASSWORD=SuperSEEcretPaSWord123+
+    21	
+    22	#IMAP
+    23	IMAP_HOST=imap.domain.com
+    24	IMAP_PORT=993
+    25	IMAP_USER=user@domain.com
+    26	IMAP_PASSWORD=SuperSEEcretPaSWord123+
+    27	
+    28	
+    29	#NEXT ENV for Client part of App
+    30	NEXT_PUBLIC_APP_NAME=NextCRM
+    31	NEXT_PUBLIC_APP_V=0.0.3-beta
+    32	NEXT_PUBLIC_APP_URL=http://localhost:3000
+    33	NEXT_PUBLIC_NEXT_VERSION="14.0.4"
+    34	NEXT_PUBLIC_GITHUB_REPO_URL="https://github.com/pdovhomilja/nextcrm-app"
+    35	NEXT_PUBLIC_GITHUB_ISSUES_URL=""
+    36	NEXT_PUBLIC_GITHUB_COMMIT_SHA="main"
+    60	ROSSUM_PASS=
+    61	
+    62	#Discord
+    63	NEXT_PUBLIC_DISCORD_INVITE_URL="https://discord.com/invite/Dd4Aj6S4Dz"
+    64	
+    65	#Resend.com
+    66	RESEND_API_KEY=
+    67	RESEND_FROM_EMAIL=noreply@domain.com
+    68	
+    69	#INNGEST
+    70	INNGEST_ID=nextcrm
+    71	INNGEST_APP_NAME=NextCRM
+    72	INNGEST_BASE_URL=
+
+ succeeded in 0ms:
+    15	GOOGLE_ID="your-google-client-id"
+    16	GOOGLE_SECRET="your-google-client-secret"
+    17	
+    18	# Email Service (Resend)
+    19	RESEND_API_KEY="your-resend-api-key"
+    20	
+    21	# AI (OpenAI)
+    22	OPENAI_API_KEY="your-openai-api-key"
+    23	
+    50	EMAIL_ENCRYPTION_KEY=your_64_hex_char_key_here
+    51	
+    52	# Campaigns — Resend email sending
+    53	RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+    54	RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+    55	
+    56	# Observability - OpenTelemetry + Pino + Loki
+
+codex
+**Most Likely Root Cause**
+
+Feedback submission failed because the `/api/feedback` backend depends on Resend email delivery and returned HTTP 500 during email setup or send. In the incident commit `9be250f`, the feedback route initializes Resend before processing the request, and it returns 500 if `RESEND_API_KEY` is missing or the Resend send call fails.
+
+**Evidence**
+
+- The client error is an Axios 500 from submitting feedback on `/en`.
+- At incident commit `9be250f`, `FeedbackForm` posts directly to `/api/feedback`.
+- `/api/feedback` returns 500 in two places only:
+  - `resendHelper()` fails, most likely because no Resend API key is configured.
+  - `resend.emails.send()` fails, likely due to invalid Resend credentials or sender configuration.
+- The incident happened in `development` at `http://localhost:3000/en`.
+- The local/example environment configuration has `RESEND_API_KEY` blank in `.env.local.example`, and the helper explicitly throws when neither `RESEND_API_KEY` nor the DB `systemServices.name = "resend_smtp"` key exists.
+
+**Conclusion**
+
+The most likely root cause is missing or invalid Resend configuration in the local development environment, especially `RESEND_API_KEY` or the stored `resend_smtp` service key. A secondary possibility is that Resend rejected the configured sender address from `EMAIL_FROM`.
+
+The repository changes listed for `feature/task-2` are unrelated to feedback submission, so they are unlikely to be causal.
+tokens used
+28,023
+**Most Likely Root Cause**
+
+Feedback submission failed because the `/api/feedback` backend depends on Resend email delivery and returned HTTP 500 during email setup or send. In the incident commit `9be250f`, the feedback route initializes Resend before processing the request, and it returns 500 if `RESEND_API_KEY` is missing or the Resend send call fails.
+
+**Evidence**
+
+- The client error is an Axios 500 from submitting feedback on `/en`.
+- At incident commit `9be250f`, `FeedbackForm` posts directly to `/api/feedback`.
+- `/api/feedback` returns 500 in two places only:
+  - `resendHelper()` fails, most likely because no Resend API key is configured.
+  - `resend.emails.send()` fails, likely due to invalid Resend credentials or sender configuration.
+- The incident happened in `development` at `http://localhost:3000/en`.
+- The local/example environment configuration has `RESEND_API_KEY` blank in `.env.local.example`, and the helper explicitly throws when neither `RESEND_API_KEY` nor the DB `systemServices.name = "resend_smtp"` key exists.
+
+**Conclusion**
+
+The most likely root cause is missing or invalid Resend configuration in the local development environment, especially `RESEND_API_KEY` or the stored `resend_smtp` service key. A secondary possibility is that Resend rejected the configured sender address from `EMAIL_FROM`.
+
+The repository changes listed for `feature/task-2` are unrelated to feedback submission, so they are unlikely to be causal.

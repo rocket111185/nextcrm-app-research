@@ -1,0 +1,2679 @@
+run_name: feature-task-5-A
+case_name: feature-task-5
+variant: A
+target_branch: feature/task-5
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:21:13Z
+elapsed_seconds: 73
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-5/A/context.md
+
+===== RESPONSE =====
+**Most Likely Root Cause**
+
+The import path for campaign targets crashes when processing the `employees` CSV field.
+
+The failing code is in `actions/crm/targets/import-targets.ts:11-17`:
+
+```ts
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+```
+
+The incident stack points directly to this function during `importTargets()` for `POST /en/campaigns/targets`. The observed error, `Cannot read properties of undefined (reading 'toString')`, means `parsed.min` was undefined when `.toString()` was called.
+
+**Why This Happened**
+
+`employees` is modeled elsewhere as a plain optional string:
+
+- Prisma: `crm_Targets.employees String?`
+- New/edit forms use free text with placeholder `50-200`
+- Existing planning docs show import should store `row.employees || null`
+
+But the importer assumes the CSV value is JSON shaped like:
+
+```json
+{ "min": 50, "max": 200 }
+```
+
+That assumption does not match the rest of the app. A CSV value such as `100`, `{}`, or another JSON value without `min` will parse successfully but leave `parsed.min` undefined, producing the exact incident error.
+
+**Trigger**
+
+A user imported a CSV from `/en/campaigns/targets` where the mapped `employees` column contained a value that was not a JSON object with both `min` and `max`.
+
+**Contributing Issue**
+
+The preview step only checks whether each row has `last_name` or `company`. It does not validate or normalize `employees`, so the user can reach the final import action with data that will crash server-side.
+
+**Confidence**
+
+High. The stack trace, compiled server output, and source code all converge on `parseEmployeesValue(row.employees)` inside the target CSV import action. The application’s schema and forms indicate `employees` should be treated as a string, not parsed as a JSON range object.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0977-4c75-7833-ad2f-dfd507e82aa6
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T19:04:06.332Z",
+      "timestampNs": "1777921446332505650",
+      "labels": {
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "err_digest": "1383626540",
+        "err_message": "Cannot read properties of undefined (reading 'toString')",
+        "err_stack": "TypeError: Cannot read properties of undefined (reading 'toString')\n    at parseEmployeesValue (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:383:26)\n    at /home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:416:27\n    at Array.forEach (<anonymous>)\n    at importTargets (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:399:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async executeActionAndPrepareForRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:5248)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:1986\n    at async handleAction (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:62:25378)\n    at async renderToHTMLOrFlightImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:69:55630)\n    at async doRender (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4079:28)\n    at async AppPageRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:71:63567)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4372:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4772:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)",
+        "err_type": "TypeError",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "pid": "94945",
+        "request_method": "POST",
+        "request_path": "/en/campaigns/targets",
+        "route_path": "/[locale]/campaigns/targets",
+        "route_renderSource": "react-server-components-payload",
+        "route_routeType": "action",
+        "route_routerKind": "App Router",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "af6b25b5543af455",
+        "time": "2026-05-04T19:04:06.330Z",
+        "trace_flags": "01",
+        "trace_id": "b7fc50998917f6d53bb5de0ae8776eb5"
+      },
+      "line": "Unhandled request error",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "rg --files -g 'AGENTS.md' -g 'SKILL.md' -g '*.ts' -g '*.tsx' -g '*.js' -g '*.jsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+next-env.d.ts
+next.config.js
+instrumentation.ts
+types/types.d.ts
+tests/e2e/sales-flow.spec.ts
+tests/e2e/reports.spec.ts
+tests/e2e/product-update.spec.ts
+tests/e2e/product-read.spec.ts
+tests/e2e/product-import.spec.ts
+tests/e2e/product-delete.spec.ts
+tests/e2e/product-create.spec.ts
+tests/e2e/opportunity-update.spec.ts
+tests/e2e/opportunity-detail-update.spec.ts
+tests/e2e/lead-update.spec.ts
+tests/e2e/lead-detail-update.spec.ts
+tests/e2e/home.spec.ts
+tests/e2e/crm.spec.ts
+tests/e2e/contact-update.spec.ts
+tests/e2e/contact-detail-update.spec.ts
+tests/e2e/campaign-targets.spec.ts
+tests/e2e/campaign-list.spec.ts
+tests/e2e/campaign-detail.spec.ts
+tests/e2e/campaign-create.spec.ts
+tests/e2e/auth.spec.ts
+tests/e2e/account-update.spec.ts
+tests/e2e/account-detail-update.spec.ts
+tests/auth.setup.ts
+tailwind.config.js
+scripts/validation/validators.ts
+scripts/validation/types.ts
+scripts/validation/table-schema.ts
+scripts/validation/report-generator.ts
+scripts/validate-migration.ts
+scripts/migration/uuid-mapper.ts
+scripts/migration/utils.ts
+scripts/migration/types.ts
+scripts/migration/transformers/users-transformer.ts
+scripts/migration/transformers/todo-list-transformer.ts
+scripts/migration/transformers/tasks-transformer.ts
+scripts/migration/transformers/tasks-comments-transformer.ts
+scripts/migration/transformers/system-services-transformer.ts
+scripts/migration/transformers/system-modules-enabled-transformer.ts
+scripts/migration/transformers/sections-transformer.ts
+scripts/migration/transformers/openai-keys-transformer.ts
+scripts/migration/transformers/my-account-transformer.ts
+scripts/migration/transformers/modul-status-transformer.ts
+scripts/migration/transformers/invoices-transformer.ts
+scripts/migration/transformers/invoice-states-transformer.ts
+scripts/migration/transformers/index.ts
+scripts/migration/transformers/image-upload-transformer.ts
+scripts/migration/transformers/gpt-models-transformer.ts
+scripts/migration/transformers/employees-transformer.ts
+scripts/migration/transformers/documents-types-transformer.ts
+scripts/migration/transformers/documents-transformer.ts
+scripts/migration/transformers/crm-opportunities-type-transformer.ts
+scripts/migration/transformers/crm-opportunities-transformer.ts
+scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+scripts/migration/transformers/crm-leads-transformer.ts
+scripts/migration/transformers/crm-industry-type-transformer.ts
+scripts/migration/transformers/crm-contracts-transformer.ts
+scripts/migration/transformers/crm-contacts-transformer.ts
+scripts/migration/transformers/crm-campaigns-transformer.ts
+scripts/migration/transformers/crm-accounts-transformer.ts
+scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+scripts/migration/transformers/boards-transformer.ts
+scripts/migration/table-config.ts
+scripts/migration/progress-tracker.ts
+scripts/migration/orchestrator.ts
+scripts/migration/junction-populator.ts
+scripts/migration/error-logger.ts
+scripts/migration/checkpoint-manager.ts
+scripts/migration/batch-processor.ts
+scripts/migration/backfill-roles.ts
+scripts/migrate-openai-keys.ts
+scripts/migrate-mongo-to-postgres.ts
+proxy.ts
+prisma/seeds/seed.ts
+prisma/seeds/currencies.ts
+postcss.config.js
+playwright.config.ts
+prisma.config.ts
+lib/api-keys.ts
+lib/auth-server.ts
+lib/auth-permissions.ts
+lib/auth-guards.ts
+lib/auth-client.ts
+lib/api-tokens.ts
+lib/currency-format.ts
+lib/create-safe-action.ts
+hooks/useDebounce.tsx
+hooks/use-toast.ts
+hooks/use-mobile.tsx
+hooks/use-action.ts
+lib/__tests__/audit-log.test.ts
+jest.env.setup.ts
+jest.config.ts
+lib/sendmail.ts
+lib/openai.ts
+lib/logger.ts
+lib/audit-log.ts
+lib/auth.ts
+lib/utils.ts
+lib/serialize-decimals.ts
+lib/resend.ts
+lib/prisma.ts
+lib/new-user-notify.ts
+lib/minio.ts
+lib/campaigns/merge-tags.ts
+__mocks__/e2b.ts
+AGENTS.md
+inngest/client.ts
+app/client-logger.ts
+app/client-error-listener.tsx
+lib/mcp/tools/reports.ts
+lib/mcp/tools/projects.ts
+lib/mcp/tools/index.ts
+lib/enrichment/utils/source-context.ts
+lib/mcp/tools/crm-targets.ts
+lib/mcp/tools/crm-target-lists.ts
+lib/enrichment/utils/skip-list.ts
+lib/mcp/tools/crm-products.ts
+lib/enrichment/utils/field-utils.ts
+lib/mcp/tools/crm-opportunities.ts
+lib/enrichment/utils/email-detection.ts
+lib/enrichment/utils.ts
+lib/mcp/tools/crm-leads.ts
+lib/mcp/tools/crm-enrichment.ts
+lib/mcp/tools/crm-email-accounts.ts
+lib/mcp/tools/crm-documents.ts
+lib/mcp/tools/crm-contracts.ts
+lib/mcp/tools/crm-contacts.ts
+lib/mcp/tools/crm-activities.ts
+lib/mcp/tools/crm-accounts.ts
+lib/mcp/tools/campaigns.ts
+lib/mcp/helpers.ts
+lib/mcp/auth.ts
+lib/line-items.ts
+lib/junction-helpers.ts
+lib/fetcher.ts
+i18n/routing.ts
+i18n/request.ts
+i18n/navigation.ts
+app/providers/ToastProvider.tsx
+app/providers/ThemeProvider.tsx
+emails/admin/MessageToAllUser.tsx
+emails/UpdatedTaskFromProject.tsx
+emails/ScheduledReport.tsx
+emails/NewTaskFromProject.tsx
+emails/NewTaskFromCRMToWatchers.tsx
+emails/NewTaskFromCRM.tsx
+emails/NewTaskComment.tsx
+emails/InviteUser.tsx
+emails/DemoTemplate.tsx
+emails/AiTasksReport.tsx
+emails/AiProjectReport.tsx
+lib/enrichment/types/stored-result.ts
+lib/enrichment/types/index.ts
+lib/enrichment/types/field-generation.ts
+app/components/NoApiKeyDialog.tsx
+__tests__/enrichment/utils.test.ts
+__tests__/enrichment/enrich-target-route.test.ts
+__tests__/enrichment/enrich-target-job.test.ts
+__tests__/enrichment/enrich-route.test.ts
+__tests__/enrichment/enrich-contact-job.test.ts
+__tests__/enrichment/e2b-apply-result.test.ts
+__tests__/crm-settings-actions.test.ts
+e2b/template.ts
+e2b/build.ts
+__tests__/reports/users.test.ts
+__tests__/reports/types.test.ts
+__tests__/reports/schedule.test.ts
+__tests__/reports/sales.test.ts
+__tests__/reports/leads.test.ts
+__tests__/reports/export-csv.test.ts
+__tests__/reports/dashboard.test.ts
+__tests__/reports/config.test.ts
+__tests__/reports/campaigns.test.ts
+__tests__/reports/activity.test.ts
+__tests__/reports/accounts.test.ts
+lib/enrichment/strategies/enrichment-strategy.ts
+lib/enrichment/strategies/email-parser.ts
+lib/enrichment/strategies/agent-enrichment-strategy.ts
+__tests__/campaigns/merge-tags.test.ts
+__tests__/lib/email-crypto.test.ts
+__tests__/lib/currency.test.ts
+__tests__/lib/api-tokens.test.ts
+__tests__/lib/api-keys.test.ts
+lib/enrichment/services/specialized-agents.ts
+lib/enrichment/services/openai.ts
+lib/enrichment/services/firecrawl.ts
+lib/enrichment/rate-limit.ts
+__tests__/campaigns/inngest/send-step.test.ts
+lib/enrichment/presets/target-fields.ts
+app/api/client-logs/route.ts
+__tests__/campaigns/api/webhooks-resend.test.ts
+__tests__/campaigns/api/unsubscribe.test.ts
+__tests__/inngest/emails/embed-email.test.ts
+lib/enrichment/e2b/apply-result.ts
+lib/enrichment/e2b/agent-script.ts
+lib/enrichment/config/enrichment.ts
+__tests__/actions/emails/accounts.test.ts
+app/api/upload/presigned-url/route.ts
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts
+lib/enrichment/agent-architecture/tools/smart-search-tool.ts
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts
+lib/enrichment/agent-architecture/orchestrator.ts
+lib/enrichment/agent-architecture/index.ts
+app/api/reports/export/route.ts
+app/api/crm/targets/enrich/validate.ts
+app/api/crm/targets/enrich/route.ts
+app/api/auth/test-otp/route.ts
+lib/enrichment/agent-architecture/core/types.ts
+lib/enrichment/agent-architecture/core/agent-base.ts
+app/api/og/route.tsx
+app/api/crm/targets/enrich-bulk/route.ts
+app/api/auth/[...all]/route.ts
+lib/enrichment/agent-architecture/agents/tech-stack-agent.ts
+lib/enrichment/agent-architecture/agents/metrics-agent.ts
+lib/enrichment/agent-architecture/agents/general-agent.ts
+lib/enrichment/agent-architecture/agents/funding-agent.ts
+lib/enrichment/agent-architecture/agents/discovery-agent.ts
+lib/enrichment/agent-architecture/agents/company-profile-agent.ts
+lib/email-crypto.ts
+lib/currency.ts
+app/api/crm/targets/[id]/route.ts
+app/[locale]/layout.tsx
+app/[locale]/loading.tsx
+app/api/mcp/[transport]/route.ts
+app/api/crm/targets/[id]/enrich/route.ts
+context/currency-context.tsx
+context/avatar-context.tsx
+app/api/inngest/route.ts
+app/api/crm/targets/[id]/contacts/route.ts
+app/api/feedback/route.ts
+components/CurrencySwitcher.tsx
+components/CommandComponent.tsx
+components/SetLanguage.tsx
+components/ThemeToggle.tsx
+inngest/functions/embed-lead.ts
+inngest/functions/embed-contact.ts
+inngest/functions/embed-backfill.ts
+inngest/functions/embed-account.ts
+actions/user/update-profile.ts
+actions/user/set-language.ts
+actions/user/update-profile-photo.ts
+actions/user/search-users.ts
+actions/user/get-user-by-id.ts
+inngest/functions/emails/sync-all.ts
+inngest/functions/emails/sync-account.ts
+inngest/functions/emails/link-crm.ts
+inngest/functions/emails/embed-email.ts
+actions/system/get-next-version.ts
+inngest/functions/ecb/sync-exchange-rates.ts
+app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts
+inngest/functions/documents/generate-thumbnail.ts
+inngest/functions/documents/enrich-document.ts
+actions/reports/users.ts
+actions/reports/types.ts
+actions/reports/schedule.ts
+actions/reports/sales.ts
+actions/reports/leads.ts
+actions/reports/export-pdf.ts
+actions/reports/export-csv.ts
+actions/reports/dashboard.ts
+actions/reports/config.ts
+actions/reports/campaigns.ts
+actions/reports/activity.ts
+actions/reports/accounts.ts
+app/[locale]/(routes)/reports/users/page.tsx
+inngest/functions/campaigns/send-step.ts
+inngest/functions/campaigns/send-now.ts
+inngest/functions/campaigns/schedule-send.ts
+inngest/functions/campaigns/process-follow-up.ts
+components/ui/drawer.tsx
+components/ui/dialog.tsx
+components/ui/dialog-document-view.tsx
+components/ui/data-table.tsx
+components/ui/command.tsx
+components/ui/collapsible.tsx
+components/ui/checkbox.tsx
+components/ui/chart.tsx
+components/ui/card.tsx
+components/ui/calendar.tsx
+components/ui/button.tsx
+components/ui/badge.tsx
+components/ui/avatar.tsx
+components/ui/alert.tsx
+components/ui/alert-dialog.tsx
+components/ui/account-search-combobox.tsx
+components/ui/IconButton.tsx
+components/ui/minio-uploader.tsx
+components/ui/user-search-combobox.tsx
+components/ui/use-toast.ts
+components/ui/tooltip.tsx
+components/ui/toaster.tsx
+components/ui/toast.tsx
+components/ui/textarea.tsx
+components/ui/tabs.tsx
+components/ui/table.tsx
+components/ui/switch.tsx
+components/ui/sonner.tsx
+components/ui/skeleton.tsx
+components/ui/sidebar.tsx
+components/ui/sheet.tsx
+components/ui/separator.tsx
+components/ui/select.tsx
+components/ui/scroll-area.tsx
+components/ui/resizable.tsx
+components/ui/popover.tsx
+components/ui/modal.tsx
+components/ui/modal-document-view.tsx
+components/ui/label.tsx
+components/ui/input.tsx
+components/ui/input-otp.tsx
+components/ui/icons.tsx
+components/ui/hover-card.tsx
+components/ui/heading.tsx
+components/ui/form.tsx
+components/ui/file-uploader.tsx
+app/[locale]/(routes)/reports/sales/page.tsx
+components/ui/file-uploader-dropzone.tsx
+components/ui/dropdown-menu.tsx
+app/api/crm/leads/create-lead-from-web/route.ts
+app/[locale]/(routes)/reports/page.tsx
+app/[locale]/(routes)/reports/loading.tsx
+inngest/functions/enrich-target-contact.ts
+inngest/functions/enrich-contacts-bulk.ts
+inngest/functions/enrich-contact.ts
+inngest/functions/embed-opportunity.ts
+inngest/functions/enrich-targets-bulk.ts
+inngest/functions/enrich-target.ts
+components/typography/h4.tsx
+components/typography/h2.tsx
+components/support.tsx
+actions/projects/watch-project.ts
+actions/projects/update-task.ts
+actions/projects/update-section-title.ts
+actions/projects/update-project.ts
+actions/projects/update-kanban-position.ts
+actions/projects/mark-task-done.ts
+actions/projects/delete-task.ts
+actions/projects/delete-section.ts
+actions/projects/delete-project.ts
+actions/projects/create-task.ts
+actions/projects/create-task-in-board.ts
+actions/projects/create-section.ts
+actions/projects/create-project.ts
+app/[locale]/(routes)/reports/leads/page.tsx
+actions/projects/assign-document-to-task.ts
+actions/projects/add-comment-to-task.ts
+actions/projects/get-user-tasks.ts
+actions/projects/get-tasks.ts
+actions/projects/get-tasks-past-due.ts
+actions/projects/get-task.ts
+actions/projects/get-task-documents.ts
+actions/projects/get-task-comments.ts
+actions/projects/get-sections.ts
+actions/projects/get-kanban-data.ts
+actions/projects/get-boards.ts
+actions/projects/get-board.ts
+actions/projects/get-board-sections.ts
+inngest/functions/reports/send-scheduled.ts
+app/[locale]/(routes)/reports/campaigns/page.tsx
+inngest/lib/imap-utils.ts
+inngest/lib/embedding-utils.ts
+actions/github/get-repo-stars.ts
+actions/github/get-repo-commits.ts
+app/api/crm/contacts/enrich/validate.ts
+app/api/crm/contacts/enrich/route.ts
+actions/get-users.ts
+actions/get-user.ts
+actions/get-empoloyees.ts
+components/skeletons/table-skeleton.tsx
+components/skeletons/search-skeleton.tsx
+components/skeletons/reports-skeleton.tsx
+components/skeletons/projects-skeleton.tsx
+components/skeletons/profile-skeleton.tsx
+components/skeletons/emails-skeleton.tsx
+components/skeletons/documents-skeleton.tsx
+components/skeletons/crm-table-skeleton.tsx
+components/skeletons/crm-accounts-skeleton.tsx
+components/skeletons/app-shell-skeleton.tsx
+components/skeletons/admin-skeleton.tsx
+app/[locale]/(routes)/reports/activity/page.tsx
+app/api/crm/contacts/enrich-bulk/route.ts
+actions/dashboard/get-tasks-count.ts
+actions/dashboard/get-opportunities-count.ts
+actions/dashboard/get-leads-count.ts
+actions/dashboard/get-documents-count.ts
+actions/dashboard/get-contracts-count.ts
+actions/dashboard/get-contacts-count.ts
+actions/dashboard/get-boards-count.ts
+actions/dashboard/get-active-users-count.ts
+actions/dashboard/get-accounts-count.ts
+actions/fulltext/unified-search.ts
+app/[locale]/(routes)/reports/accounts/page.tsx
+components/sheets/form-sheet.tsx
+components/sheets/form-sheet-no-trigger.tsx
+app/api/crm/contacts/create-from-remote/route.ts
+actions/emails/sync.ts
+actions/emails/messages.ts
+actions/emails/accounts.ts
+app/api/crm/contacts/[id]/route.ts
+components/reports/ScheduleDialog.tsx
+components/reports/SavedReportsDropdown.tsx
+components/reports/SaveConfigDialog.tsx
+components/reports/ReportToolbar.tsx
+components/reports/ReportTable.tsx
+components/reports/ReportPageLayout.tsx
+components/reports/ReportChart.tsx
+components/reports/KPICard.tsx
+components/reports/FilterBar.tsx
+components/reports/DateRangePicker.tsx
+actions/documents/unlink-from-account.ts
+actions/documents/search-documents.ts
+actions/documents/retry-enrichment.ts
+actions/documents/get-storage-size.ts
+actions/documents/get-documents.ts
+actions/documents/get-documents-by-opportunityId.ts
+actions/documents/get-documents-by-contactId.ts
+actions/documents/get-documents-by-accountId.ts
+actions/documents/get-document-versions.ts
+actions/documents/delete-document.ts
+actions/documents/create-document.ts
+actions/documents/create-document-version.ts
+actions/documents/check-duplicate.ts
+actions/documents/bulk-link-to-account.ts
+actions/documents/bulk-delete-documents.ts
+actions/documents/bulk-change-type.ts
+app/[locale]/(routes)/loading.tsx
+app/[locale]/(routes)/layout.tsx
+components/modals/ImportTargetsModal.tsx
+components/modals/upload-file-modal.tsx
+components/modals/right-view-notrigger.tsx
+components/modals/password-reset.tsx
+components/modals/loading-modal.tsx
+components/modals/document-view-modal.tsx
+components/modals/alert-modal.tsx
+components/modals/CreateTargetListModal.tsx
+components/modals/AddTargetToListModal.tsx
+components/fulltext-search/result-card.tsx
+components/fulltext-search/entity-result-section.tsx
+actions/crm/get-opportunities.ts
+app/api/campaigns/webhooks/resend/route.ts
+app/[locale]/(routes)/fulltext-search/search/page.tsx
+components/form/from-select.tsx
+components/form/form-textarea.tsx
+components/form/form-submit.tsx
+components/form/form-input.tsx
+components/form/form-errors.tsx
+components/form/form-datepicker.tsx
+actions/crm/tasks/delete-task.ts
+actions/crm/tasks/add-comment.ts
+actions/crm/tasks/get-user-tasks.ts
+app/api/campaigns/unsubscribe/route.ts
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx
+app/[locale]/(routes)/fulltext-search/search/components/ResultPage.tsx
+components/crm/similar-records-drawer.tsx
+components/crm/find-similar-button.tsx
+app/[locale]/(routes)/fulltext-search/page.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/data.tsx
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx
+components/crm/audit-log/Timeline.tsx
+components/crm/audit-log/Entry.tsx
+components/crm/audit-log/AdminTable.tsx
+components/crm/audit-log/AdminPageClient.tsx
+components/crm/audit-log/AdminFilters.tsx
+actions/crm/targets/import-targets.ts
+actions/crm/targets/suggest-mapping.ts
+actions/crm/targets/convert-target.ts
+actions/crm/targets/update-target.ts
+actions/crm/targets/delete-target.ts
+actions/crm/targets/create-target.ts
+app/[locale]/(routes)/employees/page.tsx
+components/crm/activities/ActivityForm.tsx
+components/crm/activities/ActivityEntry.tsx
+components/crm/activities/ActivitiesView.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx
+app/[locale]/(routes)/projects/tasks/page.tsx
+actions/crm/target-lists/update-target-list.ts
+actions/crm/target-lists/remove-target-from-list.ts
+actions/crm/target-lists/delete-target-list.ts
+actions/crm/target-lists/create-target-list.ts
+actions/crm/target-lists/add-targets-to-list.ts
+components/campaigns/TipTapEditor.tsx
+actions/crm/get-contracts.ts
+actions/crm/get-contract.ts
+actions/crm/get-contacts.ts
+actions/crm/get-contacts-by-opportunityId.ts
+actions/crm/get-contacts-by-accountId.ts
+actions/crm/get-contact.ts
+actions/crm/get-campaigns.ts
+actions/crm/get-accounts.ts
+actions/crm/get-accounts-by-opportunityId.ts
+actions/crm/get-accounts-by-contactId.ts
+actions/crm/get-account.ts
+app/[locale]/(routes)/emails/use-mail.ts
+app/[locale]/(routes)/emails/page.tsx
+app/[locale]/(routes)/emails/data.tsx
+app/[locale]/(routes)/projects/tasks/data/schema.tsx
+app/[locale]/(routes)/projects/tasks/data/data.tsx
+actions/crm/similarity/get-similar-opportunities.ts
+actions/crm/similarity/get-similar-leads.ts
+actions/crm/similarity/get-similar-contacts.ts
+actions/crm/similarity/get-similar-accounts.ts
+app/[locale]/(routes)/emails/components/mail-display.tsx
+app/[locale]/(routes)/emails/components/nav.tsx
+app/[locale]/(routes)/emails/components/mail.tsx
+app/[locale]/(routes)/emails/components/mail-list.tsx
+app/[locale]/(routes)/emails/components/account-switcher.tsx
+app/[locale]/(routes)/emails/components/ComposeModal.tsx
+app/[locale]/(routes)/databox/page.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-view-options.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-pagination.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/projects/tasks/components/data-table-column-header.tsx
+app/[locale]/(routes)/projects/tasks/components/columns.tsx
+actions/crm/products/import-products.ts
+actions/crm/contracts/update-contract/index.ts
+actions/crm/contracts/update-contract/types.ts
+actions/crm/contracts/update-contract/schema.ts
+app/[locale]/(routes)/documents/page.tsx
+app/[locale]/(routes)/documents/loading.tsx
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx
+app/[locale]/(routes)/projects/tasks/[userId]/page.tsx
+actions/crm/contracts/restore-contract/index.ts
+actions/crm/products/update-product/index.ts
+actions/crm/products/update-product/types.ts
+actions/crm/products/update-product/schema.ts
+actions/crm/products/get-products.ts
+actions/crm/products/get-product.ts
+actions/crm/products/get-product-categories.ts
+app/[locale]/(routes)/documents/data/schema.tsx
+app/[locale]/(routes)/documents/data/data.tsx
+app/[locale]/(routes)/projects/data/schema.tsx
+app/[locale]/(routes)/projects/data/data.tsx
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/projects/table-components/data-table.tsx
+actions/crm/contracts/delete-contract/index.ts
+app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx
+actions/crm/contracts/delete-contract/types.ts
+actions/crm/contracts/delete-contract/schema.ts
+app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/projects/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/projects/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/projects/table-components/columns.tsx
+actions/crm/products/delete-product/index.ts
+app/[locale]/(routes)/projects/page.tsx
+app/[locale]/(routes)/projects/loading.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx
+app/[locale]/(routes)/documents/components/processing-status-badge.tsx
+app/[locale]/(routes)/documents/components/modal-dropzone.tsx
+app/[locale]/(routes)/documents/components/document-detail-panel.tsx
+app/[locale]/(routes)/documents/components/data-table.tsx
+app/[locale]/(routes)/documents/components/data-table-view-options.tsx
+app/[locale]/(routes)/documents/components/data-table-toolbar.tsx
+app/[locale]/(routes)/documents/components/data-table-row-actions.tsx
+app/[locale]/(routes)/documents/components/data-table-pagination.tsx
+app/[locale]/(routes)/documents/components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/documents/components/data-table-column-header.tsx
+app/[locale]/(routes)/documents/components/columns.tsx
+app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx
+app/[locale]/(routes)/documents/components/batch-actions-bar.tsx
+actions/crm/contracts/create-new-contract/index.ts
+actions/crm/contracts/create-new-contract/types.ts
+actions/crm/contracts/create-new-contract/schema.ts
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx
+app/[locale]/(routes)/projects/dashboard/page.tsx
+actions/crm/products/create-product/index.ts
+actions/crm/products/create-product/types.ts
+actions/crm/products/create-product/schema.ts
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/data.tsx
+actions/crm/account/get-tasks.ts
+actions/crm/account/get-task.ts
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx
+actions/crm/activities/update-activity.ts
+actions/crm/activities/get-activities-by-entity.ts
+actions/crm/activities/delete-activity.ts
+actions/crm/activities/create-activity.ts
+actions/crm/opportunity/get-expected-revenue.ts
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx
+actions/crm/opportunity/dashboard/set-inactive.ts
+actions/crm/accounts/watch-account.ts
+actions/crm/accounts/update-account.ts
+actions/crm/accounts/unwatch-account.ts
+actions/crm/accounts/restore-account.ts
+actions/crm/accounts/delete-account.ts
+actions/crm/accounts/create-task.ts
+actions/crm/accounts/create-account.ts
+actions/crm/accounts/search-accounts.ts
+actions/crm/accounts/get-accounts.ts
+actions/crm/contract-line-items/get-line-items.ts
+actions/crm/contract-line-items/update-line-item/index.ts
+actions/crm/contract-line-items/update-line-item/types.ts
+actions/crm/contract-line-items/update-line-item/schema.ts
+actions/crm/account-products/update-assignment/index.ts
+actions/crm/account-products/update-assignment/types.ts
+actions/crm/account-products/update-assignment/schema.ts
+app/[locale]/(routes)/projects/boards/[boardId]/page.tsx
+actions/crm/contract-line-items/copy-from-opportunity/index.ts
+actions/crm/contract-line-items/reorder-line-items/index.ts
+actions/crm/account-products/remove-assignment/index.ts
+actions/crm/account-products/get-account-products.ts
+actions/crm/contract-line-items/remove-line-item/index.ts
+actions/crm/get-target-lists.ts
+actions/crm/contract-line-items/add-line-item/index.ts
+app/[locale]/(routes)/crm/products/table-data/schema.tsx
+actions/crm/contract-line-items/add-line-item/types.ts
+app/[locale]/(routes)/crm/products/table-data/data.tsx
+actions/crm/opportunity-line-items/update-line-item/index.ts
+actions/crm/contract-line-items/add-line-item/schema.ts
+actions/crm/opportunity-line-items/update-line-item/types.ts
+actions/crm/get-target-list.ts
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx
+actions/crm/opportunity-line-items/update-line-item/schema.ts
+actions/crm/get-sales-type.ts
+actions/crm/get-sales-stage.ts
+actions/crm/get-opportunity.ts
+actions/crm/get-opportunities-with-includes.ts
+actions/crm/get-opportunities-with-includes-by-contactId.ts
+actions/crm/get-opportunities-with-includes-by-accountId.ts
+actions/crm/get-leads.ts
+actions/crm/get-leads-by-accountId.ts
+actions/crm/get-lead.ts
+actions/crm/get-industries.ts
+actions/crm/get-currencies.ts
+actions/crm/get-crm-data.ts
+actions/crm/account-products/assign-product/index.ts
+actions/crm/account-products/assign-product/types.ts
+actions/crm/account-products/assign-product/schema.ts
+actions/crm/opportunity-line-items/reorder-line-items/index.ts
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx
+actions/crm/contacts/update-contact.ts
+actions/crm/contacts/unlink-opportunity.ts
+actions/crm/contacts/restore-contact.ts
+actions/crm/contacts/delete-contact.ts
+actions/crm/contacts/create-contact.ts
+actions/crm/leads/update-lead.ts
+actions/crm/leads/restore-lead.ts
+actions/crm/leads/delete-lead.ts
+actions/crm/leads/create-lead.ts
+app/[locale]/(routes)/crm/products/table-components/data-table.tsx
+app/[locale]/(routes)/crm/products/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/products/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/products/table-components/data-table-pagination.tsx
+actions/crm/get-user-opportunities.ts
+app/[locale]/(routes)/crm/products/table-components/data-table-faceted-filter.tsx
+actions/crm/get-user-leads.ts
+app/[locale]/(routes)/crm/products/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/products/table-components/columns.tsx
+actions/crm/get-targets.ts
+actions/crm/get-target.ts
+app/[locale]/(routes)/crm/products/page.tsx
+actions/campaigns/update-campaign.ts
+actions/crm/opportunity-line-items/remove-line-item/index.ts
+actions/crm/opportunity-line-items/get-line-items.ts
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx
+actions/crm/audit-log/get-audit-log-by-entity.ts
+actions/crm/audit-log/get-audit-log-admin.ts
+actions/crm/opportunity-line-items/add-line-item/schema.ts
+actions/crm/opportunity-line-items/add-line-item/index.ts
+actions/crm/opportunity-line-items/add-line-item/types.ts
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx
+actions/campaigns/templates/update-template.ts
+actions/campaigns/templates/get-templates.ts
+actions/campaigns/templates/get-template.ts
+actions/campaigns/templates/generate-template.ts
+actions/campaigns/templates/delete-template.ts
+actions/campaigns/templates/create-template.ts
+actions/campaigns/send-campaign-now.ts
+actions/campaigns/schedule-campaign.ts
+actions/campaigns/pause-campaign.ts
+actions/campaigns/get-campaigns.ts
+actions/campaigns/get-campaign.ts
+actions/campaigns/delete-campaign.ts
+actions/campaigns/create-campaign.ts
+actions/api-tokens.ts
+app/[locale]/(routes)/projects/actions/get-task-done.ts
+app/[locale]/(routes)/crm/products/_forms/update-product.tsx
+app/[locale]/(routes)/crm/products/_forms/create-product.tsx
+actions/crm/opportunities/update-opportunity.ts
+actions/crm/opportunities/restore-opportunity.ts
+actions/crm/opportunities/delete-opportunity.ts
+actions/crm/opportunities/create-opportunity.ts
+app/[locale]/(routes)/projects/_components/ProjectsView.tsx
+app/[locale]/(routes)/crm/products/[productId]/page.tsx
+app/[locale]/(routes)/crm/contacts/table-data/schema.tsx
+app/[locale]/(routes)/profile/page.tsx
+app/[locale]/(routes)/profile/loading.tsx
+app/[locale]/(routes)/crm/products/[productId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/products/[productId]/components/EditProductButton.tsx
+app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx
+app/[locale]/(routes)/crm/page.tsx
+actions/ai/projects/boards/getAiReport.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/contacts/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/contacts/table-components/columns.tsx
+app/[locale]/(routes)/crm/contacts/page.tsx
+app/[locale]/(routes)/campaigns/templates/page.tsx
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx
+app/[locale]/(routes)/crm/contacts/enrichment/page.tsx
+app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx
+app/[locale]/(routes)/campaigns/templates/new/page.tsx
+app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx
+app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx
+app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx
+app/[locale]/(routes)/crm/opportunities/table-data/data.tsx
+app/[locale]/(routes)/profile/components/ProfileTabs.tsx
+app/[locale]/(routes)/profile/components/ProfileHeroAvatar.tsx
+app/[locale]/(routes)/profile/components/ProfileHero.tsx
+app/[locale]/(routes)/profile/components/ProfileForm.tsx
+app/[locale]/(routes)/profile/components/OpenAiForm.tsx
+app/[locale]/(routes)/profile/components/LanguageForm.tsx
+app/[locale]/(routes)/profile/components/EmailAccountsList.tsx
+app/[locale]/(routes)/profile/components/ApiTokens.tsx
+actions/admin/users/set-role.ts
+actions/admin/users/invite-user.ts
+actions/admin/users/delete-user.ts
+actions/admin/users/deactivate-user.ts
+actions/admin/users/activate-user.ts
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx
+app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx
+app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx
+app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx
+app/[locale]/(routes)/profile/actions/api-keys.ts
+app/[locale]/(routes)/page.tsx
+actions/admin/send-mail-to-all/types.ts
+actions/admin/send-mail-to-all/schema.ts
+actions/admin/send-mail-to-all/index.ts
+app/[locale]/(routes)/crm/opportunities/table-components/data-table.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/page.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx
+app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx
+app/[locale]/(routes)/crm/opportunities/page.tsx
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx
+app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx
+app/[locale]/(routes)/campaigns/new/page.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/ContactDetailActions.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/contacts/[contactId]/components/ActivitiesSection.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/page.tsx
+app/[locale]/(routes)/campaigns/new/components/WizardShell.tsx
+app/[locale]/(routes)/campaigns/new/components/Step4Schedule.tsx
+app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx
+app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx
+app/[locale]/(routes)/campaigns/new/components/Step1Details.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/components/CampaignsView.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/OpportunityDetailActions.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/ActivitiesSection.tsx
+app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx
+app/[locale]/(routes)/crm/components/line-items/EditLineItemForm.tsx
+app/[locale]/(routes)/crm/components/line-items/AddLineItemForm.tsx
+app/[locale]/(routes)/crm/components/ProductsView.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/page.tsx
+app/[locale]/(routes)/crm/components/OpportunitiesView.tsx
+app/[locale]/(routes)/crm/components/MainPageView.tsx
+app/[locale]/(routes)/crm/components/LeadsView.tsx
+app/[locale]/(routes)/crm/components/DocumentsView.tsx
+app/[locale]/(routes)/crm/components/ContractsView.tsx
+app/[locale]/(routes)/crm/components/ContactsView.tsx
+app/[locale]/(routes)/crm/components/AccountsView.tsx
+app/[locale]/(routes)/crm/leads/page.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/StepsTimeline.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/campaigns/[campaignId]/components/CampaignDetail.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx
+app/[locale]/(routes)/campaigns/targets/page.tsx
+app/[locale]/(routes)/crm/leads/table-data/schema.tsx
+app/[locale]/(routes)/crm/leads/table-data/data.tsx
+app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx
+app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx
+app/[locale]/(routes)/crm/accounts/table-data/schema.tsx
+app/[locale]/(routes)/crm/accounts/table-data/data.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/leads/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/leads/table-components/columns.tsx
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx
+app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx
+app/[locale]/(routes)/campaigns/targets/components/EnrichFieldSelector.tsx
+app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/accounts/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/accounts/table-components/columns.tsx
+app/[locale]/(routes)/crm/accounts/page.tsx
+app/[locale]/(routes)/crm/accounts/loading.tsx
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx
+app/[locale]/(routes)/crm/leads/[leadId]/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/page.tsx
+app/[locale]/(routes)/admin/users/table-data/schema.tsx
+app/[locale]/(routes)/admin/users/table-data/data.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx
+app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx
+app/[locale]/(routes)/crm/leads/[leadId]/components/LeadDetailActions.tsx
+app/[locale]/(routes)/crm/leads/[leadId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/leads/[leadId]/components/ActivitiesSection.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/admin/users/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/admin/users/table-components/columns.tsx
+app/[locale]/(routes)/admin/users/page.tsx
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx
+app/[locale]/(routes)/components/Footer.tsx
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx
+app/[locale]/(routes)/components/FeedbackForm.tsx
+app/[locale]/(routes)/components/Feedback.tsx
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx
+app/[locale]/(routes)/admin/page.tsx
+app/[locale]/(routes)/admin/loading.tsx
+app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx
+app/[locale]/(routes)/admin/llm-keys/page.tsx
+app/[locale]/(routes)/components/ui/Container.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/schema.tsx
+app/[locale]/(routes)/crm/dashboard/user/page.tsx
+app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx
+app/[locale]/(routes)/crm/dashboard/page.tsx
+app/[locale]/(routes)/admin/layout.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/data.tsx
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx
+app/[locale]/(routes)/components/nav-user.tsx
+app/[locale]/(routes)/components/nav-secondary.tsx
+app/[locale]/(routes)/components/nav-main.tsx
+app/[locale]/(routes)/campaigns/table-data/schema.tsx
+app/[locale]/(routes)/campaigns/page.tsx
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx
+app/[locale]/(routes)/admin/currencies/page.tsx
+app/[locale]/(routes)/components/menu-items/Reports.tsx
+app/[locale]/(routes)/components/menu-items/Projects.tsx
+app/[locale]/(routes)/components/menu-items/Emails.tsx
+app/[locale]/(routes)/components/menu-items/Documents.tsx
+app/[locale]/(routes)/components/menu-items/Dashboard.tsx
+app/[locale]/(routes)/components/menu-items/Crm.tsx
+app/[locale]/(routes)/components/menu-items/Campaigns.tsx
+app/[locale]/(routes)/components/menu-items/Administration.tsx
+app/[locale]/(routes)/components/__tests__/nav-main-demo.tsx
+app/[locale]/(routes)/components/Header.tsx
+app/[locale]/(routes)/components/FulltextSearch.tsx
+app/[locale]/(routes)/components/app-sidebar.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/page.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx
+app/[locale]/(routes)/components/dasboard/storage-quota.tsx
+app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx
+app/[locale]/(routes)/components/dasboard/loading-box.tsx
+app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx
+app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/ActivitiesSection.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountDetailActions.tsx
+app/[locale]/(routes)/admin/actions/api-keys.ts
+app/[locale]/(routes)/crm/contracts/page.tsx
+app/[locale]/(routes)/admin/currencies/_actions/currencies.ts
+app/[locale]/(routes)/admin/_components/copy-key.tsx
+app/[locale]/(routes)/admin/_components/ResendCard.tsx
+app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx
+app/[locale]/(routes)/crm/contracts/table-data/schema.tsx
+app/[locale]/(auth)/layout.tsx
+app/[locale]/(routes)/crm/contracts/table-data/data.tsx
+app/[locale]/(routes)/admin/crm-settings/page.tsx
+app/[locale]/(routes)/admin/audit-log/page.tsx
+app/[locale]/(auth)/sign-in/page.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/page.tsx
+app/[locale]/(auth)/inactive/page.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-view-options.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-pagination.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-faceted-filter.tsx
+app/[locale]/(routes)/crm/contracts/table-components/data-table-column-header.tsx
+app/[locale]/(routes)/crm/contracts/table-components/columns.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx
+app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts
+app/[locale]/(auth)/inactive/components/TryAgain.tsx
+app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/components/HistoryTab.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx
+app/[locale]/(routes)/crm/contracts/[contractId]/components/ActivitiesSection.tsx
+app/[locale]/(auth)/pending/page.tsx
+app/api/campaigns/targets/enrich/route.ts
+app/[locale]/(auth)/pending/components/TryAgain.tsx
+app/api/campaigns/targets/enrich-bulk/route.ts
+app/api/campaigns/targets/[id]/route.ts
+app/api/campaigns/targets/[id]/enrich/route.ts
+
+exec
+/usr/bin/bash -lc 'rg -n "parseEmployeesValue|importTargets|employees" -S .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./scripts/migration/transformers/index.ts:31:export { transformEmployees } from './employees-transformer';
+./scripts/migration/transformers/index.ts:61:import { transformEmployees } from './employees-transformer';
+./scripts/migration/batch-processor.ts:148:      'Employees': 'employees',
+./inngest/functions/enrich-target.ts:22:  employees:        "employees",
+./inngest/functions/enrich-target.ts:74:          industry: true, employees: true, city: true,
+./scripts/migration/transformers/crm-accounts-transformer.ts:28:    employees: nullableString(mongoRecord.employees),
+./prisma/schema.prisma:29:  employees            String?
+./prisma/schema.prisma:1236:  employees        String?
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md:21:| 2 | should create a new target with all fields | Open new target sheet, fill all field groups: first_name, last_name, email, email_2, mobile_phone, office_phone, home_phone, company, position, company_website, company_website_2, social_x, social_linkedin, social_instagram, social_facebook, city, country, industry, employees, description, status. Submit form, verify success toast |
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:72:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:115:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:181:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:229:        employees: true,
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md:368:  employees:        "employees",
+./components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+./components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+./components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1107:        { employees: "5" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1108:        { employees: "50" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1109:        { employees: "500" },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1110:        { employees: null },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1211:    select: { employees: true },
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:1227:    const emp = parseInt(a.employees ?? "", 10);
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:479:    "employees": "string or null",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:600:  employees:        "employees",
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md:643:          industry: true, employees: true, city: true,
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:11:`targetFieldMap` in `inngest/functions/enrich-target.ts` has 10 fields. The API PATCH route (`app/api/crm/targets/[id]/route.ts`) has 20 fields after adding company-search fields. The 8 new fields — `personal_email`, `company_email`, `company_phone`, `industry`, `employees`, `description`, `city`, `country` — are silently dropped in bulk Inngest enrichment jobs.
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:65:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:97:('personal_email','company_email','company_phone','city','country','industry','employees','description','converted_at','converted_account_id','converted_contact_id');
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:362:employees?: string;
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:378:employees: row.employees || null,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:393:  "city", "country", "industry", "employees", "description",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:425:// employees
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:427:numemployees: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:428:teamsize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:479:employees:      z.string().optional(),
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:530:  <FormField control={form.control} name="employees" render={({ field }) => (
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:628:          employees: target.employees ?? undefined,
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:765:- 11 new fields on crm_Targets: personal_email, company_email, company_phone, city, country, industry, employees, description + conversion tracking fields
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+./locales/en.json:450:    "description": "Manage your employees",
+./prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+./__tests__/reports/accounts.test.ts:60:        { employees: "5" },
+./__tests__/reports/accounts.test.ts:61:        { employees: "50" },
+./__tests__/reports/accounts.test.ts:62:        { employees: "500" },
+./__tests__/reports/accounts.test.ts:63:        { employees: null },
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+./lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+./lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+./lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+./lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+./lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+./lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+./lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+./lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+./lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+./lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md:18:- Campaign management (bulk assign to projects/employees)
+./lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+./lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+./lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+./lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+./lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+./actions/reports/accounts.ts:45:    select: { employees: true },
+./actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+./actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+./app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+./app/[locale]/(routes)/page.tsx:115:          href="/employees"
+./app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+./actions/crm/targets/import-targets.ts:11:function parseEmployeesValue(value?: string) {
+./actions/crm/targets/import-targets.ts:20:export async function importTargets(
+./actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+./actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+./actions/crm/targets/suggest-mapping.ts:28:  "employees",
+./actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+./actions/crm/targets/suggest-mapping.ts:87:    numemployees: "employees",
+./actions/crm/targets/suggest-mapping.ts:88:    teamsize: "employees",
+./actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+./actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+./actions/crm/targets/update-target.ts:27:  employees?: string;
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' actions/crm/targets/import-targets.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,260p' components/modals/ImportTargetsModal.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,160p' actions/crm/targets/suggest-mapping.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' app/[locale]/\\(routes\\)/campaigns/targets/page.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+
+import { prismadb } from "@/lib/prisma";
+import Papa from "papaparse";
+
+function normalizeCellValue(value?: string) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+
+export async function importTargets(
+  formData: FormData
+): Promise<{ imported: number; skipped: number; errors: string[] }> {
+  const session = await getSession();
+  if (!session) throw new Error("Unauthorized");
+
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("No file provided");
+
+  const mappingRaw = formData.get("mapping") as string | null;
+  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+
+  const text = await file.text();
+  const { data } = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+
+  const valid: any[] = [];
+  const errors: string[] = [];
+
+  data.forEach((rawRow, index) => {
+    const row: Record<string, string> = {};
+    if (Object.keys(mapping).length > 0) {
+      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+        if (targetField && rawRow[csvCol] !== undefined) {
+          row[targetField] = rawRow[csvCol];
+        }
+      });
+    } else {
+      Object.assign(row, rawRow);
+    }
+
+    const last_name = normalizeCellValue(row.last_name);
+    const email = normalizeCellValue(row.email).toLowerCase();
+    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    const company = normalizeCellValue(row.company);
+    const company_website = normalizeCellValue(row.company_website);
+    const companyDomain = company_website || company.toLowerCase() || null;
+    const employees = parseEmployeesValue(row.employees);
+
+    if (!last_name && !company) {
+      errors.push(`Row ${index + 2}: missing last_name or company`);
+      return;
+    }
+
+    valid.push({
+      last_name: last_name ?? "",
+      first_name: row.first_name || null,
+      email: email || null,
+      mobile_phone: mobile_phone || null,
+      office_phone: row.office_phone || null,
+      company: row.company || null,
+      position: row.position || null,
+      company_website: companyDomain || null,
+      personal_website: row.personal_website || null,
+      social_linkedin: row.social_linkedin || null,
+      social_x: row.social_x || null,
+      social_instagram: row.social_instagram || null,
+      social_facebook: row.social_facebook || null,
+      personal_email: row.personal_email || null,
+      company_email: row.company_email || null,
+      company_phone: row.company_phone || null,
+      city: row.city || null,
+      country: row.country || null,
+      industry: row.industry || null,
+      employees: employees || null,
+      description: row.description || null,
+      created_by: (session.user as any).id,
+    });
+  });
+
+  if (valid.length > 0) {
+    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+  }
+
+  return { imported: valid.length, skipped: errors.length, errors };
+}
+
+ succeeded in 0ms:
+"use client";
+
+import { useState, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { importTargets } from "@/actions/crm/targets/import-targets";
+import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+import Papa from "papaparse";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Upload, Loader2 } from "lucide-react";
+
+type Step = "upload" | "mapping" | "preview";
+
+interface TargetField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+const TARGET_FIELDS: TargetField[] = [
+  { key: "last_name", label: "Last Name", required: false },
+  { key: "first_name", label: "First Name", required: false },
+  { key: "email", label: "Email", required: false },
+  { key: "mobile_phone", label: "Mobile Phone", required: false },
+  { key: "office_phone", label: "Office Phone", required: false },
+  { key: "company", label: "Company", required: false },
+  { key: "position", label: "Position", required: false },
+  { key: "company_website", label: "Company Website", required: false },
+  { key: "personal_website", label: "Personal Website", required: false },
+  { key: "social_linkedin", label: "LinkedIn", required: false },
+  { key: "social_x", label: "X / Twitter", required: false },
+  { key: "social_instagram", label: "Instagram", required: false },
+  { key: "social_facebook", label: "Facebook", required: false },
+  { key: "personal_email", label: "Personal Email", required: false },
+  { key: "company_email",  label: "Company Email",  required: false },
+  { key: "company_phone",  label: "Company Phone",  required: false },
+  { key: "city",           label: "City",           required: false },
+  { key: "country",        label: "Country",        required: false },
+  { key: "industry",       label: "Industry",       required: false },
+  { key: "employees",      label: "Employees",      required: false },
+  { key: "description",    label: "Description",    required: false },
+];
+
+const SKIP_VALUE = "__skip__";
+
+const ImportTargetsModal = () => {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<Step>("upload");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+  const previewRows = csvRows.slice(0, 3);
+
+  const resetState = () => {
+    setStep("upload");
+    setSelectedFile(null);
+    setCsvHeaders([]);
+    setCsvRows([]);
+    setMapping({});
+    setIsLoading(false);
+    setIsSuggesting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleOpenChange = (val: boolean) => {
+    setOpen(val);
+    if (!val) resetState();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        const headers = results.meta.fields ?? [];
+        setCsvHeaders(headers);
+        setCsvRows(results.data);
+        fetchSuggestedMapping(headers);
+      },
+    });
+  };
+
+  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+    setIsSuggesting(true);
+    setStep("mapping");
+    try {
+      const res = await suggestMapping(headers);
+      const suggested: Record<string, string | null> = res.mapping ?? {};
+      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+          newMapping[targetField] = csvHeader;
+        }
+      }
+      setMapping(newMapping);
+    } catch {
+      // Set all to skip on error
+      const newMapping: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        newMapping[field.key] = SKIP_VALUE;
+      }
+      setMapping(newMapping);
+    } finally {
+      setIsSuggesting(false);
+    }
+  }, []);
+
+  const computePreview = () => {
+    let valid = 0;
+    let skipped = 0;
+    const skipReasons: string[] = [];
+
+    for (let i = 0; i < csvRows.length; i++) {
+      const raw = csvRows[i];
+      const row: Record<string, string> = {};
+      for (const field of TARGET_FIELDS) {
+        const csvCol = mapping[field.key];
+        if (csvCol && csvCol !== SKIP_VALUE) {
+          row[field.key] = raw[csvCol] ?? "";
+        }
+      }
+
+      if (!row.last_name && !row.company) {
+        skipped++;
+        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+        continue;
+      }
+      valid++;
+    }
+
+    return { valid, skipped, skipReasons };
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+
+    // Build mapping as { csvHeader -> targetField } for the API
+    const apiMapping: Record<string, string> = {};
+    for (const [targetField, csvCol] of Object.entries(mapping)) {
+      if (csvCol && csvCol !== SKIP_VALUE) {
+        apiMapping[csvCol] = targetField;
+      }
+    }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("mapping", JSON.stringify(apiMapping));
+
+    try {
+      const { imported, skipped, errors } = await importTargets(formData);
+      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+      setOpen(false);
+      resetState();
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const preview = step === "preview" ? computePreview() : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Upload className="h-4 w-4 mr-2" />
+          Import CSV
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Import Targets from CSV
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {step === "upload" && "Select a CSV file to import targets."}
+            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+            {step === "preview" && "Review the import summary before proceeding."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Upload */}
+        {step === "upload" && (
+          <div className="space-y-4 py-2">
+            <div className="border-2 border-dashed rounded-md p-8 text-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Select CSV file
+              </Button>
+              {selectedFile && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Selected: {selectedFile.name}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Map Columns */}
+        {step === "mapping" && (
+          <div className="space-y-3 py-2">
+            {isSuggesting ? (
+              <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span>AI is suggesting column mappings…</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                  <span>CRM Field</span>
+                  <span>CSV Column</span>
+                </div>
+                {TARGET_FIELDS.map((field) => (
+
+ succeeded in 0ms:
+"use server";
+import { createLogger } from "@/lib/logger";
+import { getSession } from "@/lib/auth-server";
+import { openAiHelper } from "@/lib/openai";
+
+
+const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+const TARGET_FIELDS = [
+  "last_name",
+  "first_name",
+  "email",
+  "mobile_phone",
+  "office_phone",
+  "company",
+  "position",
+  "company_website",
+  "personal_website",
+  "social_linkedin",
+  "social_x",
+  "social_instagram",
+  "social_facebook",
+  "personal_email",
+  "company_email",
+  "company_phone",
+  "city",
+  "country",
+  "industry",
+  "employees",
+  "description",
+];
+
+function fuzzyMatch(header: string): string | null {
+  const normalized = header.toLowerCase().replace(/[\s_\-]/g, "");
+  for (const field of TARGET_FIELDS) {
+    if (field.replace(/_/g, "") === normalized) return field;
+  }
+  const aliases: Record<string, string> = {
+    lastname: "last_name",
+    surname: "last_name",
+    familyname: "last_name",
+    firstname: "first_name",
+    givenname: "first_name",
+    name: "first_name",
+    mail: "email",
+    emailaddress: "email",
+    phone: "mobile_phone",
+    mobile: "mobile_phone",
+    cellphone: "mobile_phone",
+    mobilephone: "mobile_phone",
+    officephone: "office_phone",
+    workphone: "office_phone",
+    businessphone: "office_phone",
+    companyname: "company",
+    organization: "company",
+    organisation: "company",
+    jobtitle: "position",
+    title: "position",
+    role: "position",
+    website: "company_website",
+    companywebsite: "company_website",
+    personalwebsite: "personal_website",
+    linkedin: "social_linkedin",
+    linkedinurl: "social_linkedin",
+    twitter: "social_x",
+    x: "social_x",
+    instagram: "social_instagram",
+    facebook: "social_facebook",
+    personalemail: "personal_email",
+    directemail: "personal_email",
+    myemail: "personal_email",
+    companyemail: "company_email",
+    infoemail: "company_email",
+    contactemail: "company_email",
+    genericemail: "company_email",
+    companyphone: "company_phone",
+    mainphone: "company_phone",
+    switchboard: "company_phone",
+    hqphone: "company_phone",
+    hqcity: "city",
+    headquarterscity: "city",
+    hqcountry: "country",
+    nation: "country",
+    sector: "industry",
+    vertical: "industry",
+    businesstype: "industry",
+    headcount: "employees",
+    numemployees: "employees",
+    teamsize: "employees",
+    companysize: "employees",
+    about: "description",
+    bio: "description",
+    summary: "description",
+    companydescription: "description",
+  };
+  return aliases[normalized] ?? null;
+}
+
+export const suggestMapping = async (headers: string[]) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  if (!Array.isArray(headers)) return { error: "Invalid request" };
+
+  const userId = (session.user as any).id;
+  const openai = await openAiHelper(userId);
+
+  if (openai) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a data mapping assistant. Given a list of CSV column headers and a list of CRM field names, return a JSON object mapping each CSV header to the best matching CRM field, or null if no match. Only use the provided CRM field names as values. Return only valid JSON, no explanation.",
+          },
+          {
+            role: "user",
+            content: `CSV headers: ${JSON.stringify(headers)}\n\nCRM fields: ${JSON.stringify(TARGET_FIELDS)}\n\nReturn a JSON object like: { "CSV Header": "crm_field" or null }`,
+          },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+
+      const content = completion.choices[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        const mapping: Record<string, string | null> = {};
+        for (const header of headers) {
+          const suggested = parsed[header];
+          mapping[header] = suggested && TARGET_FIELDS.includes(suggested) ? suggested : null;
+        }
+        return { mapping };
+      }
+    } catch (err) {
+      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+    }
+  }
+
+  // Fallback: fuzzy match
+  const mapping: Record<string, string | null> = {};
+  for (const header of headers) {
+    mapping[header] = fuzzyMatch(header);
+  }
+  return { mapping };
+};
+
+ succeeded in 0ms:
+import { Suspense } from "react";
+
+import CrmTableSkeleton from "@/components/skeletons/crm-table-skeleton";
+import Container from "../../components/ui/Container";
+import TargetsView from "./components/TargetsView";
+import { getTargets } from "@/actions/crm/get-targets";
+
+const TargetsPage = async () => {
+  const targets = await getTargets();
+  return (
+    <Container
+      title="Targets"
+      description="Manage your marketing and sales targets"
+    >
+      <Suspense fallback={<CrmTableSkeleton />}>
+        <TargetsView data={targets} />
+      </Suspense>
+    </Container>
+  );
+};
+
+export default TargetsPage;
+
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '1,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+    66	    valid.push({
+    67	      last_name: last_name ?? "",
+    68	      first_name: row.first_name || null,
+    69	      email: email || null,
+    70	      mobile_phone: mobile_phone || null,
+    71	      office_phone: row.office_phone || null,
+    72	      company: row.company || null,
+    73	      position: row.position || null,
+    74	      company_website: companyDomain || null,
+    75	      personal_website: row.personal_website || null,
+    76	      social_linkedin: row.social_linkedin || null,
+    77	      social_x: row.social_x || null,
+    78	      social_instagram: row.social_instagram || null,
+    79	      social_facebook: row.social_facebook || null,
+    80	      personal_email: row.personal_email || null,
+    81	      company_email: row.company_email || null,
+    82	      company_phone: row.company_phone || null,
+    83	      city: row.city || null,
+    84	      country: row.country || null,
+    85	      industry: row.industry || null,
+    86	      employees: employees || null,
+    87	      description: row.description || null,
+    88	      created_by: (session.user as any).id,
+    89	    });
+    90	  });
+    91	
+    92	  if (valid.length > 0) {
+    93	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    94	  }
+    95	
+    96	  return { imported: valid.length, skipped: errors.length, errors };
+    97	}
+
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '140,205p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '370,425p' .next/dev/server/chunks/ssr/_12nrsm3._.js" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+   140	  const computePreview = () => {
+   141	    let valid = 0;
+   142	    let skipped = 0;
+   143	    const skipReasons: string[] = [];
+   144	
+   145	    for (let i = 0; i < csvRows.length; i++) {
+   146	      const raw = csvRows[i];
+   147	      const row: Record<string, string> = {};
+   148	      for (const field of TARGET_FIELDS) {
+   149	        const csvCol = mapping[field.key];
+   150	        if (csvCol && csvCol !== SKIP_VALUE) {
+   151	          row[field.key] = raw[csvCol] ?? "";
+   152	        }
+   153	      }
+   154	
+   155	      if (!row.last_name && !row.company) {
+   156	        skipped++;
+   157	        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+   158	        continue;
+   159	      }
+   160	      valid++;
+   161	    }
+   162	
+   163	    return { valid, skipped, skipReasons };
+   164	  };
+   165	
+   166	  const handleImport = async () => {
+   167	    if (!selectedFile) return;
+   168	    setIsLoading(true);
+   169	
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+   171	    const apiMapping: Record<string, string> = {};
+   172	    for (const [targetField, csvCol] of Object.entries(mapping)) {
+   173	      if (csvCol && csvCol !== SKIP_VALUE) {
+   174	        apiMapping[csvCol] = targetField;
+   175	      }
+   176	    }
+   177	
+   178	    const formData = new FormData();
+   179	    formData.append("file", selectedFile);
+   180	    formData.append("mapping", JSON.stringify(apiMapping));
+   181	
+   182	    try {
+   183	      const { imported, skipped, errors } = await importTargets(formData);
+   184	      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+   185	      setOpen(false);
+   186	      resetState();
+   187	      router.refresh();
+   188	    } catch (error: any) {
+   189	      toast.error(error?.message || "Something went wrong");
+   190	    } finally {
+   191	      setIsLoading(false);
+   192	    }
+   193	  };
+   194	
+   195	  const preview = step === "preview" ? computePreview() : null;
+   196	
+   197	  return (
+   198	    <Dialog open={open} onOpenChange={handleOpenChange}>
+   199	      <DialogTrigger asChild>
+   200	        <Button variant="outline" size="sm">
+   201	          <Upload className="h-4 w-4 mr-2" />
+   202	          Import CSV
+   203	        </Button>
+   204	      </DialogTrigger>
+   205	      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+
+ succeeded in 0ms:
+    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$auth$2d$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__,
+    __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$prisma$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__
+]);
+[__TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$auth$2d$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$prisma$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__] = __turbopack_async_dependencies__.then ? (await __turbopack_async_dependencies__)() : __turbopack_async_dependencies__;
+;
+;
+;
+;
+function normalizeCellValue(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
+function parseEmployeesValue(value) {
+    const parsed = JSON.parse(normalizeCellValue(value) || "null");
+    return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+async function importTargets(formData) {
+    const session = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$auth$2d$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["getSession"])();
+    if (!session) throw new Error("Unauthorized");
+    const file = formData.get("file");
+    if (!file) throw new Error("No file provided");
+    const mappingRaw = formData.get("mapping");
+    const mapping = mappingRaw ? JSON.parse(mappingRaw) : {};
+    const text = await file.text();
+    const { data } = __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f2e$pnpm$2f$papaparse$40$5$2e$5$2e$3$2f$node_modules$2f$papaparse$2f$papaparse$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["default"].parse(text, {
+        header: true,
+        skipEmptyLines: true
+    });
+    const valid = [];
+    const errors = [];
+    data.forEach((rawRow, index)=>{
+        const row = {};
+        if (Object.keys(mapping).length > 0) {
+            Object.entries(mapping).forEach(([csvCol, targetField])=>{
+                if (targetField && rawRow[csvCol] !== undefined) {
+                    row[targetField] = rawRow[csvCol];
+                }
+            });
+        } else {
+            Object.assign(row, rawRow);
+        }
+        const last_name = normalizeCellValue(row.last_name);
+        const email = normalizeCellValue(row.email).toLowerCase();
+        const mobile_phone = normalizeCellValue(row.mobile_phone);
+        const company = normalizeCellValue(row.company);
+        const company_website = normalizeCellValue(row.company_website);
+        const companyDomain = company_website || company.toLowerCase() || null;
+        const employees = parseEmployeesValue(row.employees);
+        if (!last_name && !company) {
+            errors.push(`Row ${index + 2}: missing last_name or company`);
+            return;
+        }
+        valid.push({
+            last_name: last_name ?? "",
+            first_name: row.first_name || null,
+            email: email || null,
+            mobile_phone: mobile_phone || null,
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' tests/e2e/campaign-targets.spec.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,150p' app/[locale]/\\(routes\\)/campaigns/targets/table-data/schema.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { z } from "zod";
+
+export const targetSchema = z.object({
+  id: z.string(),
+  first_name: z.string().nullable(),
+  last_name: z.string(),
+  email: z.string().nullable(),
+  mobile_phone: z.string().nullable(),
+  office_phone: z.string().nullable(),
+  company: z.string().nullable(),
+  position: z.string().nullable(),
+  status: z.boolean(),
+});
+
+export type Target = z.infer<typeof targetSchema>;
+
+ succeeded in 0ms:
+import { test, expect, Page } from "@playwright/test";
+
+async function assertSuccessToast(page: Page) {
+  await expect(
+    page.locator('[data-sonner-toast][data-type="success"]').first()
+  ).toBeVisible({ timeout: 15000 });
+}
+
+async function waitForRows(page: Page) {
+  await expect(async () => {
+    const empty = await page.getByText("No results.").isVisible();
+    expect(empty).toBe(false);
+  }).toPass({ timeout: 10000 });
+}
+
+test.describe.serial("Campaign Targets", () => {
+  test.use({ storageState: "playwright/.auth/user.json" });
+
+  test("should display targets page with table", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    await expect(
+      page.locator("h2").filter({ hasText: "Targets" })
+    ).toBeVisible({ timeout: 10000 });
+
+    await expect(
+      page.getByRole("button", { name: /\+ New Target/i })
+    ).toBeVisible();
+
+    await expect(page.locator("table")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("should create a new target with all fields", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    // Open the new target sheet
+    await page.getByRole("button", { name: /\+ New Target/i }).click();
+
+    await expect(page.getByText("Create new Target")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // --- Name & Contact ---
+    await page.getByLabel("First name").fill("PW-Target-First");
+    await page.getByLabel("Last name").fill("PW-Target-Last");
+    await page.getByLabel("Email").first().fill("pw-target@test.example.com");
+    await page.getByLabel("Mobile phone").fill("+1 555 000 1111");
+    await page.getByLabel("Office phone").fill("+1 555 000 2222");
+
+    // --- Company ---
+    await page.getByLabel("Company", { exact: true }).fill("PW Test Corp");
+    await page.getByLabel("Position").fill("QA Engineer");
+    await page.getByLabel("Company website", { exact: true }).fill("https://pw-test-corp.com");
+    await page.getByLabel("Personal website").fill("https://pw-target.dev");
+
+    // --- Social ---
+    await page.getByLabel("LinkedIn").fill("https://linkedin.com/in/pw-target");
+    await page.getByLabel("X (Twitter)").fill("https://x.com/pw-target");
+    await page.getByLabel("Instagram").fill("https://instagram.com/pw-target");
+    await page.getByLabel("Facebook").fill("https://facebook.com/pw-target");
+
+    // --- Additional Contact ---
+    await page.getByLabel("Personal Email", { exact: true }).fill("pw-personal@test.example.com");
+    await page.getByLabel("Company Email", { exact: true }).fill("pw-company@test.example.com");
+    await page.getByLabel("Company Phone", { exact: true }).fill("+1 800 000 0000");
+
+    // --- Location & Industry ---
+    await page.getByLabel("City").fill("Prague");
+    await page.getByLabel("Country").fill("Czech Republic");
+    await page.getByLabel("Industry").fill("SaaS");
+    await page.getByLabel("Employees").fill("50-200");
+
+    // --- Description ---
+    await page.getByLabel("Description").fill("Playwright test target with all fields");
+
+    // Submit
+    await page.getByRole("button", { name: "Create target" }).click();
+
+    await assertSuccessToast(page);
+
+    // Verify the sheet closed and table refreshed
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  });
+
+  test("should filter targets by last name", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    const filterInput = page.getByPlaceholder("Filter by last name ...");
+    await expect(filterInput).toBeVisible({ timeout: 10000 });
+
+    // Type something that matches nothing
+    await filterInput.fill("zzz_no_match_zzz");
+    await expect(page.getByText("No results.")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Clear the filter and verify rows reappear
+    await filterInput.fill("");
+    await waitForRows(page);
+  });
+
+  test("should navigate to target detail via row action View", async ({
+    page,
+  }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "View" }).click();
+    await page.waitForURL(/\/targets\/[a-z0-9-]+$/, {
+      timeout: 10000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+  });
+
+  test("should update a target via row action", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    const firstRow = page.locator("table tbody tr").first();
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "Update" }).click();
+
+    // Wait for the update form modal to appear
+    await expect(page.getByText("Update target details")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Modify a field
+    const positionField = page.getByLabel("Position");
+    await positionField.clear();
+    await positionField.fill("Senior QA Engineer");
+
+    await page.getByRole("button", { name: "Update target" }).click();
+
+    await assertSuccessToast(page);
+  });
+
+  test("should display target detail with all fields", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    // Navigate to the PW-created target detail via View row action
+    const firstRow = page.locator("table tbody tr").first();
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+    await page.getByRole("menuitem", { name: "View" }).click();
+    await page.waitForURL(/\/campaigns\/targets\/[a-z0-9-]+$/, {
+      timeout: 10000,
+    });
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+
+    // Verify header with target name
+    await expect(
+      page.getByRole("heading", { name: /PW-Target-First/, level: 2 })
+    ).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify company info
+    await expect(page.getByText("Company").first()).toBeVisible();
+    await expect(page.getByText("PW Test Corp")).toBeVisible();
+
+    // Verify position
+    await expect(page.getByText("Position").first()).toBeVisible();
+
+    // Verify Contact Information card
+    await expect(page.getByText("Contact information")).toBeVisible();
+    await expect(page.getByText("pw-target@test.example.com")).toBeVisible();
+
+    // Verify Social Networks card
+    await expect(page.getByText("Social networks")).toBeVisible();
+  });
+
+  test("should convert target to account + contact", async ({ page }) => {
+    await page.goto("/en/campaigns/targets");
+    await page.waitForLoadState("networkidle", { timeout: 15000 });
+    await waitForRows(page);
+
+    // Open Update modal for the target (convert is inside the update form)
+    const firstRow = page.locator("table tbody tr").first();
+    await expect(firstRow).toBeVisible({ timeout: 10000 });
+    await firstRow.hover();
+    await firstRow.locator("button:has(.sr-only)").first().click();
+
+    await page.getByRole("menuitem", { name: "Update" }).click();
+
+    await expect(page.getByText("Update target details")).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Click "Convert to Account" button
+    await page
+      .getByRole("button", { name: /Convert to Account/i })
+      .click();
+
+    // Confirm the conversion dialog
+    await expect(
+      page.getByText("Convert to Account + Contact?")
+    ).toBeVisible({ timeout: 5000 });
+
+    await page
+      .getByRole("button", { name: "Convert", exact: true })
+      .click();
+
+    await assertSuccessToast(page);
+  });
+
+
+exec
+/usr/bin/bash -lc "rg -n \"Import CSV|importTargets|employees\" tests __tests__ app/[locale]/\\(routes\\)/campaigns/targets components/modals -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+components/modals/ImportTargetsModal.tsx:5:import { importTargets } from "@/actions/crm/targets/import-targets";
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+components/modals/ImportTargetsModal.tsx:202:          Import CSV
+__tests__/reports/accounts.test.ts:60:        { employees: "5" },
+__tests__/reports/accounts.test.ts:61:        { employees: "50" },
+__tests__/reports/accounts.test.ts:62:        { employees: "500" },
+__tests__/reports/accounts.test.ts:63:        { employees: null },
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+
+exec
+/usr/bin/bash -lc "sed -n '1,130p' actions/crm/targets/create-target.ts && sed -n '1,130p' actions/crm/targets/update-target.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+"use server";
+import { getSession } from "@/lib/auth-server";
+import { prismadb } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+export const createTarget = async (data: {
+  last_name?: string;
+  first_name?: string;
+  email?: string;
+  mobile_phone?: string;
+  office_phone?: string;
+  company?: string;
+  company_website?: string;
+  personal_website?: string;
+  position?: string;
+  social_x?: string;
+  social_linkedin?: string;
+  social_instagram?: string;
+  social_facebook?: string;
+  status?: boolean;
+}) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  const { last_name, email, mobile_phone, ...rest } = data;
+  if (!last_name && !data.company) return { error: "last_name or company is required" };
+
+  try {
+    const target = await prismadb.crm_Targets.create({
+      data: { last_name: last_name ?? "", email, mobile_phone, ...rest, created_by: (session.user as any).id },
+    });
+    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+    return { data: target };
+  } catch (error) {
+    return { error: "Failed to create target" };
+  }
+};
+"use server";
+import { getSession } from "@/lib/auth-server";
+import { prismadb } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+export const updateTarget = async (data: {
+  id: string;
+  last_name?: string;
+  first_name?: string;
+  email?: string;
+  mobile_phone?: string;
+  office_phone?: string;
+  company?: string;
+  company_website?: string;
+  personal_website?: string;
+  position?: string;
+  social_x?: string;
+  social_linkedin?: string;
+  social_instagram?: string;
+  social_facebook?: string;
+  personal_email?: string;
+  company_email?: string;
+  company_phone?: string;
+  city?: string;
+  country?: string;
+  industry?: string;
+  employees?: string;
+  description?: string;
+  status?: boolean;
+}) => {
+  const session = await getSession();
+  if (!session) return { error: "Unauthorized" };
+
+  const { id, ...rest } = data;
+  if (!id) return { error: "id is required" };
+
+  try {
+    const target = await prismadb.crm_Targets.update({
+      where: { id },
+      data: { ...rest, updatedBy: (session.user as any).id },
+    });
+    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+    return { data: target };
+  } catch (error) {
+    return { error: "Failed to update target" };
+  }
+};
+
+exec
+/usr/bin/bash -lc 'rg -n "model crm_Targets|employees" prisma/schema.prisma -n -C 3' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '40,95p' app/[locale]/\\(routes\\)/campaigns/targets/components/NewTargetForm.tsx && sed -n '300,325p' app/[locale]/\\(routes\\)/campaigns/targets/components/NewTargetForm.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+26-  company_id           String?
+27-  description          String?
+28-  email                String?
+29:  employees            String?
+30-  fax                  String?
+31-  industry             String?   @db.Uuid
+32-  member_of            String?
+--
+1203-// CRM TARGETS FEATURE
+1204-// ============================================
+1205-
+1206:model crm_Targets {
+1207-  id               String    @id @default(uuid()) @db.Uuid
+1208-  first_name       String?
+1209-  last_name        String
+--
+1233-  city             String?
+1234-  country          String?
+1235-  industry         String?
+1236:  employees        String?
+1237-  description      String?
+1238-
+1239-  // Conversion tracking
+
+ succeeded in 0ms:
+    personal_email: z.string().optional(),
+    company_email:  z.string().optional(),
+    company_phone:  z.string().optional(),
+    city:           z.string().optional(),
+    country:        z.string().optional(),
+    industry:       z.string().optional(),
+    employees:      z.string().optional(),
+    description:    z.string().optional(),
+    status: z.boolean(),
+  });
+
+  type NewTargetFormValues = z.infer<typeof formSchema>;
+
+  const form = useForm<NewTargetFormValues>({
+    resolver: zodResolver(formSchema),
+    mode: "onBlur",
+    defaultValues: {
+      status: true,
+      personal_email: "",
+      company_email: "",
+      company_phone: "",
+      city: "",
+      country: "",
+      industry: "",
+      employees: "",
+      description: "",
+    },
+  });
+
+  const onSubmit = async (data: NewTargetFormValues) => {
+    if (!data.last_name && !data.company) {
+      form.setError("root.serverError", {
+        message: "Please provide either last name or company.",
+      });
+      return;
+    }
+    const result = await createTarget(data);
+    if (result?.error) {
+      form.setError("root.serverError", { message: result.error });
+    } else {
+      toast.success("Target created successfully");
+      form.reset({ status: true });
+      onFinish();
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 px-2">
+        <div className="grid grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="first_name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>First name</FormLabel>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField control={form.control} name="industry" render={({ field }) => (
+            <FormItem><FormLabel>Industry</FormLabel>
+              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+          <FormField control={form.control} name="employees" render={({ field }) => (
+            <FormItem><FormLabel>Employees</FormLabel>
+              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+              <FormMessage />
+            </FormItem>
+          )} />
+        </div>
+        <FormField control={form.control} name="description" render={({ field }) => (
+          <FormItem><FormLabel>Description</FormLabel>
+            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )} />
+        <FormField
+          control={form.control}
+
+exec
+/usr/bin/bash -lc 'rg -n "parseEmployeesValue|employees:.*row|Employees" docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md -C 4' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+374-company_phone: row.company_phone || null,
+375-city: row.city || null,
+376-country: row.country || null,
+377-industry: row.industry || null,
+378:employees: row.employees || null,
+379-description: row.description || null,
+380-```
+381-
+382-- [ ] **Step 5.3: Update `suggest-mapping.ts`**
+--
+444-{ key: "company_phone",  label: "Company Phone",  required: false },
+445-{ key: "city",           label: "City",           required: false },
+446-{ key: "country",        label: "Country",        required: false },
+447-{ key: "industry",       label: "Industry",       required: false },
+448:{ key: "employees",      label: "Employees",      required: false },
+449-{ key: "description",    label: "Description",    required: false },
+450-```
+451-
+452-- [ ] **Step 5.5: Commit**
+--
+527-      <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+528-    </FormItem>
+529-  )} />
+530-  <FormField control={form.control} name="employees" render={({ field }) => (
+531:    <FormItem><FormLabel>Employees</FormLabel>
+532-      <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+533-    </FormItem>
+534-  )} />
+535-</div>
+--
+561-{ name: "company_phone", displayName: "Company Phone",  description: "Main company switchboard number" },
+562-{ name: "city",          displayName: "City",           description: "Company HQ city" },
+563-{ name: "country",       displayName: "Country",        description: "Company HQ country" },
+564-{ name: "industry",      displayName: "Industry",       description: "Company industry / sector" },
+565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+566-{ name: "description",   displayName: "Description",    description: "Short company description" },
+567-```
+568-
+569-- [ ] **Step 6.4: Commit**
+
+exec
+/usr/bin/bash -lc 'rg -n "min.*max|employees" -S actions components app lib docs | head -n 80' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+docs/superpowers/specs/2026-04-05-products-module-design.md:205:  name: z.string().min(1).max(255),
+docs/superpowers/specs/2026-04-05-products-module-design.md:213:  tax_rate: z.coerce.number().min(0).max(100).optional(),
+docs/superpowers/specs/2026-04-05-products-module-design.md:256:| `name` | Required, min 1 char, max 255 |
+docs/superpowers/specs/2026-04-05-line-items-design.md:228:  name: z.string().min(1).max(255),
+lib/mcp/tools/crm-target-lists.ts:115:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-target-lists.ts:143:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-products.ts:63:      tax_rate: z.number().min(0).max(100).optional(),
+lib/mcp/tools/crm-products.ts:121:      tax_rate: z.number().min(0).max(100).optional(),
+lib/mcp/tools/crm-enrichment.ts:70:      contactIds: z.array(z.string().uuid()).min(1).max(100),
+lib/mcp/tools/crm-enrichment.ts:158:      targetIds: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md:48:**Change:** `id: z.string().min(5).max(30)` → `id: z.string().uuid()`
+docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md:21:| 2 | should create a new target with all fields | Open new target sheet, fill all field groups: first_name, last_name, email, email_2, mobile_phone, office_phone, home_phone, company, position, company_website, company_website_2, social_x, social_linkedin, social_instagram, social_facebook, city, country, industry, employees, description, status. Submit form, verify success toast |
+lib/mcp/helpers.ts:6:  limit: z.number().min(1).max(100).default(20),
+docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md:11:`targetFieldMap` in `inngest/functions/enrich-target.ts` has 10 fields. The API PATCH route (`app/api/crm/targets/[id]/route.ts`) has 20 fields after adding company-search fields. The 8 new fields — `personal_email`, `company_email`, `company_phone`, `industry`, `employees`, `description`, `city`, `country` — are silently dropped in bulk Inngest enrichment jobs.
+lib/enrichment/services/specialized-agents.ts:68:      yearFounded: z.number().min(1800).max(2024).optional(),
+lib/enrichment/services/specialized-agents.ts:70:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:102:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:142:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:171:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:204:      confidence: z.record(z.string(), z.number().min(0).max(1)),
+lib/enrichment/services/specialized-agents.ts:299:  schemaFields._confidence = z.record(z.string(), z.number().min(0).max(1));
+lib/enrichment/services/openai.ts:47:      confidenceProperties[`${field.name}_confidence`] = z.number().min(0).max(1);
+lib/enrichment/services/openai.ts:92:        confidence: z.number().min(0).max(1), // Confidence for this specific source
+lib/enrichment/services/openai.ts:98:        consensus_confidence: z.number().min(0).max(1), // Overall confidence
+lib/enrichment/services/openai.ts:137:        console.log(`[OPENAI] Content too long (${content.length} chars), trimming to ${MAX_CONTENT_CHARS} chars`);
+lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+lib/enrichment/services/openai.ts:373:        console.log(`[OPENAI] Content too long (${content.length} chars), trimming to ${MAX_CONTENT_CHARS} chars`);
+lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:54:  limit: z.number().min(1).max(100).default(20),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1085:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1143:      tax_rate: z.number().min(0).max(100).optional(),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1961:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:1986:      target_ids: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2080:      contactIds: z.array(z.string().uuid()).min(1).max(100),
+docs/superpowers/plans/2026-04-06-mcp-full-parity.md:2154:      targetIds: z.array(z.string().uuid()).min(1).max(100),
+lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+docs/superpowers/plans/2026-04-05-products-module.md:214:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-products-module.md:347:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:234:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:380:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-04-05-line-items.md:646:  name: z.string().min(1).max(255),
+docs/superpowers/plans/2026-04-05-line-items.md:787:  name: z.string().min(1).max(255).optional(),
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:65:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:97:('personal_email','company_email','company_phone','city','country','industry','employees','description','converted_at','converted_account_id','converted_contact_id');
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:362:employees?: string;
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:378:employees: row.employees || null,
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:393:  "city", "country", "industry", "employees", "description",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:425:// employees
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:426:headcount: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:427:numemployees: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:428:teamsize: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:429:companysize: "employees",
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:448:{ key: "employees",      label: "Employees",      required: false },
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:479:employees:      z.string().optional(),
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:530:  <FormField control={form.control} name="employees" render={({ field }) => (
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:531:    <FormItem><FormLabel>Employees</FormLabel>
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:565:{ name: "employees",     displayName: "Employees",      description: "Number of employees" },
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:628:          employees: target.employees ?? undefined,
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:765:- 11 new fields on crm_Targets: personal_email, company_email, company_phone, city, country, industry, employees, description + conversion tracking fields
+docs/superpowers/plans/2026-04-04-currency-support.md:691:  name: z.string().min(1, "Name is required").max(100),
+docs/superpowers/plans/2026-04-04-currency-support.md:692:  symbol: z.string().min(1).max(5),
+docs/superpowers/plans/2026-04-04-currency-support.md:1254:  title: z.string().min(3).max(255),
+lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+docs/superpowers/plans/2026-03-23-contact-enrichment.md:1040:          placeholder="Field name (e.g. Number of employees)"
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:63:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:72:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+docs/superpowers/plans/2026-03-26-enrichment-fixes.md:94:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+
+exec
+/usr/bin/bash -lc "awk 'NR==383 {print; for(i=1;i<=length("'$0);i++) printf "%s", (i%10); print ""}'"' .next/dev/server/chunks/ssr/_12nrsm3._.js" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    return `${parsed.min.toString()}-${parsed.max.toString()}`;
+123456789012345678901234567890123456789012345678901234567890123
+
+codex
+**Most Likely Root Cause**
+
+The import path for campaign targets crashes when processing the `employees` CSV field.
+
+The failing code is in `actions/crm/targets/import-targets.ts:11-17`:
+
+```ts
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+```
+
+The incident stack points directly to this function during `importTargets()` for `POST /en/campaigns/targets`. The observed error, `Cannot read properties of undefined (reading 'toString')`, means `parsed.min` was undefined when `.toString()` was called.
+
+**Why This Happened**
+
+`employees` is modeled elsewhere as a plain optional string:
+
+- Prisma: `crm_Targets.employees String?`
+- New/edit forms use free text with placeholder `50-200`
+- Existing planning docs show import should store `row.employees || null`
+
+But the importer assumes the CSV value is JSON shaped like:
+
+```json
+{ "min": 50, "max": 200 }
+```
+
+That assumption does not match the rest of the app. A CSV value such as `100`, `{}`, or another JSON value without `min` will parse successfully but leave `parsed.min` undefined, producing the exact incident error.
+
+**Trigger**
+
+A user imported a CSV from `/en/campaigns/targets` where the mapped `employees` column contained a value that was not a JSON object with both `min` and `max`.
+
+**Contributing Issue**
+
+The preview step only checks whether each row has `last_name` or `company`. It does not validate or normalize `employees`, so the user can reach the final import action with data that will crash server-side.
+
+**Confidence**
+
+High. The stack trace, compiled server output, and source code all converge on `parseEmployeesValue(row.employees)` inside the target CSV import action. The application’s schema and forms indicate `employees` should be treated as a string, not parsed as a JSON range object.
+tokens used
+38,525
+**Most Likely Root Cause**
+
+The import path for campaign targets crashes when processing the `employees` CSV field.
+
+The failing code is in `actions/crm/targets/import-targets.ts:11-17`:
+
+```ts
+function parseEmployeesValue(value?: string) {
+  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    min: number;
+    max: number;
+  };
+
+  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+}
+```
+
+The incident stack points directly to this function during `importTargets()` for `POST /en/campaigns/targets`. The observed error, `Cannot read properties of undefined (reading 'toString')`, means `parsed.min` was undefined when `.toString()` was called.
+
+**Why This Happened**
+
+`employees` is modeled elsewhere as a plain optional string:
+
+- Prisma: `crm_Targets.employees String?`
+- New/edit forms use free text with placeholder `50-200`
+- Existing planning docs show import should store `row.employees || null`
+
+But the importer assumes the CSV value is JSON shaped like:
+
+```json
+{ "min": 50, "max": 200 }
+```
+
+That assumption does not match the rest of the app. A CSV value such as `100`, `{}`, or another JSON value without `min` will parse successfully but leave `parsed.min` undefined, producing the exact incident error.
+
+**Trigger**
+
+A user imported a CSV from `/en/campaigns/targets` where the mapped `employees` column contained a value that was not a JSON object with both `min` and `max`.
+
+**Contributing Issue**
+
+The preview step only checks whether each row has `last_name` or `company`. It does not validate or normalize `employees`, so the user can reach the final import action with data that will crash server-side.
+
+**Confidence**
+
+High. The stack trace, compiled server output, and source code all converge on `parseEmployeesValue(row.employees)` inside the target CSV import action. The application’s schema and forms indicate `employees` should be treated as a string, not parsed as a JSON range object.

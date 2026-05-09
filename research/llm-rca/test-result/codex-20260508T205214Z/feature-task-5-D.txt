@@ -1,0 +1,1543 @@
+run_name: feature-task-5-D
+case_name: feature-task-5
+variant: D
+target_branch: feature/task-5
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:15:53Z
+elapsed_seconds: 66
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-5/D/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `parseEmployeesValue()` in `actions/crm/targets/import-targets.ts` throws during CSV target import when the `employees` value is missing, empty, or not strict JSON.
+
+The failure was introduced in commit `9790f4c1` by this new path:
+
+```ts
+const employees = parseEmployeesValue(row.employees);
+```
+
+`parseEmployeesValue()` does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+That means common CSV inputs fail before import reaches the database:
+
+- missing/skipped `employees` column -> parses `"null"` -> `parsed.min` throws `TypeError`
+- blank employees cell -> same `TypeError`
+- existing range like `50-200` -> `JSON.parse()` throws `SyntaxError`
+- plain number like `50` -> parses as number, then `parsed.min` is invalid
+
+The client preview does not validate or transform `employees`; it only checks `last_name` / `company`, so users can reach the final Import button with rows that will crash server-side.
+
+The schema also confirms `crm_Targets.employees` is just `String?`, and the existing target form uses a free-text placeholder like `50-200`, so requiring a JSON object `{ min, max }` during import is inconsistent with the rest of the app.
+
+The observability message `"Unhandled request error"` matches this: the exception occurs inside the server action and is picked up by Next’s `onRequestError` instrumentation. The null `error.name/message/stack` in the incident payload appears to be a logging/serialization limitation, not evidence that the thrown value was actually null.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0972-6995-77e0-851b-e12e87e96717
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "trace:b7fc50998917f6d53bb5de0ae8776eb5",
+      "eventCount": 1,
+      "firstSeen": "2026-05-04T19:04:06.332Z",
+      "lastSeen": "2026-05-04T19:04:06.332Z",
+      "events": [
+        {
+          "time": "2026-05-04T19:04:06.332Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": null,
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Unhandled request error",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": "b7fc50998917f6d53bb5de0ae8776eb5",
+            "spanId": "af6b25b5543af455",
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ],
+  "repositoryContext": {
+    "branch": "feature/task-5",
+    "commit": "9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2",
+    "changedFiles": [
+      "actions/crm/targets/import-targets.ts",
+      "components/modals/ImportTargetsModal.tsx"
+    ],
+    "diffStat": "actions/crm/targets/import-targets.ts    | 28 ++++++++++++++++++++++------\n components/modals/ImportTargetsModal.tsx |  9 +++++++++\n 2 files changed, 31 insertions(+), 6 deletions(-)"
+  }
+}
+```
+
+codex
+I’ll inspect the incident’s changed files and surrounding error-handling paths, keeping this read-only and returning a textual root-cause report. The project-specific context-mode tools named in `AGENTS.md` are not available in this session, so I’ll use local read-only shell commands with compact output.
+exec
+/usr/bin/bash -lc 'git status --short && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+feature/task-5
+9790f4c1a07f8e6f46df8cf643cd5e516b93d2a2
+
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '.claude/skills/**/SKILL.md' -g '.claude/commands/write-plan.md'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+AGENTS.md
+
+codex
+The working tree is on the exact branch and commit from the incident context. I’m going to compare that commit’s touched files against the parent and then trace how the import action is called/logged.
+exec
+/usr/bin/bash -lc 'git diff --stat HEAD''^ HEAD -- actions/crm/targets/import-targets.ts components/modals/ImportTargetsModal.tsx' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git diff --unified=80 HEAD''^ HEAD -- actions/crm/targets/import-targets.ts' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git diff --unified=80 HEAD''^ HEAD -- components/modals/ImportTargetsModal.tsx' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ actions/crm/targets/import-targets.ts    | 16 +++++++++++++---
+ components/modals/ImportTargetsModal.tsx |  3 +++
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+ succeeded in 0ms:
+diff --git a/actions/crm/targets/import-targets.ts b/actions/crm/targets/import-targets.ts
+index 007cf72..60ba5c8 100644
+--- a/actions/crm/targets/import-targets.ts
++++ b/actions/crm/targets/import-targets.ts
+@@ -1,87 +1,97 @@
+ "use server";
+ import { getSession } from "@/lib/auth-server";
+ 
+ import { prismadb } from "@/lib/prisma";
+ import Papa from "papaparse";
+ 
+ function normalizeCellValue(value?: string) {
+   return typeof value === "string" ? value.trim() : "";
+ }
+ 
++function parseEmployeesValue(value?: string) {
++  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
++    min: number;
++    max: number;
++  };
++
++  return `${parsed.min.toString()}-${parsed.max.toString()}`;
++}
++
+ export async function importTargets(
+   formData: FormData
+ ): Promise<{ imported: number; skipped: number; errors: string[] }> {
+   const session = await getSession();
+   if (!session) throw new Error("Unauthorized");
+ 
+   const file = formData.get("file") as File | null;
+   if (!file) throw new Error("No file provided");
+ 
+   const mappingRaw = formData.get("mapping") as string | null;
+   const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+ 
+   const text = await file.text();
+   const { data } = Papa.parse<Record<string, string>>(text, {
+     header: true,
+     skipEmptyLines: true,
+   });
+ 
+   const valid: any[] = [];
+   const errors: string[] = [];
+ 
+   data.forEach((rawRow, index) => {
+     const row: Record<string, string> = {};
+     if (Object.keys(mapping).length > 0) {
+       Object.entries(mapping).forEach(([csvCol, targetField]) => {
+         if (targetField && rawRow[csvCol] !== undefined) {
+           row[targetField] = rawRow[csvCol];
+         }
+       });
+     } else {
+       Object.assign(row, rawRow);
+     }
+ 
+     const last_name = normalizeCellValue(row.last_name);
+     const email = normalizeCellValue(row.email).toLowerCase();
+     const mobile_phone = normalizeCellValue(row.mobile_phone);
+-    const company = row.company?.trim();
++    const company = normalizeCellValue(row.company);
+     const company_website = normalizeCellValue(row.company_website);
+-    const companyDomain = company_website || company.trim().toLowerCase();
++    const companyDomain = company_website || company.toLowerCase() || null;
++    const employees = parseEmployeesValue(row.employees);
+ 
+     if (!last_name && !company) {
+       errors.push(`Row ${index + 2}: missing last_name or company`);
+       return;
+     }
+ 
+     valid.push({
+       last_name: last_name ?? "",
+       first_name: row.first_name || null,
+       email: email || null,
+       mobile_phone: mobile_phone || null,
+       office_phone: row.office_phone || null,
+       company: row.company || null,
+       position: row.position || null,
+       company_website: companyDomain || null,
+       personal_website: row.personal_website || null,
+       social_linkedin: row.social_linkedin || null,
+       social_x: row.social_x || null,
+       social_instagram: row.social_instagram || null,
+       social_facebook: row.social_facebook || null,
+       personal_email: row.personal_email || null,
+       company_email: row.company_email || null,
+       company_phone: row.company_phone || null,
+       city: row.city || null,
+       country: row.country || null,
+       industry: row.industry || null,
+-      employees: row.employees || null,
++      employees: employees || null,
+       description: row.description || null,
+       created_by: (session.user as any).id,
+     });
+   });
+ 
+   if (valid.length > 0) {
+     await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+   }
+ 
+   return { imported: valid.length, skipped: errors.length, errors };
+ }
+
+ succeeded in 0ms:
+diff --git a/components/modals/ImportTargetsModal.tsx b/components/modals/ImportTargetsModal.tsx
+index f822d06..31c2329 100644
+--- a/components/modals/ImportTargetsModal.tsx
++++ b/components/modals/ImportTargetsModal.tsx
+@@ -216,160 +216,163 @@ const ImportTargetsModal = () => {
+             {step === "preview" && "Review the import summary before proceeding."}
+           </DialogDescription>
+         </DialogHeader>
+ 
+         {/* Step 1: Upload */}
+         {step === "upload" && (
+           <div className="space-y-4 py-2">
+             <div className="border-2 border-dashed rounded-md p-8 text-center">
+               <input
+                 ref={fileInputRef}
+                 type="file"
+                 accept=".csv"
+                 onChange={handleFileChange}
+                 className="hidden"
+               />
+               <Button
+                 variant="outline"
+                 onClick={() => fileInputRef.current?.click()}
+               >
+                 Select CSV file
+               </Button>
+               {selectedFile && (
+                 <p className="mt-2 text-sm text-muted-foreground">
+                   Selected: {selectedFile.name}
+                 </p>
+               )}
+             </div>
+           </div>
+         )}
+ 
+         {/* Step 2: Map Columns */}
+         {step === "mapping" && (
+           <div className="space-y-3 py-2">
+             {isSuggesting ? (
+               <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+                 <Loader2 className="h-5 w-5 animate-spin" />
+                 <span>AI is suggesting column mappings…</span>
+               </div>
+             ) : (
+               <div className="space-y-1">
+                 <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-1 pb-1">
+                   <span>CRM Field</span>
+                   <span>CSV Column</span>
+                 </div>
+                 {TARGET_FIELDS.map((field) => (
+                   <div key={field.key} className="grid grid-cols-2 gap-2 items-center">
+                     <span className="text-sm">
+                       {field.label}
+                       {field.required && (
+                         <span className="text-destructive ml-1">*</span>
+                       )}
+                     </span>
+                     <Select
+                       value={mapping[field.key] ?? SKIP_VALUE}
+                       onValueChange={(val) =>
+                         setMapping((prev) => ({ ...prev, [field.key]: val }))
+                       }
+                     >
+                       <SelectTrigger className="h-8 text-sm">
+                         <SelectValue placeholder="— skip —" />
+                       </SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value={SKIP_VALUE}>— skip —</SelectItem>
+                         {csvHeaders.map((h) => (
+                           <SelectItem key={h} value={h}>
+                             {h}
+                           </SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 ))}
+                 <p className="text-xs text-muted-foreground pt-1">
+                   <span className="text-destructive">*</span> last_name or company is required per row.
+                 </p>
+                 {previewRows.length > 0 && (
+                   <p className="text-xs text-muted-foreground">
+                     Parsed {csvRows.length} row{csvRows.length !== 1 ? "s" : ""}. Previewing first {previewRows.length}.
+                   </p>
+                 )}
++                <p className="text-xs text-muted-foreground">
++                  Employee ranges from legacy imports are expected in structured form.
++                </p>
+               </div>
+             )}
+           </div>
+         )}
+ 
+         {/* Step 3: Preview */}
+         {step === "preview" && preview && (
+           <div className="space-y-4 py-2">
+             <div className="rounded-md border p-4 space-y-1">
+               <p className="text-sm font-medium">
+                 Ready to import{" "}
+                 <span className="text-green-600 dark:text-green-400">
+                   {preview.valid} row{preview.valid !== 1 ? "s" : ""}
+                 </span>
+                 {preview.skipped > 0 && (
+                   <>
+                     {" "}— {" "}
+                     <span className="text-yellow-600 dark:text-yellow-400">
+                       {preview.skipped} row{preview.skipped !== 1 ? "s" : ""} will be skipped
+                     </span>
+                   </>
+                 )}
+                 .
+               </p>
+               {preview.skipReasons.length > 0 && (
+                 <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5 pt-1">
+                   {preview.skipReasons.map((r, i) => (
+                     <li key={i}>{r}</li>
+                   ))}
+                   {preview.skipped > preview.skipReasons.length && (
+                     <li>…and {preview.skipped - preview.skipReasons.length} more</li>
+                   )}
+                 </ul>
+               )}
+             </div>
+             {preview.valid === 0 && (
+               <p className="text-sm text-destructive">
+                 No valid rows to import. Go back and adjust your column mapping.
+               </p>
+             )}
+           </div>
+         )}
+ 
+         <DialogFooter className="flex gap-2 sm:gap-0">
+           {step === "upload" && (
+             <Button variant="outline" onClick={() => handleOpenChange(false)}>
+               Cancel
+             </Button>
+           )}
+ 
+           {step === "mapping" && (
+             <>
+               <Button variant="outline" onClick={() => setStep("upload")}>
+                 Back
+               </Button>
+               <Button
+                 onClick={() => setStep("preview")}
+                 disabled={isSuggesting}
+               >
+                 Next
+               </Button>
+             </>
+           )}
+ 
+           {step === "preview" && (
+             <>
+               <Button variant="outline" onClick={() => setStep("mapping")} disabled={isLoading}>
+                 Back
+               </Button>
+               <Button
+                 onClick={handleImport}
+                 disabled={isLoading || !preview || preview.valid === 0}
+               >
+                 {isLoading ? (
+                   <>
+                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                     Importing…
+                   </>
+                 ) : (
+                   "Import"
+
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/import-targets.ts | sed -n '1,130p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba components/modals/ImportTargetsModal.tsx | sed -n '1,220p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	function parseEmployeesValue(value?: string) {
+    12	  const parsed = JSON.parse(normalizeCellValue(value) || "null") as {
+    13	    min: number;
+    14	    max: number;
+    15	  };
+    16	
+    17	  return `${parsed.min.toString()}-${parsed.max.toString()}`;
+    18	}
+    19	
+    20	export async function importTargets(
+    21	  formData: FormData
+    22	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    23	  const session = await getSession();
+    24	  if (!session) throw new Error("Unauthorized");
+    25	
+    26	  const file = formData.get("file") as File | null;
+    27	  if (!file) throw new Error("No file provided");
+    28	
+    29	  const mappingRaw = formData.get("mapping") as string | null;
+    30	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    31	
+    32	  const text = await file.text();
+    33	  const { data } = Papa.parse<Record<string, string>>(text, {
+    34	    header: true,
+    35	    skipEmptyLines: true,
+    36	  });
+    37	
+    38	  const valid: any[] = [];
+    39	  const errors: string[] = [];
+    40	
+    41	  data.forEach((rawRow, index) => {
+    42	    const row: Record<string, string> = {};
+    43	    if (Object.keys(mapping).length > 0) {
+    44	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    45	        if (targetField && rawRow[csvCol] !== undefined) {
+    46	          row[targetField] = rawRow[csvCol];
+    47	        }
+    48	      });
+    49	    } else {
+    50	      Object.assign(row, rawRow);
+    51	    }
+    52	
+    53	    const last_name = normalizeCellValue(row.last_name);
+    54	    const email = normalizeCellValue(row.email).toLowerCase();
+    55	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    56	    const company = normalizeCellValue(row.company);
+    57	    const company_website = normalizeCellValue(row.company_website);
+    58	    const companyDomain = company_website || company.toLowerCase() || null;
+    59	    const employees = parseEmployeesValue(row.employees);
+    60	
+    61	    if (!last_name && !company) {
+    62	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    63	      return;
+    64	    }
+    65	
+    66	    valid.push({
+    67	      last_name: last_name ?? "",
+    68	      first_name: row.first_name || null,
+    69	      email: email || null,
+    70	      mobile_phone: mobile_phone || null,
+    71	      office_phone: row.office_phone || null,
+    72	      company: row.company || null,
+    73	      position: row.position || null,
+    74	      company_website: companyDomain || null,
+    75	      personal_website: row.personal_website || null,
+    76	      social_linkedin: row.social_linkedin || null,
+    77	      social_x: row.social_x || null,
+    78	      social_instagram: row.social_instagram || null,
+    79	      social_facebook: row.social_facebook || null,
+    80	      personal_email: row.personal_email || null,
+    81	      company_email: row.company_email || null,
+    82	      company_phone: row.company_phone || null,
+    83	      city: row.city || null,
+    84	      country: row.country || null,
+    85	      industry: row.industry || null,
+    86	      employees: employees || null,
+    87	      description: row.description || null,
+    88	      created_by: (session.user as any).id,
+    89	    });
+    90	  });
+    91	
+    92	  if (valid.length > 0) {
+    93	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    94	  }
+    95	
+    96	  return { imported: valid.length, skipped: errors.length, errors };
+    97	}
+
+ succeeded in 0ms:
+     1	"use client";
+     2	
+     3	import { useState, useRef, useCallback } from "react";
+     4	import { useRouter } from "next/navigation";
+     5	import { importTargets } from "@/actions/crm/targets/import-targets";
+     6	import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+     7	import Papa from "papaparse";
+     8	import { toast } from "sonner";
+     9	import { Button } from "@/components/ui/button";
+    10	import {
+    11	  Dialog,
+    12	  DialogContent,
+    13	  DialogDescription,
+    14	  DialogFooter,
+    15	  DialogHeader,
+    16	  DialogTitle,
+    17	  DialogTrigger,
+    18	} from "@/components/ui/dialog";
+    19	import {
+    20	  Select,
+    21	  SelectContent,
+    22	  SelectItem,
+    23	  SelectTrigger,
+    24	  SelectValue,
+    25	} from "@/components/ui/select";
+    26	import { Upload, Loader2 } from "lucide-react";
+    27	
+    28	type Step = "upload" | "mapping" | "preview";
+    29	
+    30	interface TargetField {
+    31	  key: string;
+    32	  label: string;
+    33	  required: boolean;
+    34	}
+    35	
+    36	const TARGET_FIELDS: TargetField[] = [
+    37	  { key: "last_name", label: "Last Name", required: false },
+    38	  { key: "first_name", label: "First Name", required: false },
+    39	  { key: "email", label: "Email", required: false },
+    40	  { key: "mobile_phone", label: "Mobile Phone", required: false },
+    41	  { key: "office_phone", label: "Office Phone", required: false },
+    42	  { key: "company", label: "Company", required: false },
+    43	  { key: "position", label: "Position", required: false },
+    44	  { key: "company_website", label: "Company Website", required: false },
+    45	  { key: "personal_website", label: "Personal Website", required: false },
+    46	  { key: "social_linkedin", label: "LinkedIn", required: false },
+    47	  { key: "social_x", label: "X / Twitter", required: false },
+    48	  { key: "social_instagram", label: "Instagram", required: false },
+    49	  { key: "social_facebook", label: "Facebook", required: false },
+    50	  { key: "personal_email", label: "Personal Email", required: false },
+    51	  { key: "company_email",  label: "Company Email",  required: false },
+    52	  { key: "company_phone",  label: "Company Phone",  required: false },
+    53	  { key: "city",           label: "City",           required: false },
+    54	  { key: "country",        label: "Country",        required: false },
+    55	  { key: "industry",       label: "Industry",       required: false },
+    56	  { key: "employees",      label: "Employees",      required: false },
+    57	  { key: "description",    label: "Description",    required: false },
+    58	];
+    59	
+    60	const SKIP_VALUE = "__skip__";
+    61	
+    62	const ImportTargetsModal = () => {
+    63	  const router = useRouter();
+    64	  const fileInputRef = useRef<HTMLInputElement>(null);
+    65	
+    66	  const [open, setOpen] = useState(false);
+    67	  const [step, setStep] = useState<Step>("upload");
+    68	  const [isLoading, setIsLoading] = useState(false);
+    69	  const [isSuggesting, setIsSuggesting] = useState(false);
+    70	
+    71	  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    72	  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+    73	  const [csvRows, setCsvRows] = useState<Record<string, string>[]>([]);
+    74	  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+    75	  const [mapping, setMapping] = useState<Record<string, string>>({});
+    76	  const previewRows = csvRows.slice(0, 3);
+    77	
+    78	  const resetState = () => {
+    79	    setStep("upload");
+    80	    setSelectedFile(null);
+    81	    setCsvHeaders([]);
+    82	    setCsvRows([]);
+    83	    setMapping({});
+    84	    setIsLoading(false);
+    85	    setIsSuggesting(false);
+    86	    if (fileInputRef.current) fileInputRef.current.value = "";
+    87	  };
+    88	
+    89	  const handleOpenChange = (val: boolean) => {
+    90	    setOpen(val);
+    91	    if (!val) resetState();
+    92	  };
+    93	
+    94	  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    95	    const file = e.target.files?.[0];
+    96	    if (!file) return;
+    97	    setSelectedFile(file);
+    98	
+    99	    Papa.parse<Record<string, string>>(file, {
+   100	      header: true,
+   101	      skipEmptyLines: true,
+   102	      complete: (results) => {
+   103	        const headers = results.meta.fields ?? [];
+   104	        setCsvHeaders(headers);
+   105	        setCsvRows(results.data);
+   106	        fetchSuggestedMapping(headers);
+   107	      },
+   108	    });
+   109	  };
+   110	
+   111	  const fetchSuggestedMapping = useCallback(async (headers: string[]) => {
+   112	    setIsSuggesting(true);
+   113	    setStep("mapping");
+   114	    try {
+   115	      const res = await suggestMapping(headers);
+   116	      const suggested: Record<string, string | null> = res.mapping ?? {};
+   117	      // Convert from { csvHeader -> targetField } to { targetField -> csvHeader }
+   118	      const newMapping: Record<string, string> = {};
+   119	      for (const field of TARGET_FIELDS) {
+   120	        newMapping[field.key] = SKIP_VALUE;
+   121	      }
+   122	      for (const [csvHeader, targetField] of Object.entries(suggested)) {
+   123	        if (targetField && newMapping[targetField] === SKIP_VALUE) {
+   124	          newMapping[targetField] = csvHeader;
+   125	        }
+   126	      }
+   127	      setMapping(newMapping);
+   128	    } catch {
+   129	      // Set all to skip on error
+   130	      const newMapping: Record<string, string> = {};
+   131	      for (const field of TARGET_FIELDS) {
+   132	        newMapping[field.key] = SKIP_VALUE;
+   133	      }
+   134	      setMapping(newMapping);
+   135	    } finally {
+   136	      setIsSuggesting(false);
+   137	    }
+   138	  }, []);
+   139	
+   140	  const computePreview = () => {
+   141	    let valid = 0;
+   142	    let skipped = 0;
+   143	    const skipReasons: string[] = [];
+   144	
+   145	    for (let i = 0; i < csvRows.length; i++) {
+   146	      const raw = csvRows[i];
+   147	      const row: Record<string, string> = {};
+   148	      for (const field of TARGET_FIELDS) {
+   149	        const csvCol = mapping[field.key];
+   150	        if (csvCol && csvCol !== SKIP_VALUE) {
+   151	          row[field.key] = raw[csvCol] ?? "";
+   152	        }
+   153	      }
+   154	
+   155	      if (!row.last_name && !row.company) {
+   156	        skipped++;
+   157	        if (skipReasons.length < 3) skipReasons.push(`Row ${i + 2}: missing Last Name or Company`);
+   158	        continue;
+   159	      }
+   160	      valid++;
+   161	    }
+   162	
+   163	    return { valid, skipped, skipReasons };
+   164	  };
+   165	
+   166	  const handleImport = async () => {
+   167	    if (!selectedFile) return;
+   168	    setIsLoading(true);
+   169	
+   170	    // Build mapping as { csvHeader -> targetField } for the API
+   171	    const apiMapping: Record<string, string> = {};
+   172	    for (const [targetField, csvCol] of Object.entries(mapping)) {
+   173	      if (csvCol && csvCol !== SKIP_VALUE) {
+   174	        apiMapping[csvCol] = targetField;
+   175	      }
+   176	    }
+   177	
+   178	    const formData = new FormData();
+   179	    formData.append("file", selectedFile);
+   180	    formData.append("mapping", JSON.stringify(apiMapping));
+   181	
+   182	    try {
+   183	      const { imported, skipped, errors } = await importTargets(formData);
+   184	      toast.success(`Imported: ${imported}, Skipped: ${skipped}${errors.length > 0 ? `. Errors: ${errors.slice(0, 3).join("; ")}` : ""}`);
+   185	      setOpen(false);
+   186	      resetState();
+   187	      router.refresh();
+   188	    } catch (error: any) {
+   189	      toast.error(error?.message || "Something went wrong");
+   190	    } finally {
+   191	      setIsLoading(false);
+   192	    }
+   193	  };
+   194	
+   195	  const preview = step === "preview" ? computePreview() : null;
+   196	
+   197	  return (
+   198	    <Dialog open={open} onOpenChange={handleOpenChange}>
+   199	      <DialogTrigger asChild>
+   200	        <Button variant="outline" size="sm">
+   201	          <Upload className="h-4 w-4 mr-2" />
+   202	          Import CSV
+   203	        </Button>
+   204	      </DialogTrigger>
+   205	      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+   206	        <DialogHeader>
+   207	          <DialogTitle>
+   208	            Import Targets from CSV
+   209	            <span className="ml-2 text-sm font-normal text-muted-foreground">
+   210	              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+   211	            </span>
+   212	          </DialogTitle>
+   213	          <DialogDescription>
+   214	            {step === "upload" && "Select a CSV file to import targets."}
+   215	            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+   216	            {step === "preview" && "Review the import summary before proceeding."}
+   217	          </DialogDescription>
+   218	        </DialogHeader>
+   219	
+   220	        {/* Step 1: Upload */}
+
+exec
+/usr/bin/bash -lc "rg -n \"Unhandled request error|importTargets\\(|handleImport|mapping\" -S actions components lib app middleware.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: middleware.ts: No such file or directory (os error 2)
+lib/enrichment/strategies/email-parser.ts:26:    // Known company mappings for proper capitalization
+components/modals/ImportTargetsModal.tsx:6:import { suggestMapping } from "@/actions/crm/targets/suggest-mapping";
+components/modals/ImportTargetsModal.tsx:28:type Step = "upload" | "mapping" | "preview";
+components/modals/ImportTargetsModal.tsx:74:  // mapping: targetField -> csvHeader (or SKIP_VALUE)
+components/modals/ImportTargetsModal.tsx:75:  const [mapping, setMapping] = useState<Record<string, string>>({});
+components/modals/ImportTargetsModal.tsx:113:    setStep("mapping");
+components/modals/ImportTargetsModal.tsx:116:      const suggested: Record<string, string | null> = res.mapping ?? {};
+components/modals/ImportTargetsModal.tsx:149:        const csvCol = mapping[field.key];
+components/modals/ImportTargetsModal.tsx:166:  const handleImport = async () => {
+components/modals/ImportTargetsModal.tsx:170:    // Build mapping as { csvHeader -> targetField } for the API
+components/modals/ImportTargetsModal.tsx:172:    for (const [targetField, csvCol] of Object.entries(mapping)) {
+components/modals/ImportTargetsModal.tsx:180:    formData.append("mapping", JSON.stringify(apiMapping));
+components/modals/ImportTargetsModal.tsx:183:      const { imported, skipped, errors } = await importTargets(formData);
+components/modals/ImportTargetsModal.tsx:210:              Step {step === "upload" ? 1 : step === "mapping" ? 2 : 3} of 3
+components/modals/ImportTargetsModal.tsx:215:            {step === "mapping" && "Map your CSV columns to target fields. AI has pre-filled suggestions — adjust as needed."}
+components/modals/ImportTargetsModal.tsx:247:        {step === "mapping" && (
+components/modals/ImportTargetsModal.tsx:252:                <span>AI is suggesting column mappings…</span>
+components/modals/ImportTargetsModal.tsx:269:                      value={mapping[field.key] ?? SKIP_VALUE}
+components/modals/ImportTargetsModal.tsx:336:                No valid rows to import. Go back and adjust your column mapping.
+components/modals/ImportTargetsModal.tsx:349:          {step === "mapping" && (
+components/modals/ImportTargetsModal.tsx:365:              <Button variant="outline" onClick={() => setStep("mapping")} disabled={isLoading}>
+components/modals/ImportTargetsModal.tsx:369:                onClick={handleImport}
+lib/enrichment/agent-architecture/tools/website-scraper-tool.ts:203:  // Industry keywords mapping
+lib/enrichment/agent-architecture/tools/email-parser-tool.ts:58:  // Known company mappings for proper capitalization
+lib/enrichment/agent-architecture/orchestrator.ts:1957:    // Known company mappings for proper capitalization
+lib/enrichment/agent-architecture/orchestrator.ts:2165:    // Known company mappings
+actions/crm/targets/import-targets.ts:20:export async function importTargets(
+actions/crm/targets/import-targets.ts:29:  const mappingRaw = formData.get("mapping") as string | null;
+actions/crm/targets/import-targets.ts:30:  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+actions/crm/targets/import-targets.ts:43:    if (Object.keys(mapping).length > 0) {
+actions/crm/targets/import-targets.ts:44:      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+actions/crm/targets/suggest-mapping.ts:7:const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+actions/crm/targets/suggest-mapping.ts:115:              "You are a data mapping assistant. Given a list of CSV column headers and a list of CRM field names, return a JSON object mapping each CSV header to the best matching CRM field, or null if no match. Only use the provided CRM field names as values. Return only valid JSON, no explanation.",
+actions/crm/targets/suggest-mapping.ts:129:        const mapping: Record<string, string | null> = {};
+actions/crm/targets/suggest-mapping.ts:132:          mapping[header] = suggested && TARGET_FIELDS.includes(suggested) ? suggested : null;
+actions/crm/targets/suggest-mapping.ts:134:        return { mapping };
+actions/crm/targets/suggest-mapping.ts:137:      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+actions/crm/targets/suggest-mapping.ts:142:  const mapping: Record<string, string | null> = {};
+actions/crm/targets/suggest-mapping.ts:144:    mapping[header] = fuzzyMatch(header);
+actions/crm/targets/suggest-mapping.ts:146:  return { mapping };
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:115:  const handleImport = async () => {
+app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx:200:            <Button onClick={handleImport} disabled={isImporting}>
+
+codex
+The strongest signal so far is in the server action: the new employee parser runs before row validation and assumes every row has a JSON object with `min` and `max`. I’m checking schema/tests/logging to distinguish that from a database-shape or observability-only issue.
+exec
+/usr/bin/bash -lc 'git show --name-status --oneline --decorate --stat HEAD' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "rg -n \"crm_Targets|model crm_Targets|employees|createMany\\({ data: valid|Unhandled request error|createLogger|logger\\.error\" -S prisma actions components app lib instrumentation* middleware* next.config.*" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c (HEAD -> feature/task-5, origin/feature/task-5) Handle legacy employee range imports
+M	actions/crm/targets/import-targets.ts
+M	components/modals/ImportTargetsModal.tsx
+
+exec
+/usr/bin/bash -lc 'git show HEAD''^:actions/crm/targets/import-targets.ts | nl -ba | sed -n '"'1,110p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: regex parse error:
+    (?:crm_Targets|model crm_Targets|employees|createMany\({ data: valid|Unhandled request error|createLogger|logger\.error)
+                                                             ^
+error: repetition quantifier expects a valid decimal
+
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	
+     4	import { prismadb } from "@/lib/prisma";
+     5	import Papa from "papaparse";
+     6	
+     7	function normalizeCellValue(value?: string) {
+     8	  return typeof value === "string" ? value.trim() : "";
+     9	}
+    10	
+    11	export async function importTargets(
+    12	  formData: FormData
+    13	): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    14	  const session = await getSession();
+    15	  if (!session) throw new Error("Unauthorized");
+    16	
+    17	  const file = formData.get("file") as File | null;
+    18	  if (!file) throw new Error("No file provided");
+    19	
+    20	  const mappingRaw = formData.get("mapping") as string | null;
+    21	  const mapping: Record<string, string> = mappingRaw ? JSON.parse(mappingRaw) : {};
+    22	
+    23	  const text = await file.text();
+    24	  const { data } = Papa.parse<Record<string, string>>(text, {
+    25	    header: true,
+    26	    skipEmptyLines: true,
+    27	  });
+    28	
+    29	  const valid: any[] = [];
+    30	  const errors: string[] = [];
+    31	
+    32	  data.forEach((rawRow, index) => {
+    33	    const row: Record<string, string> = {};
+    34	    if (Object.keys(mapping).length > 0) {
+    35	      Object.entries(mapping).forEach(([csvCol, targetField]) => {
+    36	        if (targetField && rawRow[csvCol] !== undefined) {
+    37	          row[targetField] = rawRow[csvCol];
+    38	        }
+    39	      });
+    40	    } else {
+    41	      Object.assign(row, rawRow);
+    42	    }
+    43	
+    44	    const last_name = normalizeCellValue(row.last_name);
+    45	    const email = normalizeCellValue(row.email).toLowerCase();
+    46	    const mobile_phone = normalizeCellValue(row.mobile_phone);
+    47	    const company = row.company?.trim();
+    48	    const company_website = normalizeCellValue(row.company_website);
+    49	    const companyDomain = company_website || company.trim().toLowerCase();
+    50	
+    51	    if (!last_name && !company) {
+    52	      errors.push(`Row ${index + 2}: missing last_name or company`);
+    53	      return;
+    54	    }
+    55	
+    56	    valid.push({
+    57	      last_name: last_name ?? "",
+    58	      first_name: row.first_name || null,
+    59	      email: email || null,
+    60	      mobile_phone: mobile_phone || null,
+    61	      office_phone: row.office_phone || null,
+    62	      company: row.company || null,
+    63	      position: row.position || null,
+    64	      company_website: companyDomain || null,
+    65	      personal_website: row.personal_website || null,
+    66	      social_linkedin: row.social_linkedin || null,
+    67	      social_x: row.social_x || null,
+    68	      social_instagram: row.social_instagram || null,
+    69	      social_facebook: row.social_facebook || null,
+    70	      personal_email: row.personal_email || null,
+    71	      company_email: row.company_email || null,
+    72	      company_phone: row.company_phone || null,
+    73	      city: row.city || null,
+    74	      country: row.country || null,
+    75	      industry: row.industry || null,
+    76	      employees: row.employees || null,
+    77	      description: row.description || null,
+    78	      created_by: (session.user as any).id,
+    79	    });
+    80	  });
+    81	
+    82	  if (valid.length > 0) {
+    83	    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+    84	  }
+    85	
+    86	  return { imported: valid.length, skipped: errors.length, errors };
+    87	}
+
+exec
+/usr/bin/bash -lc 'rg -n "model crm_Targets|crm_Targets|employees" prisma actions components app lib -S' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+prisma/schema.prisma:29:  employees            String?
+prisma/schema.prisma:49:  converted_targets  crm_Targets[]         @relation("target_converted_account")
+prisma/schema.prisma:145:  target            crm_Targets       @relation(fields: [targetId], references: [id])
+prisma/schema.prisma:169:  target   crm_Targets    @relation(fields: [targetId], references: [id], onDelete: Cascade)
+prisma/schema.prisma:383:  target   crm_Targets        @relation(fields: [target_id], references: [id])
+prisma/schema.prisma:491:  converted_targets     crm_Targets[]            @relation("target_converted_contact")
+prisma/schema.prisma:956:  created_targets      crm_Targets[]         @relation("created_targets")
+prisma/schema.prisma:1206:model crm_Targets {
+prisma/schema.prisma:1236:  employees        String?
+prisma/schema.prisma:1287:  target      crm_Targets     @relation(fields: [target_id], references: [id], onDelete: Cascade)
+lib/enrichment/e2b/agent-script.ts:110:    "employees": "string or null",
+lib/mcp/tools/crm-targets.ts:21:        prismadb.crm_Targets.findMany({
+lib/mcp/tools/crm-targets.ts:26:        prismadb.crm_Targets.count({ where }),
+lib/mcp/tools/crm-targets.ts:36:      const target = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:62:        prismadb.crm_Targets.findMany({
+lib/mcp/tools/crm-targets.ts:67:        prismadb.crm_Targets.count({ where }),
+lib/mcp/tools/crm-targets.ts:97:      const target = await prismadb.crm_Targets.create({
+lib/mcp/tools/crm-targets.ts:129:      const existing = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:134:      const target = await prismadb.crm_Targets.update({
+lib/mcp/tools/crm-targets.ts:146:      const existing = await prismadb.crm_Targets.findFirst({
+lib/mcp/tools/crm-targets.ts:150:      const target = await prismadb.crm_Targets.update({
+actions/reports/accounts.ts:45:    select: { employees: true },
+actions/reports/accounts.ts:58:    const emp = parseInt(a.employees ?? "", 10);
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:1:-- Add deletedAt/deletedBy to crm_Targets
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:2:ALTER TABLE "crm_Targets" ADD COLUMN "deletedAt" TIMESTAMP(3);
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:3:ALTER TABLE "crm_Targets" ADD COLUMN "deletedBy" UUID;
+prisma/migrations/20260406180000_soft_delete_universal/migration.sql:4:CREATE INDEX "crm_Targets_deletedAt_idx" ON "crm_Targets"("deletedAt");
+lib/mcp/tools/crm-enrichment.ts:123:      const target = await prismadb.crm_Targets.findUnique({
+lib/enrichment/agent-architecture/orchestrator.ts:888:    const searchQuery = `${domainQuery}"${String(companyName)}" employees "team size" revenue "annual revenue" ARR MRR ${year} ${year-1}`;
+lib/enrichment/services/openai.ts:178:"URL: techcrunch.com ... Example Corp has grown to 150 employees this year..."
+lib/enrichment/services/openai.ts:180:"URL: seekcompany.com ... Seek offers AI for data analytics with 200 employees..."
+lib/enrichment/services/openai.ts:187:    {"url": "techcrunch.com", "quote": "Example Corp has grown to 150 employees this year"},
+lib/enrichment/services/openai.ts:195:- "Seek has 200 employees" from seek.ai → This IS valid
+lib/enrichment/services/openai.ts:198:If looking for "Example Corp" but finding "Microsoft has 200,000 employees":
+lib/enrichment/services/openai.ts:225:1. Employee Count: Must be explicitly stated. Look for phrases like "X employees", "team of X", "X people". If not found, return null.
+lib/enrichment/services/openai.ts:413:- If extracting "150 employees", the exact_text must contain "150" and "employees"
+lib/enrichment/services/openai.ts:426:  - RIGHT: "We now have 150 employees across our offices"
+lib/enrichment/services/openai.ts:448:Example Corp was founded in 2015 in San Francisco, CA. Our team of 150 employees works across 3 offices to deliver innovative solutions...
+lib/enrichment/services/openai.ts:458:        "exact_text": "Our team of 150 employees works across 3 offices",
+lib/enrichment/presets/target-fields.ts:23:  { name: "employees",        displayName: "Employees",               description: "Approximate number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:32:export const COMPANY_DEFAULTS = ["industry", "employees", "description", "city", "country", "company_website"];
+lib/enrichment/presets/target-fields.ts:54:  { name: "employees",        displayName: "Employees",               description: "Number of employees", type: "string", required: false },
+lib/enrichment/presets/target-fields.ts:75:  employees:        "employees",
+lib/enrichment/agent-architecture/agents/metrics-agent.ts:30:    2. Search "{companyName} employees team size {currentYear}"
+app/api/crm/targets/enrich/route.ts:43:  const target = await prismadb.crm_Targets.findUnique({
+actions/get-empoloyees.ts:4:  const data = await prismadb.employees.findMany({});
+app/api/crm/targets/[id]/route.ts:32:  const target = await prismadb.crm_Targets.update({
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:1:-- AddColumn: new enrichment fields on crm_Targets (safe, additive, idempotent)
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:2:ALTER TABLE "crm_Targets"
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:9:  ADD COLUMN IF NOT EXISTS "employees"            TEXT,
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:15:CREATE INDEX IF NOT EXISTS "crm_Targets_converted_account_id_idx" ON "crm_Targets"("converted_account_id");
+prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql:16:CREATE INDEX IF NOT EXISTS "crm_Targets_converted_contact_id_idx" ON "crm_Targets"("converted_contact_id");
+components/modals/ImportTargetsModal.tsx:56:  { key: "employees",      label: "Employees",      required: false },
+prisma/migrations/20260325000000_campaigns_module/migration.sql:1:-- CreateTable (IF NOT EXISTS): crm_Targets — may already exist on upgraded DBs
+prisma/migrations/20260325000000_campaigns_module/migration.sql:2:CREATE TABLE IF NOT EXISTS "crm_Targets" (
+prisma/migrations/20260325000000_campaigns_module/migration.sql:25:    CONSTRAINT "crm_Targets_pkey" PRIMARY KEY ("id")
+prisma/migrations/20260325000000_campaigns_module/migration.sql:64:-- CreateIndex (IF NOT EXISTS) for crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:65:CREATE INDEX IF NOT EXISTS "crm_Targets_created_by_idx" ON "crm_Targets"("created_by");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:66:CREATE INDEX IF NOT EXISTS "crm_Targets_status_idx" ON "crm_Targets"("status");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:67:CREATE INDEX IF NOT EXISTS "crm_Targets_created_on_idx" ON "crm_Targets"("created_on");
+prisma/migrations/20260325000000_campaigns_module/migration.sql:85:  ALTER TABLE "crm_Targets" ADD CONSTRAINT "crm_Targets_created_by_fkey"
+prisma/migrations/20260325000000_campaigns_module/migration.sql:95:-- AddForeignKey (idempotent) for TargetsToTargetLists → crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:98:    FOREIGN KEY ("target_id") REFERENCES "crm_Targets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+prisma/migrations/20260325000000_campaigns_module/migration.sql:107:-- AddForeignKey (idempotent) for crm_Target_Enrichment → crm_Targets
+prisma/migrations/20260325000000_campaigns_module/migration.sql:110:    FOREIGN KEY ("targetId") REFERENCES "crm_Targets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+prisma/migrations/20260325000000_campaigns_module/migration.sql:252:    FOREIGN KEY ("target_id") REFERENCES "crm_Targets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+prisma/migrations/0_init/migration.sql:49:    "employees" TEXT,
+actions/crm/targets/import-targets.ts:59:    const employees = parseEmployeesValue(row.employees);
+actions/crm/targets/import-targets.ts:86:      employees: employees || null,
+actions/crm/targets/import-targets.ts:93:    await prismadb.crm_Targets.createMany({ data: valid, skipDuplicates: true });
+actions/crm/targets/suggest-mapping.ts:28:  "employees",
+actions/crm/targets/suggest-mapping.ts:86:    headcount: "employees",
+actions/crm/targets/suggest-mapping.ts:87:    numemployees: "employees",
+actions/crm/targets/suggest-mapping.ts:88:    teamsize: "employees",
+actions/crm/targets/suggest-mapping.ts:89:    companysize: "employees",
+actions/crm/targets/convert-target.ts:15:  const target = await prismadb.crm_Targets.findFirst({ where: { id: targetId, deletedAt: null } });
+actions/crm/targets/convert-target.ts:42:          employees: target.employees ?? undefined,
+actions/crm/targets/convert-target.ts:68:      await tx.crm_Targets.update({
+actions/crm/targets/update-target.ts:27:  employees?: string;
+actions/crm/targets/update-target.ts:38:    const target = await prismadb.crm_Targets.update({
+actions/crm/targets/delete-target.ts:13:    await prismadb.crm_Targets.update({
+actions/crm/targets/create-target.ts:29:    const target = await prismadb.crm_Targets.create({
+actions/crm/get-targets.ts:5:  const targets = await prismadb.crm_Targets.findMany({
+actions/crm/get-target.ts:10:  const target = await prismadb.crm_Targets.findUnique({
+app/[locale]/(routes)/page.tsx:59:  const employees = await getEmployees();
+app/[locale]/(routes)/page.tsx:115:          href="/employees"
+app/[locale]/(routes)/page.tsx:118:          content={employees.length}
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:76:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:106:      employees: initialData?.employees || "",
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:347:          <FormField control={form.control} name="employees" render={({ field }) => (
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:46:    employees:      z.string().optional(),
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:64:      employees: "",
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:311:          <FormField control={form.control} name="employees" render={({ field }) => (
+app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx:112:          placeholder="Field name (e.g. Number of employees)"
+
+exec
+/usr/bin/bash -lc "rg -n \"Unhandled request error|createLogger|logger\\.error|request error\" app lib actions instrumentation.ts middleware.ts next.config.ts next.config.js -S" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: middleware.ts: No such file or directory (os error 2)
+rg: next.config.ts: No such file or directory (os error 2)
+instrumentation.ts:29:  logger.error(
+instrumentation.ts:44:    "Unhandled request error"
+actions/user/update-profile.ts:2:import { createLogger } from "@/lib/logger";
+actions/user/update-profile.ts:8:const logger = createLogger({ module: "actions.user.update-profile" });
+actions/user/update-profile.ts:35:    logger.error({ err: error }, "UPDATE_PROFILE");
+actions/user/set-language.ts:2:import { createLogger } from "@/lib/logger";
+actions/user/set-language.ts:9:const logger = createLogger({ module: "actions.user.set-language" });
+actions/user/set-language.ts:35:    logger.error({ err: error }, "SET_LANGUAGE");
+actions/system/get-next-version.ts:1:import { createLogger } from "@/lib/logger";
+actions/system/get-next-version.ts:4:const logger = createLogger({ module: "actions.system.get-next-version" });
+actions/system/get-next-version.ts:17:      logger.error({ err: error }, "Error parsing package.json");
+actions/system/get-next-version.ts:21:    logger.error({ err: error }, "Error reading package.json");
+lib/sendmail.ts:2:import { createLogger } from "@/lib/logger";
+lib/sendmail.ts:4:const logger = createLogger({ module: "sendmail" });
+lib/sendmail.ts:36:    logger.error(
+actions/projects/watch-project.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/watch-project.ts:9:const logger = createLogger({ module: "actions.projects.watch-project" });
+actions/projects/watch-project.ts:27:    logger.error({ err: error }, "WATCH_PROJECT");
+actions/projects/watch-project.ts:52:    logger.error({ err: error }, "UNWATCH_PROJECT");
+lib/openai.ts:3:import { createLogger } from "@/lib/logger";
+lib/openai.ts:5:const logger = createLogger({ module: "openai" });
+lib/logger.ts:99:export function createLogger(bindings: pino.Bindings) {
+actions/projects/update-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/update-task.ts:10:const logger = createLogger({ module: "actions.projects.update-task" });
+actions/projects/update-task.ts:95:        logger.error({ err: emailError }, "UPDATE_TASK_EMAIL");
+actions/projects/update-task.ts:102:    logger.error({ err: error }, "UPDATE_TASK");
+lib/audit-log.ts:2:import { createLogger } from "@/lib/logger";
+lib/audit-log.ts:5:const logger = createLogger({ module: "audit-log" });
+lib/audit-log.ts:81:    logger.error(
+actions/projects/update-section-title.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/update-section-title.ts:8:const logger = createLogger({ module: "actions.projects.update-section-title" });
+actions/projects/update-section-title.ts:28:    logger.error({ err: error }, "UPDATE_SECTION_TITLE");
+actions/projects/update-project.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/update-project.ts:8:const logger = createLogger({ module: "actions.projects.update-project" });
+actions/projects/update-project.ts:37:    logger.error({ err: error }, "UPDATE_PROJECT");
+actions/projects/update-kanban-position.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/update-kanban-position.ts:8:const logger = createLogger({ module: "actions.projects.update-kanban-position" });
+actions/projects/update-kanban-position.ts:58:    logger.error({ err: error }, "UPDATE_KANBAN_POSITION");
+actions/projects/mark-task-done.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/mark-task-done.ts:8:const logger = createLogger({ module: "actions.projects.mark-task-done" });
+actions/projects/mark-task-done.ts:27:    logger.error({ err: error }, "MARK_TASK_DONE");
+actions/projects/delete-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/delete-task.ts:8:const logger = createLogger({ module: "actions.projects.delete-task" });
+actions/projects/delete-task.ts:52:    logger.error({ err: error }, "DELETE_TASK");
+actions/projects/delete-section.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/delete-section.ts:8:const logger = createLogger({ module: "actions.projects.delete-section" });
+actions/projects/delete-section.ts:27:    logger.error({ err: error }, "DELETE_SECTION");
+actions/projects/delete-project.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/delete-project.ts:8:const logger = createLogger({ module: "actions.projects.delete-project" });
+actions/projects/delete-project.ts:24:    logger.error({ err: error }, "DELETE_PROJECT");
+actions/projects/create-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/create-task.ts:10:const logger = createLogger({ module: "actions.projects.create-task" });
+actions/projects/create-task.ts:105:        logger.error({ err: emailError }, "CREATE_TASK_EMAIL");
+actions/projects/create-task.ts:112:    logger.error({ err: error }, "CREATE_TASK");
+actions/projects/create-task-in-board.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/create-task-in-board.ts:10:const logger = createLogger({ module: "actions.projects.create-task-in-board" });
+actions/projects/create-task-in-board.ts:57:      logger.error({ err: error }, "CREATE_TASK_IN_BOARD_QUICK");
+actions/projects/create-task-in-board.ts:133:        logger.error({ err: emailError }, "CREATE_TASK_IN_BOARD_EMAIL");
+actions/projects/create-task-in-board.ts:140:    logger.error({ err: error }, "CREATE_TASK_IN_BOARD");
+actions/projects/create-section.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/create-section.ts:8:const logger = createLogger({ module: "actions.projects.create-section" });
+actions/projects/create-section.ts:37:    logger.error({ err: error }, "CREATE_SECTION");
+actions/projects/create-project.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/create-project.ts:8:const logger = createLogger({ module: "actions.projects.create-project" });
+actions/projects/create-project.ts:49:    logger.error({ err: error }, "CREATE_PROJECT");
+actions/projects/assign-document-to-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/assign-document-to-task.ts:8:const logger = createLogger({ module: "actions.projects.assign-document-to-task" });
+actions/projects/assign-document-to-task.ts:42:    logger.error({ err: error }, "ASSIGN_DOCUMENT_TO_TASK");
+actions/projects/assign-document-to-task.ts:82:    logger.error({ err: error }, "DISCONNECT_DOCUMENT_FROM_TASK");
+actions/projects/add-comment-to-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/projects/add-comment-to-task.ts:11:const logger = createLogger({ module: "actions.projects.add-comment-to-task" });
+actions/projects/add-comment-to-task.ts:109:        logger.error({ err: emailError }, "ADD_COMMENT_EMAIL");
+actions/projects/add-comment-to-task.ts:129:    logger.error({ err: error }, "ADD_COMMENT_TO_TASK");
+actions/github/get-repo-stars.ts:1:import { createLogger } from "@/lib/logger";
+actions/github/get-repo-stars.ts:5:const logger = createLogger({ module: "actions.github.get-repo-stars" });
+actions/github/get-repo-stars.ts:23:    logger.error({ err: error }, "Error fetching commits");
+actions/github/get-repo-commits.ts:1:import { createLogger } from "@/lib/logger";
+actions/github/get-repo-commits.ts:6:const logger = createLogger({ module: "actions.github.get-repo-commits" });
+actions/github/get-repo-commits.ts:45:    logger.error({ err: error }, "Error fetching commits");
+actions/fulltext/unified-search.ts:2:import { createLogger } from "@/lib/logger";
+actions/fulltext/unified-search.ts:11:const logger = createLogger({ module: "actions.fulltext.unified-search" });
+actions/fulltext/unified-search.ts:384:    logger.error({ err: error }, "UNIFIED_SEARCH");
+actions/crm/get-opportunities.ts:1:import { createLogger } from "@/lib/logger";
+actions/crm/get-opportunities.ts:5:const logger = createLogger({ module: "actions.crm.get-opportunities" });
+actions/crm/tasks/delete-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/tasks/delete-task.ts:8:const logger = createLogger({ module: "actions.crm.tasks.delete-task" });
+actions/crm/tasks/delete-task.ts:27:    logger.error({ err: error }, "DELETE_TASK");
+actions/crm/tasks/add-comment.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/tasks/add-comment.ts:8:const logger = createLogger({ module: "actions.crm.tasks.add-comment" });
+actions/crm/tasks/add-comment.ts:40:    logger.error({ err: error }, "ADD_COMMENT");
+actions/crm/targets/suggest-mapping.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/targets/suggest-mapping.ts:7:const logger = createLogger({ module: "actions.crm.targets.suggest-mapping" });
+actions/crm/targets/suggest-mapping.ts:137:      logger.error({ err: err }, "OpenAI mapping failed, falling back to fuzzy match");
+actions/crm/targets/convert-target.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/targets/convert-target.ts:8:const logger = createLogger({ module: "actions.crm.targets.convert-target" });
+actions/crm/targets/convert-target.ts:86:    logger.error({ err: error }, "[convertTarget] Error");
+actions/crm/contracts/update-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contracts/update-contract/index.ts:14:const logger = createLogger({ module: "actions.crm.contracts.update-contract" });
+actions/crm/contracts/update-contract/index.ts:104:    logger.error({ err: error, contractId: id }, "Update contract failed");
+actions/crm/contracts/restore-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contracts/restore-contract/index.ts:9:const logger = createLogger({ module: "actions.crm.contracts.restore-contract" });
+actions/crm/contracts/restore-contract/index.ts:32:    logger.error({ err: error }, "RESTORE_CONTRACT");
+actions/crm/similarity/get-similar-opportunities.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/similarity/get-similar-opportunities.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-opportunities" });
+actions/crm/similarity/get-similar-opportunities.ts:44:    logger.error({ err: error }, "GET_SIMILAR_OPPORTUNITIES");
+actions/crm/similarity/get-similar-leads.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/similarity/get-similar-leads.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-leads" });
+actions/crm/similarity/get-similar-leads.ts:43:    logger.error({ err: error }, "GET_SIMILAR_LEADS");
+actions/crm/similarity/get-similar-contacts.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/similarity/get-similar-contacts.ts:7:const logger = createLogger({ module: "actions.crm.similarity.get-similar-contacts" });
+actions/crm/similarity/get-similar-contacts.ts:43:    logger.error({ err: error }, "GET_SIMILAR_CONTACTS");
+actions/crm/contracts/delete-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contracts/delete-contract/index.ts:13:const logger = createLogger({ module: "actions.crm.contracts.delete-contract" });
+actions/crm/contracts/delete-contract/index.ts:56:    logger.error({ err: error, contractId: id }, "Delete contract failed");
+actions/crm/similarity/get-similar-accounts.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/similarity/get-similar-accounts.ts:6:const logger = createLogger({ module: "actions.crm.similarity.get-similar-accounts" });
+actions/crm/similarity/get-similar-accounts.ts:55:    logger.error({ err: error }, "GET_SIMILAR_ACCOUNTS");
+actions/crm/contracts/create-new-contract/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contracts/create-new-contract/index.ts:14:const logger = createLogger({ module: "actions.crm.contracts.create-new-contract" });
+actions/crm/contracts/create-new-contract/index.ts:87:    logger.error({ err: error }, "Create contract failed");
+actions/crm/products/import-products.ts:3:import { createLogger } from "@/lib/logger";
+actions/crm/products/import-products.ts:11:const logger = createLogger({ module: "actions.crm.products.import" });
+actions/crm/products/update-product/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/products/update-product/index.ts:12:const logger = createLogger({ module: "actions.crm.products.update-product" });
+actions/crm/products/update-product/index.ts:74:    logger.error({ err: error }, "UPDATE_PRODUCT");
+actions/crm/contract-line-items/update-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contract-line-items/update-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.contract-line-items.update-line-item" });
+actions/crm/contract-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_CONTRACT_LINE_ITEM");
+actions/crm/products/delete-product/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/products/delete-product/index.ts:9:const logger = createLogger({ module: "actions.crm.products.delete-product" });
+actions/crm/products/delete-product/index.ts:36:    logger.error({ err: error }, "DELETE_PRODUCT");
+actions/crm/contract-line-items/reorder-line-items/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contract-line-items/reorder-line-items/index.ts:8:const logger = createLogger({ module: "actions.crm.contract-line-items.reorder-line-items" });
+actions/crm/contract-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_CONTRACT_LINE_ITEMS");
+actions/crm/contract-line-items/remove-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contract-line-items/remove-line-item/index.ts:10:const logger = createLogger({ module: "actions.crm.contract-line-items.remove-line-item" });
+actions/crm/contract-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_CONTRACT_LINE_ITEM");
+actions/crm/products/create-product/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/products/create-product/index.ts:12:const logger = createLogger({ module: "actions.crm.products.create-product" });
+actions/crm/products/create-product/index.ts:68:    logger.error({ err: error }, "CREATE_PRODUCT");
+actions/crm/contract-line-items/copy-from-opportunity/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contract-line-items/copy-from-opportunity/index.ts:10:const logger = createLogger({ module: "actions.crm.contract-line-items.copy-from-opportunity" });
+actions/crm/contract-line-items/copy-from-opportunity/index.ts:94:    logger.error({ err: error }, "COPY_LINE_ITEMS_FROM_OPPORTUNITY");
+actions/crm/contract-line-items/add-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contract-line-items/add-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.contract-line-items.add-line-item" });
+actions/crm/contract-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_CONTRACT_LINE_ITEM");
+actions/crm/opportunity/dashboard/set-inactive.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunity/dashboard/set-inactive.ts:7:const logger = createLogger({ module: "actions.crm.opportunity.dashboard.set-inactive" });
+actions/crm/opportunity/dashboard/set-inactive.ts:54:    logger.error({ err: error, opportunityId: id }, "Set opportunity inactive failed");
+actions/crm/contacts/update-contact.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contacts/update-contact.ts:10:const logger = createLogger({ module: "actions.crm.contacts.update-contact" });
+actions/crm/contacts/update-contact.ts:82:    logger.error({ err: error }, "UPDATE_CONTACT");
+actions/crm/contacts/unlink-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contacts/unlink-opportunity.ts:8:const logger = createLogger({ module: "actions.crm.contacts.unlink-opportunity" });
+actions/crm/contacts/unlink-opportunity.ts:33:    logger.error({ err: error }, "UNLINK_OPPORTUNITY");
+actions/crm/opportunity-line-items/update-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunity-line-items/update-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.opportunity-line-items.update-line-item" });
+actions/crm/opportunity-line-items/update-line-item/index.ts:76:    logger.error({ err: error }, "UPDATE_OPPORTUNITY_LINE_ITEM");
+actions/crm/contacts/restore-contact.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contacts/restore-contact.ts:9:const logger = createLogger({ module: "actions.crm.contacts.restore-contact" });
+actions/crm/contacts/restore-contact.ts:32:    logger.error({ err: error }, "RESTORE_CONTACT");
+actions/crm/contacts/delete-contact.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contacts/delete-contact.ts:9:const logger = createLogger({ module: "actions.crm.contacts.delete-contact" });
+actions/crm/contacts/delete-contact.ts:31:    logger.error({ err: error }, "DELETE_CONTACT");
+actions/crm/contacts/create-contact.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/contacts/create-contact.ts:11:const logger = createLogger({ module: "actions.crm.contacts.create-contact" });
+actions/crm/contacts/create-contact.ts:99:    logger.error({ err: error }, "CREATE_CONTACT");
+actions/crm/opportunity-line-items/reorder-line-items/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunity-line-items/reorder-line-items/index.ts:8:const logger = createLogger({ module: "actions.crm.opportunity-line-items.reorder-line-items" });
+actions/crm/opportunity-line-items/reorder-line-items/index.ts:30:    logger.error({ err: error }, "REORDER_OPPORTUNITY_LINE_ITEMS");
+actions/crm/opportunity-line-items/remove-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunity-line-items/remove-line-item/index.ts:10:const logger = createLogger({ module: "actions.crm.opportunity-line-items.remove-line-item" });
+actions/crm/opportunity-line-items/remove-line-item/index.ts:47:    logger.error({ err: error }, "REMOVE_OPPORTUNITY_LINE_ITEM");
+actions/crm/activities/update-activity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/activities/update-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.update-activity" });
+actions/crm/activities/update-activity.ts:102:    logger.error({ err: error }, "updateActivity error");
+actions/crm/activities/get-activities-by-entity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/activities/get-activities-by-entity.ts:6:const logger = createLogger({ module: "actions.crm.activities.get-activities-by-entity" });
+actions/crm/activities/get-activities-by-entity.ts:77:    logger.error({ err: error }, "getActivitiesByEntity error");
+actions/crm/opportunity-line-items/add-line-item/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunity-line-items/add-line-item/index.ts:13:const logger = createLogger({ module: "actions.crm.opportunity-line-items.add-line-item" });
+actions/crm/opportunity-line-items/add-line-item/index.ts:97:    logger.error({ err: error }, "ADD_OPPORTUNITY_LINE_ITEM");
+actions/crm/activities/delete-activity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/activities/delete-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.delete-activity" });
+actions/crm/activities/delete-activity.ts:42:    logger.error({ err: error }, "deleteActivity error");
+actions/crm/activities/create-activity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/activities/create-activity.ts:8:const logger = createLogger({ module: "actions.crm.activities.create-activity" });
+actions/crm/activities/create-activity.ts:77:    logger.error({ err: error }, "createActivity error");
+actions/crm/opportunities/update-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunities/update-opportunity.ts:11:const logger = createLogger({ module: "actions.crm.opportunities.update-opportunity" });
+actions/crm/opportunities/update-opportunity.ts:91:    logger.error({ err: error }, "UPDATE_OPPORTUNITY");
+actions/crm/accounts/watch-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/watch-account.ts:8:const logger = createLogger({ module: "actions.crm.accounts.watch-account" });
+actions/crm/accounts/watch-account.ts:24:    logger.error({ err: error }, "WATCH_ACCOUNT");
+actions/crm/opportunities/restore-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunities/restore-opportunity.ts:9:const logger = createLogger({ module: "actions.crm.opportunities.restore-opportunity" });
+actions/crm/opportunities/restore-opportunity.ts:32:    logger.error({ err: error }, "RESTORE_OPPORTUNITY");
+actions/crm/accounts/update-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/update-account.ts:10:const logger = createLogger({ module: "actions.crm.accounts.update-account" });
+actions/crm/accounts/update-account.ts:68:    logger.error({ err: error }, "UPDATE_ACCOUNT");
+actions/crm/opportunities/delete-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunities/delete-opportunity.ts:9:const logger = createLogger({ module: "actions.crm.opportunities.delete-opportunity" });
+actions/crm/opportunities/delete-opportunity.ts:31:    logger.error({ err: error }, "DELETE_OPPORTUNITY");
+actions/crm/opportunities/create-opportunity.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/opportunities/create-opportunity.ts:12:const logger = createLogger({ module: "actions.crm.opportunities.create-opportunity" });
+actions/crm/opportunities/create-opportunity.ts:108:    logger.error({ err: error }, "CREATE_OPPORTUNITY");
+actions/crm/leads/update-lead.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/leads/update-lead.ts:11:const logger = createLogger({ module: "actions.crm.leads.update-lead" });
+actions/crm/leads/update-lead.ts:110:    logger.error({ err: error }, "UPDATE_LEAD");
+actions/crm/leads/restore-lead.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/leads/restore-lead.ts:9:const logger = createLogger({ module: "actions.crm.leads.restore-lead" });
+actions/crm/leads/restore-lead.ts:32:    logger.error({ err: error }, "RESTORE_LEAD");
+actions/crm/leads/delete-lead.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/leads/delete-lead.ts:9:const logger = createLogger({ module: "actions.crm.leads.delete-lead" });
+actions/crm/leads/delete-lead.ts:31:    logger.error({ err: error }, "DELETE_LEAD");
+actions/crm/leads/create-lead.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/leads/create-lead.ts:11:const logger = createLogger({ module: "actions.crm.leads.create-lead" });
+actions/crm/leads/create-lead.ts:104:    logger.error({ err: error }, "CREATE_LEAD");
+actions/crm/accounts/unwatch-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/unwatch-account.ts:8:const logger = createLogger({ module: "actions.crm.accounts.unwatch-account" });
+actions/crm/accounts/unwatch-account.ts:27:    logger.error({ err: error }, "UNWATCH_ACCOUNT");
+actions/crm/accounts/restore-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/restore-account.ts:9:const logger = createLogger({ module: "actions.crm.accounts.restore-account" });
+actions/crm/accounts/restore-account.ts:32:    logger.error({ err: error }, "RESTORE_ACCOUNT");
+app/client-error-listener.tsx:11:      logger.error(
+app/client-error-listener.tsx:25:      logger.error(
+actions/crm/accounts/delete-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/delete-account.ts:9:const logger = createLogger({ module: "actions.crm.accounts.delete-account" });
+actions/crm/accounts/delete-account.ts:30:    logger.error({ err: error }, "DELETE_ACCOUNT");
+actions/crm/accounts/create-task.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/create-task.ts:11:const logger = createLogger({ module: "actions.crm.accounts.create-task" });
+actions/crm/accounts/create-task.ts:79:        logger.error({ err: error, taskId: task.id, userId: user }, "Task assignee notification failed");
+actions/crm/accounts/create-task.ts:115:      logger.error({ err: error, accountId: account, taskId: task.id }, "Task watcher notification failed");
+actions/crm/accounts/create-task.ts:121:    logger.error({ err: error }, "CREATE_TASK");
+actions/crm/accounts/create-account.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/accounts/create-account.ts:10:const logger = createLogger({ module: "actions.crm.accounts.create-account" });
+actions/crm/accounts/create-account.ts:63:    logger.error({ err: error }, "CREATE_ACCOUNT");
+actions/crm/account-products/update-assignment/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/account-products/update-assignment/index.ts:12:const logger = createLogger({ module: "actions.crm.account-products.update-assignment" });
+actions/crm/account-products/update-assignment/index.ts:57:    logger.error({ err: error }, "UPDATE_ASSIGNMENT");
+actions/crm/account-products/remove-assignment/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/account-products/remove-assignment/index.ts:9:const logger = createLogger({ module: "actions.crm.account-products.remove-assignment" });
+actions/crm/account-products/remove-assignment/index.ts:32:    logger.error({ err: error }, "REMOVE_ASSIGNMENT");
+actions/crm/account-products/assign-product/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/crm/account-products/assign-product/index.ts:13:const logger = createLogger({ module: "actions.crm.account-products.assign-product" });
+actions/crm/account-products/assign-product/index.ts:71:    logger.error({ err: error }, "ASSIGN_PRODUCT");
+app/api/client-logs/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+app/api/client-logs/route.ts:61:      logger.error(payload, message);
+app/api/upload/presigned-url/route.ts:6:import { createLogger } from "@/lib/logger";
+app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+app/api/upload/presigned-url/route.ts:71:    logger.error(
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:61:          logger.error({ error: res.error, query, locale }, "Unified search returned error");
+app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx:66:        logger.error({ err, query, locale }, "Unified search failed");
+app/api/feedback/route.ts:2:import { createLogger } from "@/lib/logger";
+app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+app/api/feedback/route.ts:48:    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+actions/ai/projects/boards/getAiReport.tsx:3:import { createLogger } from "@/lib/logger";
+actions/ai/projects/boards/getAiReport.tsx:12:const logger = createLogger({ module: "actions.ai.projects.boards.getAiReport" });
+actions/ai/projects/boards/getAiReport.tsx:83:    logger.error("Error from OpenAI API");
+actions/ai/projects/boards/getAiReport.tsx:100:      logger.error({ err: error }, "Error from get-user-ai-tasks");
+app/[locale]/(routes)/emails/components/mail-display.tsx:97:      logger.error({ err: e, emailId: mail.id }, "Email deletion failed");
+actions/admin/users/set-role.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/users/set-role.ts:8:const logger = createLogger({ module: "actions.admin.users.set-role" });
+actions/admin/users/set-role.ts:42:    logger.error({ err: error }, "SET_USER_ROLE");
+actions/admin/users/deactivate-user.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/users/deactivate-user.ts:8:const logger = createLogger({ module: "actions.admin.users.deactivate-user" });
+actions/admin/users/deactivate-user.ts:23:    logger.error({ err: error }, "DEACTIVATE_USER");
+actions/admin/users/invite-user.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/users/invite-user.ts:11:const logger = createLogger({ module: "actions.admin.users.invite-user" });
+actions/admin/users/invite-user.ts:81:    logger.error({ err: error }, "INVITE_USER");
+actions/admin/users/activate-user.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/users/activate-user.ts:9:const logger = createLogger({ module: "actions.admin.users.activate-user" });
+actions/admin/users/activate-user.ts:45:    logger.error({ err: error }, "ACTIVATE_USER");
+actions/admin/users/delete-user.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/users/delete-user.ts:8:const logger = createLogger({ module: "actions.admin.users.delete-user" });
+actions/admin/users/delete-user.ts:37:    logger.error({ err: error }, "DELETE_USER");
+actions/admin/send-mail-to-all/index.ts:2:import { createLogger } from "@/lib/logger";
+actions/admin/send-mail-to-all/index.ts:17:const logger = createLogger({ module: "actions.admin.send-mail-to-all" });
+actions/admin/send-mail-to-all/index.ts:100:    logger.error({ err: error }, "Send mail to all users failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:64:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/api/crm/leads/create-lead-from-web/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/crm/leads/create-lead-from-web/route.ts:5:const logger = createLogger({ module: "api.crm.leads.create-from-web" });
+app/api/crm/leads/create-lead-from-web/route.ts:68:      logger.error({ err: error, leadSource: lead_source }, "Lead creation from remote form failed");
+app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx:53:      logger.error({ err: error, taskId: task.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document assignment failed");
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx:58:      logger.error({ err: error, documentId: document.id, taskId: params?.taskId }, "Document disconnect failed");
+app/api/crm/contacts/create-from-remote/route.ts:1:import { createLogger } from "@/lib/logger";
+app/api/crm/contacts/create-from-remote/route.ts:5:const logger = createLogger({ module: "app.api.crm.contacts.create-from-remote" });
+app/api/crm/contacts/create-from-remote/route.ts:46:    logger.error({ err: error, tag }, "Remote contact creation failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:70:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:89:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx:106:      logger.error({ err: error, projectId: project.id }, "Project row action failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:439:      logger.error({ err: error, boardId, sectionId }, "Board task creation failed");
+app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx:479:      logger.error({ err: error, boardId, taskId: selectedTask.id }, "Board task deletion failed");
+app/[locale]/(routes)/projects/actions/get-task-done.ts:1:import { createLogger } from "@/lib/logger";
+app/[locale]/(routes)/projects/actions/get-task-done.ts:4:const logger = createLogger({ module: "app.routes.projects.actions.get-task-done" });
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx:53:      logger.error({ err: e }, "Profile photo update failed");
+app/[locale]/(routes)/crm/leads/page.tsx:10:import { createLogger } from "@/lib/logger";
+app/[locale]/(routes)/crm/leads/page.tsx:13:const logger = createLogger({ module: "app.routes.crm.leads.page" });
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:81:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx:98:      logger.error({ err: error, accountId: account.id }, "Account row action failed");
+app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx:51:      logger.error({ err: error, taskId: task?.id }, "Task deletion failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:347:      logger.error({ err: error, opportunityId: activeId }, "Opportunity stage update failed");
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:359:      logger.error({ err: error, opportunityId }, "Set opportunity inactive failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:49:      logger.error({ err: error }, "Feedback submission failed");
+
+exec
+/usr/bin/bash -lc "node -e 'function n(v){return typeof v===\"string\"?v.trim():\"\"}; function p(v){const parsed=JSON.parse(n(v)||\"null\"); return "'`${parsed.min.toString()}-${parsed.max.toString()}`}; for (const v of [undefined,"","{'"\\\"min\\\":1,\\\"max\\\":10}\",\"1-10\",\"{min:1,max:10}\"]) { try { console.log(JSON.stringify(v), \"=>\", p(v)); } catch(e) { console.log(JSON.stringify(v), \"throws\", e.name + \": \" + e.message); } }'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+undefined throws TypeError: Cannot read properties of null (reading 'min')
+"" throws TypeError: Cannot read properties of null (reading 'min')
+"{\"min\":1,\"max\":10}" => 1-10
+"1-10" throws SyntaxError: Unexpected non-whitespace character after JSON at position 1 (line 1 column 2)
+"{min:1,max:10}" throws SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+exec
+/usr/bin/bash -lc "nl -ba instrumentation.ts | sed -n '1,70p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/'[locale]'/'(routes)'/campaigns/targets/components/NewTargetForm.tsx | sed -n '300,322p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba prisma/schema.prisma | sed -n '1200,1242p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba actions/crm/targets/create-target.ts | sed -n '1,50p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { registerOTel } from "@vercel/otel";
+     2	import type { Instrumentation } from "next";
+     3	
+     4	const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+     5	
+     6	export function register() {
+     7	  registerOTel({
+     8	    serviceName,
+     9	  });
+    10	
+    11	  if (process.env.NEXT_RUNTIME === "nodejs") {
+    12	    void import("@/lib/logger").then(({ logger }) => {
+    13	      logger.info({ serviceName }, "OpenTelemetry instrumentation registered");
+    14	    });
+    15	  }
+    16	}
+    17	
+    18	export const onRequestError: Instrumentation.onRequestError = async (
+    19	  error,
+    20	  request,
+    21	  context
+    22	) => {
+    23	  if (process.env.NEXT_RUNTIME !== "nodejs") {
+    24	    return;
+    25	  }
+    26	
+    27	  const { logger } = await import("@/lib/logger");
+    28	
+    29	  logger.error(
+    30	    {
+    31	      err: error,
+    32	      request: {
+    33	        method: request.method,
+    34	        path: request.path,
+    35	      },
+    36	      route: {
+    37	        path: context.routePath,
+    38	        routerKind: context.routerKind,
+    39	        routeType: context.routeType,
+    40	        renderSource: context.renderSource,
+    41	        revalidateReason: context.revalidateReason,
+    42	      },
+    43	    },
+    44	    "Unhandled request error"
+    45	  );
+    46	};
+
+ succeeded in 0ms:
+  1200	}
+  1201	
+  1202	// ============================================
+  1203	// CRM TARGETS FEATURE
+  1204	// ============================================
+  1205	
+  1206	model crm_Targets {
+  1207	  id               String    @id @default(uuid()) @db.Uuid
+  1208	  first_name       String?
+  1209	  last_name        String
+  1210	  email            String?
+  1211	  mobile_phone     String?
+  1212	  office_phone     String?
+  1213	  company          String?
+  1214	  company_website  String?
+  1215	  personal_website String?
+  1216	  position         String?
+  1217	  social_x         String?
+  1218	  social_linkedin  String?
+  1219	  social_instagram String?
+  1220	  social_facebook  String?
+  1221	  status           Boolean   @default(true)
+  1222	  tags             String[]
+  1223	  notes            String[]
+  1224	  created_by       String?   @db.Uuid
+  1225	  created_on       DateTime? @default(now())
+  1226	  updatedAt        DateTime? @updatedAt
+  1227	  updatedBy        String?   @db.Uuid
+  1228	
+  1229	  // Extended contact fields
+  1230	  personal_email   String?
+  1231	  company_email    String?
+  1232	  company_phone    String?
+  1233	  city             String?
+  1234	  country          String?
+  1235	  industry         String?
+  1236	  employees        String?
+  1237	  description      String?
+  1238	
+  1239	  // Conversion tracking
+  1240	  converted_at         DateTime?
+  1241	  converted_account_id String?   @db.Uuid
+  1242	  converted_contact_id String?   @db.Uuid
+
+ succeeded in 0ms:
+   300	              <FormMessage />
+   301	            </FormItem>
+   302	          )} />
+   303	        </div>
+   304	        <div className="grid grid-cols-2 gap-4">
+   305	          <FormField control={form.control} name="industry" render={({ field }) => (
+   306	            <FormItem><FormLabel>Industry</FormLabel>
+   307	              <FormControl><Input placeholder="SaaS" {...field} value={field.value ?? ''} /></FormControl>
+   308	              <FormMessage />
+   309	            </FormItem>
+   310	          )} />
+   311	          <FormField control={form.control} name="employees" render={({ field }) => (
+   312	            <FormItem><FormLabel>Employees</FormLabel>
+   313	              <FormControl><Input placeholder="50-200" {...field} value={field.value ?? ''} /></FormControl>
+   314	              <FormMessage />
+   315	            </FormItem>
+   316	          )} />
+   317	        </div>
+   318	        <FormField control={form.control} name="description" render={({ field }) => (
+   319	          <FormItem><FormLabel>Description</FormLabel>
+   320	            <FormControl><Input placeholder="Short company description" {...field} value={field.value ?? ''} /></FormControl>
+   321	            <FormMessage />
+   322	          </FormItem>
+
+ succeeded in 0ms:
+     1	"use server";
+     2	import { getSession } from "@/lib/auth-server";
+     3	import { prismadb } from "@/lib/prisma";
+     4	import { revalidatePath } from "next/cache";
+     5	
+     6	export const createTarget = async (data: {
+     7	  last_name?: string;
+     8	  first_name?: string;
+     9	  email?: string;
+    10	  mobile_phone?: string;
+    11	  office_phone?: string;
+    12	  company?: string;
+    13	  company_website?: string;
+    14	  personal_website?: string;
+    15	  position?: string;
+    16	  social_x?: string;
+    17	  social_linkedin?: string;
+    18	  social_instagram?: string;
+    19	  social_facebook?: string;
+    20	  status?: boolean;
+    21	}) => {
+    22	  const session = await getSession();
+    23	  if (!session) return { error: "Unauthorized" };
+    24	
+    25	  const { last_name, email, mobile_phone, ...rest } = data;
+    26	  if (!last_name && !data.company) return { error: "last_name or company is required" };
+    27	
+    28	  try {
+    29	    const target = await prismadb.crm_Targets.create({
+    30	      data: { last_name: last_name ?? "", email, mobile_phone, ...rest, created_by: (session.user as any).id },
+    31	    });
+    32	    revalidatePath("/[locale]/(routes)/crm/targets", "page");
+    33	    return { data: target };
+    34	  } catch (error) {
+    35	    return { error: "Failed to create target" };
+    36	  }
+    37	};
+
+codex
+**Incident Report**
+
+Most likely root cause: `parseEmployeesValue()` in `actions/crm/targets/import-targets.ts` throws during CSV target import when the `employees` value is missing, empty, or not strict JSON.
+
+The failure was introduced in commit `9790f4c1` by this new path:
+
+```ts
+const employees = parseEmployeesValue(row.employees);
+```
+
+`parseEmployeesValue()` does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+That means common CSV inputs fail before import reaches the database:
+
+- missing/skipped `employees` column -> parses `"null"` -> `parsed.min` throws `TypeError`
+- blank employees cell -> same `TypeError`
+- existing range like `50-200` -> `JSON.parse()` throws `SyntaxError`
+- plain number like `50` -> parses as number, then `parsed.min` is invalid
+
+The client preview does not validate or transform `employees`; it only checks `last_name` / `company`, so users can reach the final Import button with rows that will crash server-side.
+
+The schema also confirms `crm_Targets.employees` is just `String?`, and the existing target form uses a free-text placeholder like `50-200`, so requiring a JSON object `{ min, max }` during import is inconsistent with the rest of the app.
+
+The observability message `"Unhandled request error"` matches this: the exception occurs inside the server action and is picked up by Next’s `onRequestError` instrumentation. The null `error.name/message/stack` in the incident payload appears to be a logging/serialization limitation, not evidence that the thrown value was actually null.
+
+No code changes were made.
+tokens used
+29,766
+**Incident Report**
+
+Most likely root cause: `parseEmployeesValue()` in `actions/crm/targets/import-targets.ts` throws during CSV target import when the `employees` value is missing, empty, or not strict JSON.
+
+The failure was introduced in commit `9790f4c1` by this new path:
+
+```ts
+const employees = parseEmployeesValue(row.employees);
+```
+
+`parseEmployeesValue()` does:
+
+```ts
+const parsed = JSON.parse(normalizeCellValue(value) || "null");
+return `${parsed.min.toString()}-${parsed.max.toString()}`;
+```
+
+That means common CSV inputs fail before import reaches the database:
+
+- missing/skipped `employees` column -> parses `"null"` -> `parsed.min` throws `TypeError`
+- blank employees cell -> same `TypeError`
+- existing range like `50-200` -> `JSON.parse()` throws `SyntaxError`
+- plain number like `50` -> parses as number, then `parsed.min` is invalid
+
+The client preview does not validate or transform `employees`; it only checks `last_name` / `company`, so users can reach the final Import button with rows that will crash server-side.
+
+The schema also confirms `crm_Targets.employees` is just `String?`, and the existing target form uses a free-text placeholder like `50-200`, so requiring a JSON object `{ min, max }` during import is inconsistent with the rest of the app.
+
+The observability message `"Unhandled request error"` matches this: the exception occurs inside the server action and is picked up by Next’s `onRequestError` instrumentation. The null `error.name/message/stack` in the incident payload appears to be a logging/serialization limitation, not evidence that the thrown value was actually null.
+
+No code changes were made.

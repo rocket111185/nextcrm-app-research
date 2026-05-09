@@ -1,0 +1,537 @@
+run_name: feature-task-4-A
+case_name: feature-task-4
+variant: A
+target_branch: feature/task-4
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T20:55:25Z
+elapsed_seconds: 59
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-4/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23699000b8fcd3c5d7a0c060856627af982` (`Refactor footer link metadata`) introduced invalid TypeScript in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+The build fails because `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`. That directly causes:
+
+```text
+TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.
+```
+
+The same refactor also changed the Next.js version display expression to:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses, causing:
+
+```text
+TS5076: '??' and '||' operations cannot be mixed without parentheses.
+```
+
+I reproduced the failure locally with the same command from the incident:
+
+```text
+pnpm exec tsc --noEmit --pretty false --incremental false
+```
+
+It returns the same two errors and exits with code `2`.
+
+The earlier `20:12:29Z` event appears to be a synthetic/demo build command because its command string manually emits a fake `Footer.tsx(4,10): error TS2305: demo`. The real failing build evidence is the `20:15:46Z` `pnpm exec tsc` run.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e095f-ac27-7242-94c8-366f5d2f7192
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T20:12:29.375Z",
+      "timestampNs": "1777925549375342231",
+      "labels": {
+        "build_id": "5e4f6fc7-16c7-471d-ba24-48734cd50ee7",
+        "command": "node -e console.log('plain line'); console.error('app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: demo'); process.exit(1)",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "event": "build_failed",
+        "exit_code": "1",
+        "failure_phase": "build",
+        "git_branch": "feature/task-4",
+        "git_commit": "4ef0d23699000b8fcd3c5d7a0c060856627af982",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "build.log",
+        "log_file_path": "/var/log/nextcrm/build.log",
+        "log_source": "build",
+        "module": "scripts.build-with-logs",
+        "pid": "2",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "time": "2026-05-04T20:12:29.352Z"
+      },
+      "line": "Build logging finished",
+      "metadata": {}
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "timestampNs": "1777925746777695145",
+      "labels": {
+        "build_id": "6bc34798-b92b-470e-a0d7-d3367dbdb274",
+        "command": "pnpm exec tsc --noEmit --pretty false --incremental false",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "event": "build_failed",
+        "exit_code": "2",
+        "failure_phase": "build",
+        "git_branch": "feature/task-4",
+        "git_commit": "4ef0d23699000b8fcd3c5d7a0c060856627af982",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "build.log",
+        "log_file_path": "/var/log/nextcrm/build.log",
+        "log_source": "build",
+        "module": "scripts.build-with-logs",
+        "pid": "2",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "time": "2026-05-04T20:15:46.668Z"
+      },
+      "line": "Build logging finished",
+      "metadata": {}
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "timestampNs": "1777925746777692360",
+      "labels": {
+        "build_id": "6bc34798-b92b-470e-a0d7-d3367dbdb274",
+        "command": "pnpm exec tsc --noEmit --pretty false --incremental false",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "event": "build_output",
+        "failure_phase": "build",
+        "git_branch": "feature/task-4",
+        "git_commit": "4ef0d23699000b8fcd3c5d7a0c060856627af982",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "build.log",
+        "log_file_path": "/var/log/nextcrm/build.log",
+        "log_source": "build",
+        "module": "scripts.build-with-logs",
+        "pid": "2",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "stream": "stdout",
+        "time": "2026-05-04T20:15:46.668Z"
+      },
+      "line": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+      "metadata": {}
+    },
+    {
+      "time": "2026-05-04T20:15:46.777Z",
+      "timestampNs": "1777925746777694657",
+      "labels": {
+        "build_id": "6bc34798-b92b-470e-a0d7-d3367dbdb274",
+        "command": "pnpm exec tsc --noEmit --pretty false --incremental false",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "event": "build_output",
+        "failure_phase": "build",
+        "git_branch": "feature/task-4",
+        "git_commit": "4ef0d23699000b8fcd3c5d7a0c060856627af982",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "build.log",
+        "log_file_path": "/var/log/nextcrm/build.log",
+        "log_source": "build",
+        "module": "scripts.build-with-logs",
+        "pid": "2",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "stream": "stdout",
+        "time": "2026-05-04T20:15:46.668Z"
+      },
+      "line": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+      "metadata": {}
+    },
+    {
+      "time": "2026-05-04T20:11:49.374Z",
+      "timestampNs": "1777925509374828310",
+      "labels": {
+        "build_id": "95817347-8149-4413-aa70-880ba63e971b",
+        "command": "pnpm exec tsc --noEmit --pretty false --incremental false",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "event": "build_failed",
+        "exit_code": "2",
+        "failure_phase": "build",
+        "git_branch": "feature/task-4",
+        "git_commit": "4ef0d23699000b8fcd3c5d7a0c060856627af982",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "build.log",
+        "log_file_path": "/var/log/nextcrm/build.log",
+        "log_source": "build",
+        "module": "scripts.build-with-logs",
+        "pid": "2",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "time": "2026-05-04T20:11:49.268Z"
+      },
+      "line": "Build logging finished",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc 'pwd && rg --files .claude/skills .claude/commands | sort' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+rg: .claude/skills: No such file or directory (os error 2)
+rg: .claude/commands: No such file or directory (os error 2)
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'git log --oneline --decorate --max-count=12 --all' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,240p' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' 'app/[locale]/(routes)/components/Footer.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+9790f4c (origin/feature/task-5, feature/task-5) Handle legacy employee range imports
+e35981e Normalize imported target values
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+de800af (origin/feature/task-3, feature/task-3) Tighten upload URL handling
+9be250f (origin/feature/task-2, feature/task-2) Polish sign-in copy and labels
+6d8033a Polish board task card presentation
+3fee71d (origin/feature/task-1, feature/task-1) Refine feedback submission flow
+80870cb (origin/develop, develop) FInalized improving telemetry techniques. Sweet!
+6d1b947 Provided project telemetry
+fe8a466 Self-hosted solution improvements
+366ce31 Merge pull request #154 from pdovhomilja/release-please--branches--main--components--nextcrm-app
+1eb31fa chore(main): release 0.6.1
+
+ succeeded in 0ms:
+import getNextVersion from "@/actions/system/get-next-version";
+import Link from "next/link";
+import { version } from "@/package.json";
+import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+
+const Footer = async () => {
+  const nextVersion = await getNextVersion();
+
+  return (
+    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+      <div className="hidden md:flex pr-5">
+        <Link href="/">
+          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+          </h1>
+        </Link>
+      </div>
+      <div className="hidden md:flex space-x-2 pr-2">
+        {footerMeta.poweredBy}
+        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+        </span>
+        +
+        <Link href={footerLinks[0].href}>
+          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+            {footerLinks[0].label}
+          </span>
+        </Link>
+        {footerMeta.hostedBy}
+        <span className="text-bold underline hover:text-foreground transition-colors">
+          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+        </span>
+      </div>
+    </footer>
+  );
+};
+
+export default Footer;
+
+ succeeded in 0ms:
+export const footerLinks = [
+  {
+    href: "https://ui.shadcn.com/",
+    label: "shadcnUI",
+  },
+  {
+    href: "https://www.vercel.com",
+    label: "Vercel",
+  },
+];
+
+export const footerMeta = {
+  poweredBy: "powered by Next.js",
+  hostedBy: "hosted by:",
+};
+
+exec
+/usr/bin/bash -lc 'rg -n "footerBadgeLabels|footer-links|Footer" app' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/components/NoApiKeyDialog.tsx:10:  DialogFooter,
+app/components/NoApiKeyDialog.tsx:36:        <DialogFooter>
+app/components/NoApiKeyDialog.tsx:43:        </DialogFooter>
+app/[locale]/(auth)/layout.tsx:7:import Footer from "@/app/[locale]/(routes)/components/Footer";
+app/[locale]/(auth)/layout.tsx:55:      <Footer />
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:22:  CardFooter,
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:156:            <CardFooter className="space-x-2">
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:162:            </CardFooter>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:20:  DialogFooter,
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:127:                    <DialogFooter>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:141:                    </DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:15:  DialogFooter,
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:294:              <DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:303:              </DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:13:  DialogFooter,
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:178:              <DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:187:              </DialogFooter>
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:12:  TableFooter,
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:140:      <TableFooter>
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:150:      </TableFooter>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:15:  CardFooter,
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:129:            <CardFooter className="space-x-2 ">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:190:            </CardFooter>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:235:            <CardFooter className="space-x-2">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:290:            </CardFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:14:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:290:              <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:299:              </DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:24:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:128:              <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:137:              </DialogFooter>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:45:import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:162:      <CardFooter className="flex justify-between">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:186:      </CardFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:11:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:80:        <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:90:        </DialogFooter>
+app/[locale]/(routes)/layout.tsx:6:import Footer from "./components/Footer";
+app/[locale]/(routes)/layout.tsx:122:          Task Group 3.3: Footer Relocation
+app/[locale]/(routes)/layout.tsx:123:          - Footer has been moved inside the scrollable content area
+app/[locale]/(routes)/layout.tsx:125:          - Footer will appear at the bottom of the content, not fixed at viewport bottom
+app/[locale]/(routes)/layout.tsx:133:          <Footer />
+app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+app/[locale]/(routes)/components/Footer.tsx:6:const Footer = async () => {
+app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+app/[locale]/(routes)/components/Footer.tsx:38:export default Footer;
+app/[locale]/(routes)/components/app-sidebar.tsx:7:  SidebarFooter,
+app/[locale]/(routes)/components/app-sidebar.tsx:46: * - Task 3.1: Added NavUser component in SidebarFooter
+app/[locale]/(routes)/components/app-sidebar.tsx:164:      {/* Footer with NavUser and Build Version */}
+app/[locale]/(routes)/components/app-sidebar.tsx:165:      <SidebarFooter>
+app/[locale]/(routes)/components/app-sidebar.tsx:168:      </SidebarFooter>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:29:  AlertDialogFooter,
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:402:              <AlertDialogFooter>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:407:              </AlertDialogFooter>
+
+exec
+/usr/bin/bash -lc 'git show --name-only --format=fuller 4ef0d23699000b8fcd3c5d7a0c060856627af982' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --unified=80 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc 'git show --stat --oneline 4ef0d23699000b8fcd3c5d7a0c060856627af982' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 Refactor footer link metadata
+ app/[locale]/(routes)/components/Footer.tsx      | 18 +++++++++---------
+ app/[locale]/(routes)/components/footer-links.ts | 15 +++++++++++++++
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:12:25 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+app/[locale]/(routes)/components/Footer.tsx
+app/[locale]/(routes)/components/footer-links.ts
+
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,38 +1,38 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+         <Link href="/">
+           <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+             {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+           </h1>
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+     </footer>
+   );
+ };
+ 
+ export default Footer;
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+exec
+/usr/bin/bash -lc 'pnpm exec tsc --noEmit --pretty false --incremental false' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 15301ms:
+app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.
+app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.
+
+codex
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23699000b8fcd3c5d7a0c060856627af982` (`Refactor footer link metadata`) introduced invalid TypeScript in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+The build fails because `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`. That directly causes:
+
+```text
+TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.
+```
+
+The same refactor also changed the Next.js version display expression to:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses, causing:
+
+```text
+TS5076: '??' and '||' operations cannot be mixed without parentheses.
+```
+
+I reproduced the failure locally with the same command from the incident:
+
+```text
+pnpm exec tsc --noEmit --pretty false --incremental false
+```
+
+It returns the same two errors and exits with code `2`.
+
+The earlier `20:12:29Z` event appears to be a synthetic/demo build command because its command string manually emits a fake `Footer.tsx(4,10): error TS2305: demo`. The real failing build evidence is the `20:15:46Z` `pnpm exec tsc` run.
+
+No code changes were made.
+tokens used
+32,576
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23699000b8fcd3c5d7a0c060856627af982` (`Refactor footer link metadata`) introduced invalid TypeScript in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+The build fails because `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`. That directly causes:
+
+```text
+TS2305: Module '"./footer-links"' has no exported member 'footerBadgeLabels'.
+```
+
+The same refactor also changed the Next.js version display expression to:
+
+```tsx
+footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION
+```
+
+TypeScript rejects this because `??` and `||` cannot be mixed without explicit parentheses, causing:
+
+```text
+TS5076: '??' and '||' operations cannot be mixed without parentheses.
+```
+
+I reproduced the failure locally with the same command from the incident:
+
+```text
+pnpm exec tsc --noEmit --pretty false --incremental false
+```
+
+It returns the same two errors and exits with code `2`.
+
+The earlier `20:12:29Z` event appears to be a synthetic/demo build command because its command string manually emits a fake `Footer.tsx(4,10): error TS2305: demo`. The real failing build evidence is the `20:15:46Z` `pnpm exec tsc` run.
+
+No code changes were made.

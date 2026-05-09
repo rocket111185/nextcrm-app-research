@@ -1,0 +1,1038 @@
+run_name: feature-task-4-C
+case_name: feature-task-4
+variant: C
+target_branch: feature/task-4
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:56:09Z
+elapsed_seconds: 82
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-4/C/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced two build-breaking errors in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+Evidence:
+
+- `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+- `Footer.tsx` line 21 mixes `??` and `||` without parentheses:
+  `footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION`
+- The incident’s two concrete errors exactly match those lines:
+  - `TS2305`: no exported member `footerBadgeLabels`
+  - `TS5076`: `??` and `||` cannot be mixed without parentheses
+- Local `logs/build.log` confirms the failing command was `pnpm exec tsc --noEmit --pretty false --incremental false`, exiting with code `2` at `2026-05-04T20:15:46Z` on branch `feature/task-4`, commit `4ef0d23699000b8fcd3c5d7a0c060856627af982`.
+
+The repeated `"Build logging finished"` events are wrapper logs from `scripts.build-with-logs`, not the root failure. The actual failure is the TypeScript compilation break in the footer refactor.
+
+Likely remediation: either remove the accidental `footerBadgeLabels` reference and restore the previous fallback expression, or add a real `footerBadgeLabels` export and parenthesize the `??` / `||` fallback chain. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e0997-463c-7852-9ca0-9a7b34ae47ee
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "groups": [
+    {
+      "key": "uncorrelated",
+      "eventCount": 5,
+      "firstSeen": "2026-05-04T20:11:49.374Z",
+      "lastSeen": "2026-05-04T20:15:46.777Z",
+      "events": [
+        {
+          "time": "2026-05-04T20:11:49.374Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:12:29.375Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "Build logging finished",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        },
+        {
+          "time": "2026-05-04T20:15:46.777Z",
+          "level": "error",
+          "service": "nextcrm-app",
+          "environment": "development",
+          "module": "scripts.build-with-logs",
+          "contextModule": null,
+          "route": null,
+          "clientUrl": null,
+          "message": "app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.",
+          "error": {
+            "name": null,
+            "message": null,
+            "stack": null
+          },
+          "correlation": {
+            "traceId": null,
+            "spanId": null,
+            "clientSessionId": null
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "sed -n '1,260p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/using-superpowers/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/using-superpowers/SKILL.md: No such file or directory
+
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc pwd in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+
+exec
+/usr/bin/bash -lc 'ls -la' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+total 824
+drwxr-xr-x. 1 dmytro dmytro   1274 May  4 23:51 .
+drwxr-xr-x. 1 dmytro dmytro    220 May  1 16:53 ..
+-rw-r--r--. 1 dmytro dmytro   2108 May  4 21:43 .env
+-rw-r--r--. 1 dmytro dmytro   2143 May  1 17:06 .env.example
+-rw-r--r--. 1 dmytro dmytro   2571 May  2 21:31 .env.local
+-rw-r--r--. 1 dmytro dmytro   2336 May  1 17:06 .env.local.example
+-rw-r--r--. 1 dmytro dmytro     41 May  1 16:54 .eslintrc.json
+drwxr-xr-x. 1 dmytro dmytro    166 May  9 00:56 .git
+drwxr-xr-x. 1 dmytro dmytro     68 May  1 16:54 .github
+-rw-r--r--. 1 dmytro dmytro    817 May  1 17:57 .gitignore
+drwxr-xr-x. 1 dmytro dmytro    288 May  4 23:21 .next
+-rw-r--r--. 1 dmytro dmytro     19 May  1 16:54 .release-please-manifest.json
+drwxr-xr-x. 1 dmytro dmytro     26 May  1 17:00 .vscode
+-rw-r--r--. 1 dmytro dmytro   3838 May  1 16:54 AGENTS.md
+-rw-r--r--. 1 dmytro dmytro  28341 May  1 16:54 CHANGELOG.md
+-rw-r--r--. 1 dmytro dmytro   7284 May  1 16:54 CONTRIBUTING.md
+-rw-r--r--. 1 dmytro dmytro   1073 May  1 16:54 LICENSE
+-rw-r--r--. 1 dmytro dmytro  14862 May  1 17:06 README.md
+drwxr-xr-x. 1 dmytro dmytro     12 May  1 16:54 __mocks__
+drwxr-xr-x. 1 dmytro dmytro    142 May  1 16:54 __tests__
+drwxr-xr-x. 1 dmytro dmytro    270 May  1 16:54 actions
+drwxr-xr-x. 1 dmytro dmytro    202 May  1 17:11 app
+-rw-r--r--. 1 dmytro dmytro     19 May  1 16:54 buildCount.json
+drwxr-xr-x. 1 dmytro dmytro    304 May  1 16:54 components
+-rw-r--r--. 1 dmytro dmytro    335 May  1 16:54 components.json
+drwxr-xr-x. 1 dmytro dmytro     76 May  1 16:54 context
+-rw-r--r--. 1 dmytro dmytro   1998 May  1 17:57 docker-compose.yml
+drwxr-xr-x. 1 dmytro dmytro    180 May  4 23:51 docs
+drwxr-xr-x. 1 dmytro dmytro     38 May  1 16:54 e2b
+-rw-r--r--. 1 dmytro dmytro    196 May  1 16:54 e2b.Dockerfile
+-rw-r--r--. 1 dmytro dmytro     69 May  1 16:54 e2b.toml
+drwxr-xr-x. 1 dmytro dmytro    404 May  1 16:54 emails
+-rw-r--r--. 1 dmytro dmytro    573 May  1 16:54 eslint.config.mjs
+drwxr-xr-x. 1 dmytro dmytro    108 May  1 16:54 hooks
+drwxr-xr-x. 1 dmytro dmytro     66 May  1 16:54 i18n
+drwxr-xr-x. 1 dmytro dmytro     42 May  1 16:54 inngest
+-rw-r--r--. 1 dmytro dmytro   1052 May  1 17:06 instrumentation.ts
+-rw-r--r--. 1 dmytro dmytro    462 May  1 16:54 jest.config.ts
+-rw-r--r--. 1 dmytro dmytro    108 May  1 16:54 jest.env.setup.ts
+drwxr-xr-x. 1 dmytro dmytro    688 May  1 17:06 lib
+drwxr-xr-x. 1 dmytro dmytro     56 May  1 16:54 locales
+drwxr-xr-x. 1 dmytro dmytro     56 May  4 23:11 logs
+-rw-r--r--. 1 dmytro dmytro    251 May  2 21:24 next-env.d.ts
+-rw-r--r--. 1 dmytro dmytro    925 May  1 17:06 next.config.js
+drwxr-xr-x. 1 dmytro dmytro   1720 May  2 21:30 node_modules
+drwxr-xr-x. 1 dmytro dmytro     94 May  1 17:06 observability
+-rw-r--r--. 1 dmytro dmytro   7091 May  4 23:51 package.json
+-rw-r--r--. 1 dmytro dmytro   2296 May  1 16:54 playwright.config.ts
+-rw-r--r--. 1 dmytro dmytro 662943 May  1 17:06 pnpm-lock.yaml
+-rw-r--r--. 1 dmytro dmytro     93 May  1 16:54 postcss.config.js
+drwxr-xr-x. 1 dmytro dmytro    116 May  1 16:54 prisma
+-rw-r--r--. 1 dmytro dmytro    224 May  1 16:54 prisma.config.ts
+-rw-r--r--. 1 dmytro dmytro   2191 May  1 16:54 proxy.ts
+drwxr-xr-x. 1 dmytro dmytro    100 May  1 16:54 public
+-rw-r--r--. 1 dmytro dmytro    504 May  1 16:54 release-please-config.json
+drwxr-xr-x. 1 dmytro dmytro    476 May  4 23:51 scripts
+-rw-r--r--. 1 dmytro dmytro    652 May  1 16:54 skills-lock.json
+-rw-r--r--. 1 dmytro dmytro   6185 May  1 16:54 tailwind.config.js
+drwxr-xr-x. 1 dmytro dmytro     48 May  1 16:54 tests
+-rw-r--r--. 1 dmytro dmytro    816 May  1 17:06 tsconfig.json
+drwxr-xr-x. 1 dmytro dmytro     20 May  1 16:54 types
+
+exec
+/usr/bin/bash -lc "rg --files -g 'AGENTS.md' -g 'SKILL.md' -g 'Footer.tsx' -g 'footer-links*' -g 'package.json'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+package.json
+AGENTS.md
+app/[locale]/(routes)/components/footer-links.ts
+app/[locale]/(routes)/components/Footer.tsx
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/footer-links.ts' | sed -n '1,260p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	export const footerLinks = [
+     2	  {
+     3	    href: "https://ui.shadcn.com/",
+     4	    label: "shadcnUI",
+     5	  },
+     6	  {
+     7	    href: "https://www.vercel.com",
+     8	    label: "Vercel",
+     9	  },
+    10	];
+    11	
+    12	export const footerMeta = {
+    13	  poweredBy: "powered by Next.js",
+    14	  hostedBy: "hosted by:",
+    15	};
+
+exec
+/usr/bin/bash -lc "sed -n '1,220p' AGENTS.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/Footer.tsx' | sed -n '1,220p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+# AGENTS.md
+
+This file is the authoritative guide for AI agents (Claude Code and other LLM agents) working in the `nextcrm-app` project. It covers context management, available superpowers/skills, current repo status, and available MCP servers.
+
+---
+
+## 1. Context-Mode
+
+**What it is**: The `context-mode` MCP plugin intercepts large tool outputs and stores them in a local FTS5 SQLite sandbox, returning only a compact reference instead of flooding the context window.
+
+### Tool Hierarchy
+
+| Priority | Tool                                                                      | Use When                                                             |
+| -------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 1        | `mcp__plugin_context-mode_context-mode__ctx_batch_execute`                | Primary research — runs commands, auto-indexes, searches in one call |
+| 2        | `mcp__plugin_context-mode_context-mode__ctx_search`                       | Follow-up questions — pass multiple queries in one call              |
+| 3        | `mcp__plugin_context-mode_context-mode__ctx_execute` / `ctx_execute_file` | Data processing, API calls, large log analysis                       |
+
+### Forbidden Actions
+
+- **Never** use `Bash` for commands producing >20 lines of output
+- **Never** use `Read` for analysis (use `ctx_execute_file` instead; `Read` is correct only for files you intend to `Edit`)
+- **Never** use `WebFetch` — use `ctx_fetch_and_index` instead
+
+### Trigger Commands
+
+| Command        | Action                                                                            |
+| -------------- | --------------------------------------------------------------------------------- |
+| `/ctx-stats`   | Call `ctx_stats` MCP tool, display output verbatim                                |
+| `/ctx-doctor`  | Call `ctx_doctor` MCP tool, execute returned shell command, display as checklist  |
+| `/ctx-upgrade` | Call `ctx_upgrade` MCP tool, execute returned shell command, display as checklist |
+
+---
+
+## 2. Superpowers (Skills System)
+
+**What it is**: The `.claude/skills/` directory contains `SKILL.md` files that define rigid and flexible agent behaviors.
+
+**Core rule**: Check for applicable skills **before** any response. Invoke via the `Skill` tool.
+
+**Priority order**: User instructions > Superpowers skills > Default behavior
+
+### Available Skills
+
+| Skill                          | Path                                             | Type     |
+| ------------------------------ | ------------------------------------------------ | -------- |
+| using-superpowers              | `.claude/skills/using-superpowers/`              | Rigid    |
+| brainstorming                  | `.claude/skills/brainstorming/`                  | Rigid    |
+| test-driven-development        | `.claude/skills/test-driven-development/`        | Rigid    |
+| systematic-debugging           | `.claude/skills/systematic-debugging/`           | Rigid    |
+| writing-plans                  | `.claude/commands/write-plan.md`                 | Flexible |
+| executing-plans                | `.claude/skills/executing-plans/`                | Flexible |
+| dispatching-parallel-agents    | `.claude/skills/dispatching-parallel-agents/`    | Flexible |
+| subagent-driven-development    | `.claude/skills/subagent-driven-development/`    | Flexible |
+| using-git-worktrees            | `.claude/skills/using-git-worktrees/`            | Flexible |
+| finishing-a-development-branch | `.claude/skills/finishing-a-development-branch/` | Flexible |
+| requesting-code-review         | `.claude/skills/requesting-code-review/`         | Flexible |
+| receiving-code-review          | `.claude/skills/receiving-code-review/`          | Flexible |
+
+---
+
+ succeeded in 0ms:
+     1	import getNextVersion from "@/actions/system/get-next-version";
+     2	import Link from "next/link";
+     3	import { version } from "@/package.json";
+     4	import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+     5	
+     6	const Footer = async () => {
+     7	  const nextVersion = await getNextVersion();
+     8	
+     9	  return (
+    10	    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+    11	      <div className="hidden md:flex pr-5">
+    12	        <Link href="/">
+    13	          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+    14	            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+    15	          </h1>
+    16	        </Link>
+    17	      </div>
+    18	      <div className="hidden md:flex space-x-2 pr-2">
+    19	        {footerMeta.poweredBy}
+    20	        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+    21	          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+    22	        </span>
+    23	        +
+    24	        <Link href={footerLinks[0].href}>
+    25	          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+    26	            {footerLinks[0].label}
+    27	          </span>
+    28	        </Link>
+    29	        {footerMeta.hostedBy}
+    30	        <span className="text-bold underline hover:text-foreground transition-colors">
+    31	          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+    32	        </span>
+    33	      </div>
+    34	    </footer>
+    35	  );
+    36	};
+    37	
+    38	export default Footer;
+
+exec
+/usr/bin/bash -lc 'rg -n "footerBadgeLabels|footer-links|badgeLabels|Footer" app components lib locales tests __tests__ scripts docs' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+docs/superpowers/specs/2026-04-05-line-items-design.md:277:**Footer row:** Subtotal (sum of all line totals)
+app/components/NoApiKeyDialog.tsx:10:  DialogFooter,
+app/components/NoApiKeyDialog.tsx:36:        <DialogFooter>
+app/components/NoApiKeyDialog.tsx:43:        </DialogFooter>
+components/ui/table.tsx:39:const TableFooter = React.forwardRef<
+components/ui/table.tsx:52:TableFooter.displayName = "TableFooter"
+components/ui/table.tsx:112:  TableFooter,
+components/ui/sidebar.tsx:378:const SidebarFooter = React.forwardRef<
+components/ui/sidebar.tsx:391:SidebarFooter.displayName = "SidebarFooter"
+components/ui/sidebar.tsx:751:  SidebarFooter,
+components/ui/sheet.tsx:91:const SheetFooter = ({
+components/ui/sheet.tsx:103:SheetFooter.displayName = "SheetFooter"
+components/ui/sheet.tsx:137:  SheetFooter,
+components/ui/drawer.tsx:69:const DrawerFooter = ({
+components/ui/drawer.tsx:78:DrawerFooter.displayName = "DrawerFooter"
+components/ui/drawer.tsx:115:  DrawerFooter,
+components/ui/dialog.tsx:70:const DialogFooter = ({
+components/ui/dialog.tsx:82:DialogFooter.displayName = "DialogFooter"
+components/ui/dialog.tsx:119:  DialogFooter,
+components/ui/dialog-document-view.tsx:71:const DialogFooter = ({
+components/ui/dialog-document-view.tsx:83:DialogFooter.displayName = "DialogFooter";
+components/ui/dialog-document-view.tsx:117:  DialogFooter,
+components/ui/card.tsx:72:const CardFooter = ({
+components/ui/card.tsx:83:CardFooter.displayName = "CardFooter"
+components/ui/card.tsx:85:export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+components/ui/alert-dialog.tsx:66:const AlertDialogFooter = ({
+components/ui/alert-dialog.tsx:78:AlertDialogFooter.displayName = "AlertDialogFooter"
+components/ui/alert-dialog.tsx:152:  AlertDialogFooter,
+components/modals/ImportTargetsModal.tsx:14:  DialogFooter,
+components/modals/ImportTargetsModal.tsx:333:        <DialogFooter className="flex gap-2 sm:gap-0">
+components/modals/ImportTargetsModal.tsx:374:        </DialogFooter>
+components/modals/alert-modal.tsx:7:  DialogFooter,
+components/modals/alert-modal.tsx:46:        <DialogFooter>
+components/modals/alert-modal.tsx:58:        </DialogFooter>
+components/reports/ScheduleDialog.tsx:4:import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+components/reports/ScheduleDialog.tsx:99:        <DialogFooter>
+components/reports/ScheduleDialog.tsx:102:        </DialogFooter>
+components/modals/CreateTargetListModal.tsx:14:  DialogFooter,
+components/modals/CreateTargetListModal.tsx:82:        <DialogFooter>
+components/modals/CreateTargetListModal.tsx:89:        </DialogFooter>
+components/reports/SaveConfigDialog.tsx:4:import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+components/reports/SaveConfigDialog.tsx:46:        <DialogFooter>
+components/reports/SaveConfigDialog.tsx:49:        </DialogFooter>
+components/modals/AddTargetToListModal.tsx:15:  DialogFooter,
+components/modals/AddTargetToListModal.tsx:172:        <DialogFooter>
+components/modals/AddTargetToListModal.tsx:186:        </DialogFooter>
+docs/superpowers/plans/2026-04-05-line-items.md:1159:  TableFooter,
+docs/superpowers/plans/2026-04-05-line-items.md:1286:      <TableFooter>
+docs/superpowers/plans/2026-04-05-line-items.md:1296:      </TableFooter>
+components/crm/activities/ActivityEntry.tsx:14:  AlertDialogFooter,
+components/crm/activities/ActivityEntry.tsx:125:                <AlertDialogFooter>
+components/crm/activities/ActivityEntry.tsx:128:                </AlertDialogFooter>
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:685:  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:730:    <AlertDialogFooter>
+docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md:735:    </AlertDialogFooter>
+app/[locale]/(routes)/layout.tsx:6:import Footer from "./components/Footer";
+app/[locale]/(routes)/layout.tsx:122:          Task Group 3.3: Footer Relocation
+app/[locale]/(routes)/layout.tsx:123:          - Footer has been moved inside the scrollable content area
+app/[locale]/(routes)/layout.tsx:125:          - Footer will appear at the bottom of the content, not fixed at viewport bottom
+app/[locale]/(routes)/layout.tsx:133:          <Footer />
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:826:  DialogFooter,
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:858:        <DialogFooter className="gap-2 sm:gap-0">
+docs/superpowers/plans/2026-03-23-llm-api-keys.md:863:        </DialogFooter>
+docs/superpowers/plans/2026-03-28-crm-activities.md:492:  AlertDialogFooter,
+docs/superpowers/plans/2026-03-28-crm-activities.md:606:                <AlertDialogFooter>
+docs/superpowers/plans/2026-03-28-crm-activities.md:609:                </AlertDialogFooter>
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3215:  DialogFooter,
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3284:        <DialogFooter>
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3291:        </DialogFooter>
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3310:  DialogFooter,
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3454:        <DialogFooter>
+docs/superpowers/plans/2026-03-31-reports-remaster.md:3461:        </DialogFooter>
+app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+app/[locale]/(routes)/components/Footer.tsx:6:const Footer = async () => {
+app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+app/[locale]/(routes)/components/Footer.tsx:38:export default Footer;
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:22:  CardFooter,
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:156:            <CardFooter className="space-x-2">
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx:162:            </CardFooter>
+app/[locale]/(routes)/components/app-sidebar.tsx:7:  SidebarFooter,
+app/[locale]/(routes)/components/app-sidebar.tsx:46: * - Task 3.1: Added NavUser component in SidebarFooter
+app/[locale]/(routes)/components/app-sidebar.tsx:164:      {/* Footer with NavUser and Build Version */}
+app/[locale]/(routes)/components/app-sidebar.tsx:165:      <SidebarFooter>
+app/[locale]/(routes)/components/app-sidebar.tsx:168:      </SidebarFooter>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:29:  AlertDialogFooter,
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:402:              <AlertDialogFooter>
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:407:              </AlertDialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:15:  DialogFooter,
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:294:              <DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:303:              </DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:13:  DialogFooter,
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:178:              <DialogFooter>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:187:              </DialogFooter>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:15:  CardFooter,
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:129:            <CardFooter className="space-x-2 ">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:190:            </CardFooter>
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:235:            <CardFooter className="space-x-2">
+app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx:290:            </CardFooter>
+app/[locale]/(auth)/layout.tsx:7:import Footer from "@/app/[locale]/(routes)/components/Footer";
+app/[locale]/(auth)/layout.tsx:55:      <Footer />
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:12:  TableFooter,
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:140:      <TableFooter>
+app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx:150:      </TableFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:14:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:290:              <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:299:              </DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:24:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:128:              <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:137:              </DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:11:  DialogFooter,
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:80:        <DialogFooter>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx:90:        </DialogFooter>
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:45:import { Card, CardContent, CardFooter, CardTitle } from "@/components/ui/card";
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:162:      <CardFooter className="flex justify-between">
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:186:      </CardFooter>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:20:  DialogFooter,
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:127:                    <DialogFooter>
+app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx:141:                    </DialogFooter>
+
+exec
+/usr/bin/bash -lc "nl -ba scripts/build-with-logs.* | sed -n '1,260p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+nl: 'scripts/build-with-logs.*': No such file or directory
+
+exec
+/usr/bin/bash -lc "ls -lt logs | sed -n '1,40p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+total 88
+-rw-r--r--. 1 dmytro dmytro 51921 May  4 23:21 build.log
+-rw-r--r--. 1 dmytro dmytro 35919 May  4 22:04 nextcrm.log
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "git log --oneline --decorate --max-count=12 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+003a728 feat(footer): read app version from package.json instead of env var
+2cd7ebb chore: cleanup sidebar, footer, and add inngest proxy passthrough
+3ffff2a feat: PostgreSQL migration and Next.js 16 upgrade
+5922dde Update - getNextVersion - get next version from package.json - disabled fetching build count from github - api limit issue
+022fc4c Update - Build count info - added 2 actions for fetching data from Github - added build info counter to Sidebar component - updated .env.local.example - new strings for Github
+a7364dd Cypress and i18n integration
+
+exec
+/usr/bin/bash -lc 'git show --stat --oneline --decorate --name-only 4ef0d23' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4ef0d23 (HEAD -> feature/task-4, origin/feature/task-4) Refactor footer link metadata
+app/[locale]/(routes)/components/Footer.tsx
+app/[locale]/(routes)/components/footer-links.ts
+
+exec
+/usr/bin/bash -lc 'git show --format=fuller --no-patch 003a728' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 003a728b56429230d40058622e7d0f6fb925e150
+Author:     Pavel Dovhomilja <pavel@dovhomilja.dev>
+AuthorDate: Fri Apr 3 09:01:16 2026 +0200
+Commit:     Pavel Dovhomilja <pavel@dovhomilja.dev>
+CommitDate: Fri Apr 3 09:01:16 2026 +0200
+
+    feat(footer): read app version from package.json instead of env var
+    
+    Replace NEXT_PUBLIC_APP_V env variable with a direct import of `version`
+    from package.json so the footer version stays in sync with releases
+    automatically.
+    
+    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+exec
+/usr/bin/bash -lc 'rg --files scripts | sort' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+scripts/MIGRATION_README.md
+scripts/PHASE2_IMPLEMENTATION_STATUS.md
+scripts/PHASE3_IMPLEMENTATION_SUMMARY.md
+scripts/VALIDATION_QUICK_START.md
+scripts/VALIDATION_README.md
+scripts/db-backup.sh
+scripts/migrate-mongo-to-postgres.ts
+scripts/migrate-openai-keys.ts
+scripts/migration/MIGRATION_MONGO_NATIVE.md
+scripts/migration/backfill-roles.ts
+scripts/migration/batch-processor.ts
+scripts/migration/checkpoint-manager.ts
+scripts/migration/error-logger.ts
+scripts/migration/junction-populator.ts
+scripts/migration/orchestrator.ts
+scripts/migration/progress-tracker.ts
+scripts/migration/table-config.ts
+scripts/migration/transformers/boards-transformer.ts
+scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+scripts/migration/transformers/crm-accounts-transformer.ts
+scripts/migration/transformers/crm-campaigns-transformer.ts
+scripts/migration/transformers/crm-contacts-transformer.ts
+scripts/migration/transformers/crm-contracts-transformer.ts
+scripts/migration/transformers/crm-industry-type-transformer.ts
+scripts/migration/transformers/crm-leads-transformer.ts
+scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+scripts/migration/transformers/crm-opportunities-transformer.ts
+scripts/migration/transformers/crm-opportunities-type-transformer.ts
+scripts/migration/transformers/documents-transformer.ts
+scripts/migration/transformers/documents-types-transformer.ts
+scripts/migration/transformers/employees-transformer.ts
+scripts/migration/transformers/gpt-models-transformer.ts
+scripts/migration/transformers/image-upload-transformer.ts
+scripts/migration/transformers/index.ts
+scripts/migration/transformers/invoice-states-transformer.ts
+scripts/migration/transformers/invoices-transformer.ts
+scripts/migration/transformers/modul-status-transformer.ts
+scripts/migration/transformers/my-account-transformer.ts
+scripts/migration/transformers/openai-keys-transformer.ts
+scripts/migration/transformers/sections-transformer.ts
+scripts/migration/transformers/system-modules-enabled-transformer.ts
+scripts/migration/transformers/system-services-transformer.ts
+scripts/migration/transformers/tasks-comments-transformer.ts
+scripts/migration/transformers/tasks-transformer.ts
+scripts/migration/transformers/todo-list-transformer.ts
+scripts/migration/transformers/users-transformer.ts
+scripts/migration/types.ts
+scripts/migration/utils.ts
+scripts/migration/uuid-mapper.ts
+scripts/test-data/README.md
+scripts/validate-migration.ts
+scripts/validation/report-generator.ts
+scripts/validation/table-schema.ts
+scripts/validation/types.ts
+scripts/validation/validators.ts
+
+exec
+/usr/bin/bash -lc 'git show --format=fuller --no-patch 4ef0d23' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+AuthorDate: Fri May 1 18:12:25 2026 +0300
+Commit:     Dmytro Rekechynskyi <rocket111185@gmail.com>
+CommitDate: Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+exec
+/usr/bin/bash -lc 'tail -n 80 logs/build.log' in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "git show --unified=80 -- 'app/[locale]/(routes)/components/Footer.tsx' 'app/[locale]/(routes)/components/footer-links.ts'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+commit 4ef0d23699000b8fcd3c5d7a0c060856627af982
+Author: Dmytro Rekechynskyi <rocket111185@gmail.com>
+Date:   Fri May 1 18:12:25 2026 +0300
+
+    Refactor footer link metadata
+
+diff --git a/app/[locale]/(routes)/components/Footer.tsx b/app/[locale]/(routes)/components/Footer.tsx
+index a19a0d8..572940a 100644
+--- a/app/[locale]/(routes)/components/Footer.tsx
++++ b/app/[locale]/(routes)/components/Footer.tsx
+@@ -1,38 +1,38 @@
+ import getNextVersion from "@/actions/system/get-next-version";
+ import Link from "next/link";
+ import { version } from "@/package.json";
+-
++import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+ 
+ const Footer = async () => {
+   const nextVersion = await getNextVersion();
+-  //console.log(nextVersion, "nextVersion");
++
+   return (
+     <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+       <div className="hidden md:flex pr-5">
+         <Link href="/">
+           <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+             {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+           </h1>
+         </Link>
+       </div>
+       <div className="hidden md:flex space-x-2 pr-2">
+-        powered by Next.js
++        {footerMeta.poweredBy}
+         <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+-          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
++          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+         </span>
+         +
+-        <Link href={"https://ui.shadcn.com/"}>
++        <Link href={footerLinks[0].href}>
+           <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+-            shadcnUI
++            {footerLinks[0].label}
+           </span>
+-        </Link>{" "}
+-        hosted by:
++        </Link>
++        {footerMeta.hostedBy}
+         <span className="text-bold underline hover:text-foreground transition-colors">
+-          <Link href="https://www.vercel.com">Vercel</Link>
++          <Link href={footerLinks[1].href}>{footerLinks[1].label}</Link>
+         </span>
+       </div>
+     </footer>
+   );
+ };
+ 
+ export default Footer;
+diff --git a/app/[locale]/(routes)/components/footer-links.ts b/app/[locale]/(routes)/components/footer-links.ts
+new file mode 100644
+index 0000000..d61773b
+--- /dev/null
++++ b/app/[locale]/(routes)/components/footer-links.ts
+@@ -0,0 +1,15 @@
++export const footerLinks = [
++  {
++    href: "https://ui.shadcn.com/",
++    label: "shadcnUI",
++  },
++  {
++    href: "https://www.vercel.com",
++    label: "Vercel",
++  },
++];
++
++export const footerMeta = {
++  poweredBy: "powered by Next.js",
++  hostedBy: "hosted by:",
++};
+
+ succeeded in 0ms:
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  └─ 20260404120000_add_currency_support/","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    └─ migration.sql","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"All migrations have been successfully applied.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"▲ Next.js 16.2.4 (Turbopack)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Environments: .env.local, .env","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Creating an optimized production build ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Loaded Prisma config from prisma.config.ts.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Prisma schema loaded from prisma/schema.prisma.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Loaded Prisma config from prisma.config.ts.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Prisma schema loaded from prisma/schema.prisma.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"┌─────────────────────────────────────────────────────────┐","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│  Update available 7.6.0 -> 7.8.0                        │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│  Run the following to update                            │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│    npm i --save-dev prisma@latest                       │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│    npm i @prisma/client@latest                          │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"└─────────────────────────────────────────────────────────┘","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Turbopack build encountered 1 warnings:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./next.config.js","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Encountered unexpected file in NFT list","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- filesystem operations (like path.join, path.resolve or fs.readFile), or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- very dynamic requires (like require('./' + foo)).","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"To resolve this, you can","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- remove them if possible, or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- only use them in development, or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import trace:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./next.config.js","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"> Build error occurred","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Error: Turbopack build failed with 2 errors:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./app/[locale]/(routes)/components/Footer.tsx:21:12","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Nullish coalescing operator(??) requires parens when mixing with logical operators","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m19 |\u001b[0m ...y}","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m20 |\u001b[0m ...\u001b[32mblack dark:bg-white rounded-md text-white dark:text-black px...\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"\u001b[31m\u001b[1m>\u001b[0m \u001b[90m21 |\u001b[0m ....nextjs ?? nextVersion.substring(\u001b[35m1\u001b[0m, \u001b[35m7\u001b[0m) || process.env.\u001b[33mNEXT_P...\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m   |\u001b[0m    \u001b[31m\u001b[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m22 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m23 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m24 |\u001b[0m ...nks[\u001b[35m0\u001b[0m].href}>","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Parsing ecmascript source code failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Server Component:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/layout.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Code generation for chunk item errored","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Caused by:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Debug info:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of <MergedEcmascriptModule as EcmascriptChunkPlaceable>::chunk_item_content failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of *EcmascriptChunkItemContent::new failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of EcmascriptModuleContent::new_merged failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component Browser:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component SSR:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    at <unknown> (./app/[locale]/(routes)/components/Footer.tsx:21:12)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+{"level":"error","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging finished","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_failed","exit_code":1}
+
+exec
+/usr/bin/bash -lc 'rg -n "Build logging finished|footerBadgeLabels|TS2305|TS5076|Footer.tsx|build-with-logs" logs package.json observability instrumentation.ts lib scripts app' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+logs/build.log:1:{"level":"info","time":"2026-05-04T20:15:31.273Z","service":"nextcrm-app","environment":"development","pid":2,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging started","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"6bc34798-b92b-470e-a0d7-d3367dbdb274","command":"pnpm exec tsc --noEmit --pretty false --incremental false","event":"build_started"}
+logs/build.log:2:{"level":"error","time":"2026-05-04T20:15:46.668Z","service":"nextcrm-app","environment":"development","pid":2,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"app/[locale]/(routes)/components/Footer.tsx(4,10): error TS2305: Module '\"./footer-links\"' has no exported member 'footerBadgeLabels'.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"6bc34798-b92b-470e-a0d7-d3367dbdb274","command":"pnpm exec tsc --noEmit --pretty false --incremental false","event":"build_output","stream":"stdout"}
+logs/build.log:3:{"level":"error","time":"2026-05-04T20:15:46.668Z","service":"nextcrm-app","environment":"development","pid":2,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"app/[locale]/(routes)/components/Footer.tsx(21,12): error TS5076: '??' and '||' operations cannot be mixed without parentheses.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"6bc34798-b92b-470e-a0d7-d3367dbdb274","command":"pnpm exec tsc --noEmit --pretty false --incremental false","event":"build_output","stream":"stdout"}
+logs/build.log:4:{"level":"error","time":"2026-05-04T20:15:46.668Z","service":"nextcrm-app","environment":"development","pid":2,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging finished","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"6bc34798-b92b-470e-a0d7-d3367dbdb274","command":"pnpm exec tsc --noEmit --pretty false --incremental false","event":"build_failed","exit_code":2}
+logs/build.log:5:{"level":"info","time":"2026-05-04T20:21:07.785Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging started","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_started"}
+logs/build.log:6:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"✔ Generated Prisma Client (v7.6.0) to ./node_modules/.pnpm/@prisma+client@7.6.0_prisma@7.6.0_react-dom@19.2.4_react@19.2.4__react@19.2.4_types-rea_e5da05f9d54b20c89631f381589b11a6/node_modules/@prisma/client in 633ms","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:7:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:8:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Datasource \"db\": PostgreSQL database \"nextcrm\", schema \"public\" at \"localhost:5432\"","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:9:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"26 migrations found in prisma/migrations","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:10:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Applying migration `20260404120000_add_currency_support`","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:11:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"The following migration(s) have been applied:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:12:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"migrations/","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:13:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  └─ 20260404120000_add_currency_support/","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:14:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    └─ migration.sql","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:15:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"All migrations have been successfully applied.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:16:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"▲ Next.js 16.2.4 (Turbopack)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:17:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Environments: .env.local, .env","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:18:{"level":"info","time":"2026-05-04T20:21:38.728Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Creating an optimized production build ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stdout"}
+logs/build.log:19:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Loaded Prisma config from prisma.config.ts.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:20:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Prisma schema loaded from prisma/schema.prisma.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:21:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Loaded Prisma config from prisma.config.ts.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:22:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Prisma schema loaded from prisma/schema.prisma.","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:23:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"┌─────────────────────────────────────────────────────────┐","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:24:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│  Update available 7.6.0 -> 7.8.0                        │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:25:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│  Run the following to update                            │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:26:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│    npm i --save-dev prisma@latest                       │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:27:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"│    npm i @prisma/client@latest                          │","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:28:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"└─────────────────────────────────────────────────────────┘","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:29:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Turbopack build encountered 1 warnings:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:30:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./next.config.js","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:31:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Encountered unexpected file in NFT list","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:32:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"A file was traced that indicates that the whole project was traced unintentionally. Somewhere in the import trace below, there are:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:33:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- filesystem operations (like path.join, path.resolve or fs.readFile), or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:34:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- very dynamic requires (like require('./' + foo)).","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:35:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"To resolve this, you can","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:36:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- remove them if possible, or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:37:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- only use them in development, or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:38:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- make sure they are statically scoped to some subfolder: path.join(process.cwd(), 'data', bar), or","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:39:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- add ignore comments: path.join(/*turbopackIgnore: true*/ process.cwd(), bar)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:40:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import trace:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:41:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:42:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./next.config.js","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:43:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:44:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:45:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"> Build error occurred","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:46:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Error: Turbopack build failed with 2 errors:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:47:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./app/[locale]/(routes)/components/Footer.tsx:21:12","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:48:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Nullish coalescing operator(??) requires parens when mixing with logical operators","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:49:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m19 |\u001b[0m ...y}","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:50:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m20 |\u001b[0m ...\u001b[32mblack dark:bg-white rounded-md text-white dark:text-black px...\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:51:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"\u001b[31m\u001b[1m>\u001b[0m \u001b[90m21 |\u001b[0m ....nextjs ?? nextVersion.substring(\u001b[35m1\u001b[0m, \u001b[35m7\u001b[0m) || process.env.\u001b[33mNEXT_P...\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:52:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m   |\u001b[0m    \u001b[31m\u001b[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\u001b[0m","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:53:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m22 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:54:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m23 |\u001b[0m ...","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:55:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  \u001b[90m24 |\u001b[0m ...nks[\u001b[35m0\u001b[0m].href}>","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:56:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Parsing ecmascript source code failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:57:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:58:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Server Component:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:59:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:60:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/layout.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:61:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:62:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/components/Footer.tsx","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:63:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:64:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:65:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:66:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Code generation for chunk item errored","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:67:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:68:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Caused by:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:69:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:70:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Debug info:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:71:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- An error occurred while generating the chunk item [project]/app/[locale]/(routes)/projects/actions/get-task-done.ts [app-client] (ecmascript)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:72:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of <MergedEcmascriptModule as EcmascriptChunkPlaceable>::chunk_item_content failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:73:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of *EcmascriptChunkItemContent::new failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:74:{"level":"error","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- Execution of EcmascriptModuleContent::new_merged failed","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:75:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"- the chunking context (unknown) does not support external modules (request: node:fs)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:76:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Import traces:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:77:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  App Route:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:78:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:79:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./lib/logger.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:80:{"level":"warn","time":"2026-05-04T20:21:38.729Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/api/crm/leads/create-lead-from-web/route.ts","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:81:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component Browser:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:82:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:83:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component Browser]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:84:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:85:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:86:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"  Client Component SSR:","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:87:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/actions/get-task-done.ts [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:88:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Client Component SSR]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:89:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:90:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    ./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx [Server Component]","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:91:{"level":"warn","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"    at <unknown> (./app/[locale]/(routes)/components/Footer.tsx:21:12)","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_output","stream":"stderr"}
+logs/build.log:92:{"level":"error","time":"2026-05-04T20:21:38.730Z","service":"nextcrm-app","environment":"development","pid":103106,"hostname":"localhost","module":"scripts.build-with-logs","log_source":"build","failure_phase":"build","message":"Build logging finished","git_branch":"feature/task-4","git_commit":"4ef0d23699000b8fcd3c5d7a0c060856627af982","build_id":"9f4c1957-2584-4c23-b4cf-f59ec01afba5","command":"pnpm exec prisma generate && pnpm exec prisma migrate deploy && pnpm exec next build","event":"build_failed","exit_code":1}
+app/[locale]/(routes)/components/Footer.tsx:4:import { footerBadgeLabels, footerLinks, footerMeta } from "./footer-links";
+app/[locale]/(routes)/components/Footer.tsx:21:          {footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+
+exec
+/usr/bin/bash -lc "git show 003a728:'app/[locale]/(routes)/components/Footer.tsx' | nl -ba | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import getNextVersion from "@/actions/system/get-next-version";
+     2	import Link from "next/link";
+     3	import { version } from "@/package.json";
+     4	
+     5	
+     6	const Footer = async () => {
+     7	  const nextVersion = await getNextVersion();
+     8	  //console.log(nextVersion, "nextVersion");
+     9	  return (
+    10	    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+    11	      <div className="hidden md:flex pr-5">
+    12	        <Link href="/">
+    13	          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+    14	            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+    15	          </h1>
+    16	        </Link>
+    17	      </div>
+    18	      <div className="hidden md:flex space-x-2 pr-2">
+    19	        powered by Next.js
+    20	        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+    21	          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+    22	        </span>
+    23	        +
+    24	        <Link href={"https://ui.shadcn.com/"}>
+    25	          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+    26	            shadcnUI
+    27	          </span>
+    28	        </Link>{" "}
+    29	        hosted by:
+    30	        <span className="text-bold underline hover:text-foreground transition-colors">
+    31	          <Link href="https://www.vercel.com">Vercel</Link>
+    32	        </span>
+    33	      </div>
+    34	    </footer>
+    35	  );
+    36	};
+    37	
+    38	export default Footer;
+
+exec
+/usr/bin/bash -lc 'git show 4ef0d23''^:'"'app/[locale]/(routes)/components/Footer.tsx' | nl -ba | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import getNextVersion from "@/actions/system/get-next-version";
+     2	import Link from "next/link";
+     3	import { version } from "@/package.json";
+     4	
+     5	
+     6	const Footer = async () => {
+     7	  const nextVersion = await getNextVersion();
+     8	  //console.log(nextVersion, "nextVersion");
+     9	  return (
+    10	    <footer className="flex flex-row h-8 justify-end items-center w-full text-xs text-muted-foreground p-5">
+    11	      <div className="hidden md:flex pr-5">
+    12	        <Link href="/">
+    13	          <h1 className="text-muted-foreground hover:text-foreground transition-colors">
+    14	            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+    15	          </h1>
+    16	        </Link>
+    17	      </div>
+    18	      <div className="hidden md:flex space-x-2 pr-2">
+    19	        powered by Next.js
+    20	        <span className="bg-black dark:bg-white rounded-md text-white dark:text-black px-1 mx-1">
+    21	          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+    22	        </span>
+    23	        +
+    24	        <Link href={"https://ui.shadcn.com/"}>
+    25	          <span className="rounded-md mr-2 hover:text-foreground transition-colors">
+    26	            shadcnUI
+    27	          </span>
+    28	        </Link>{" "}
+    29	        hosted by:
+    30	        <span className="text-bold underline hover:text-foreground transition-colors">
+    31	          <Link href="https://www.vercel.com">Vercel</Link>
+    32	        </span>
+    33	      </div>
+    34	    </footer>
+    35	  );
+    36	};
+    37	
+    38	export default Footer;
+
+exec
+/usr/bin/bash -lc "rg -n \"from ['\\\"]node:fs|from ['\\\"]fs|require\\(['\\\"]fs|logger\" 'app/[locale]/(routes)/projects/actions/get-task-done.ts' lib/logger.ts 'app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/logger.ts:2:import { mkdirSync } from "node:fs";
+lib/logger.ts:55:export const logger = pino(
+lib/logger.ts:100:  return logger.child(bindings);
+app/[locale]/(routes)/projects/actions/get-task-done.ts:1:import { createLogger } from "@/lib/logger";
+app/[locale]/(routes)/projects/actions/get-task-done.ts:4:const logger = createLogger({ module: "app.routes.projects.actions.get-task-done" });
+app/[locale]/(routes)/projects/actions/get-task-done.ts:11:    logger.error({ err: error, taskId }, "Mark task done wrapper failed");
+
+exec
+/usr/bin/bash -lc "node -e \"const p=require('./package.json'); console.log(JSON.stringify(p.scripts,null,2))\"" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+{
+  "dev": "next dev",
+  "build": "prisma generate && prisma migrate deploy && next build",
+  "start": "next start",
+  "lint": "eslint . --max-warnings=0",
+  "migrate:mongo-to-postgres": "pnpm exec tsx scripts/migrate-mongo-to-postgres.ts",
+  "validate:migration": "pnpm exec tsx scripts/validate-migration.ts",
+  "test": "jest",
+  "test:e2e": "playwright test",
+  "test:e2e:ui": "playwright test --ui",
+  "test:e2e:headed": "playwright test --headed",
+  "test:e2e:debug": "playwright test --debug"
+}
+
+codex
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced two build-breaking errors in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+Evidence:
+
+- `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+- `Footer.tsx` line 21 mixes `??` and `||` without parentheses:
+  `footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION`
+- The incident’s two concrete errors exactly match those lines:
+  - `TS2305`: no exported member `footerBadgeLabels`
+  - `TS5076`: `??` and `||` cannot be mixed without parentheses
+- Local `logs/build.log` confirms the failing command was `pnpm exec tsc --noEmit --pretty false --incremental false`, exiting with code `2` at `2026-05-04T20:15:46Z` on branch `feature/task-4`, commit `4ef0d23699000b8fcd3c5d7a0c060856627af982`.
+
+The repeated `"Build logging finished"` events are wrapper logs from `scripts.build-with-logs`, not the root failure. The actual failure is the TypeScript compilation break in the footer refactor.
+
+Likely remediation: either remove the accidental `footerBadgeLabels` reference and restore the previous fallback expression, or add a real `footerBadgeLabels` export and parenthesize the `??` / `||` fallback chain. No code changes were made.
+tokens used
+42,760
+**Incident Report**
+
+Most likely root cause: commit `4ef0d23` (`Refactor footer link metadata`) introduced two build-breaking errors in [Footer.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/Footer.tsx:4).
+
+Evidence:
+
+- `Footer.tsx` imports `footerBadgeLabels` from `./footer-links`, but [footer-links.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/footer-links.ts:1) only exports `footerLinks` and `footerMeta`.
+- `Footer.tsx` line 21 mixes `??` and `||` without parentheses:
+  `footerBadgeLabels.nextjs ?? nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION`
+- The incident’s two concrete errors exactly match those lines:
+  - `TS2305`: no exported member `footerBadgeLabels`
+  - `TS5076`: `??` and `||` cannot be mixed without parentheses
+- Local `logs/build.log` confirms the failing command was `pnpm exec tsc --noEmit --pretty false --incremental false`, exiting with code `2` at `2026-05-04T20:15:46Z` on branch `feature/task-4`, commit `4ef0d23699000b8fcd3c5d7a0c060856627af982`.
+
+The repeated `"Build logging finished"` events are wrapper logs from `scripts.build-with-logs`, not the root failure. The actual failure is the TypeScript compilation break in the footer refactor.
+
+Likely remediation: either remove the accidental `footerBadgeLabels` reference and restore the previous fallback expression, or add a real `footerBadgeLabels` export and parenthesize the `??` / `||` fallback chain. No code changes were made.

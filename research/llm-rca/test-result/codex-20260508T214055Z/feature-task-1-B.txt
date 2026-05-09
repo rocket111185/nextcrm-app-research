@@ -1,0 +1,1180 @@
+run_name: feature-task-1-B
+case_name: feature-task-1
+variant: B
+target_branch: feature/task-1
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T21:46:22Z
+elapsed_seconds: 72
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-1/B/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: the feedback API expects `body.context.pathname`, but the client sends `page`, not `context`.
+
+Evidence:
+- Client submits to `/api/feedback` with `{ feedback, page, submittedAt }` in [FeedbackForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48).
+- Server reads `body.context.pathname.replace(...)` in [route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36).
+- Because `body.context` is absent, this throws `TypeError: Cannot read properties of undefined`, outside the email-send `try/catch`, causing Next.js to return HTTP 500.
+- The observed client log is exactly consistent: Axios received `500` from `/api/feedback`, then `FeedbackForm` logged `"Feedback submission failed"`.
+
+Secondary finding: the form always shows the success toast and closes in `finally`, even after the failed request, so users may see a false success after the 500.
+
+Less likely alternative: missing Resend configuration could also produce a 500, but local env files contain `RESEND_API_KEY`, and the direct client/server payload mismatch is a deterministic failure path.
+
+Recommended fix: align the API and client payload shape, e.g. have the server read `body.page` or have the client send `context: { pathname: window.location.pathname }`, and guard optional fields before dereferencing. No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e098e-503a-7440-864f-5d9d737e6fe9
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-02T18:34:29.669Z",
+      "level": "error",
+      "service": "nextcrm-app",
+      "environment": "development",
+      "module": "app.api.client-logs",
+      "contextModule": "app.[locale].(routes).components.FeedbackForm",
+      "route": "/en",
+      "clientUrl": "http://localhost:3000/en",
+      "message": "Feedback submission failed",
+      "error": {
+        "name": "AxiosError",
+        "message": "Request failed with status code 500",
+        "stack": "AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n"
+      },
+      "correlation": {
+        "traceId": "e2980506f723a88135d38840469ec308",
+        "spanId": "f184cde15745e45a",
+        "clientSessionId": "4f335a33-9f27-425f-8755-32b3bc9b3859"
+      }
+    }
+  ]
+}
+```
+
+exec
+/usr/bin/bash -lc "sed -n '1,200p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+exec
+/usr/bin/bash -lc "pwd && rg --files -g 'AGENTS.md' -g '.claude/skills/systematic-debugging/SKILL.md' -g 'app/**' -g 'src/**' -g 'pages/**' -g 'components/**' -g 'lib/**' -g 'server/**' -g 'package.json' | head -n 80" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+/home/dmytro/Github/phd-work/nextcrm-app-update
+package.json
+AGENTS.md
+app/client-logger.ts
+app/client-error-listener.tsx
+app/[locale]/layout.tsx
+app/[locale]/loading.tsx
+app/[locale]/globals.css.bck
+app/[locale]/globals.css
+app/providers/ToastProvider.tsx
+app/providers/ThemeProvider.tsx
+app/opengraph-image.png
+app/favicon.ico
+app/components/NoApiKeyDialog.tsx
+lib/sendmail.ts
+lib/openai.ts
+lib/logger.ts
+lib/audit-log.ts
+lib/auth.ts
+lib/utils.ts
+lib/serialize-decimals.ts
+lib/resend.ts
+lib/prisma.ts
+lib/new-user-notify.ts
+lib/minio.ts
+app/api/client-logs/route.ts
+app/[locale]/(routes)/reports/users/page.tsx
+lib/mcp/tools/reports.ts
+lib/mcp/tools/projects.ts
+lib/mcp/tools/index.ts
+lib/mcp/tools/crm-targets.ts
+lib/mcp/tools/crm-target-lists.ts
+lib/mcp/tools/crm-products.ts
+lib/mcp/tools/crm-opportunities.ts
+lib/mcp/tools/crm-leads.ts
+lib/mcp/tools/crm-enrichment.ts
+lib/mcp/tools/crm-email-accounts.ts
+lib/mcp/tools/crm-documents.ts
+lib/mcp/tools/crm-contracts.ts
+lib/mcp/tools/crm-contacts.ts
+lib/mcp/tools/crm-activities.ts
+lib/mcp/tools/crm-accounts.ts
+lib/mcp/tools/campaigns.ts
+lib/mcp/helpers.ts
+lib/mcp/auth.ts
+app/api/upload/presigned-url/route.ts
+lib/line-items.ts
+lib/junction-helpers.ts
+lib/fetcher.ts
+app/[locale]/(routes)/reports/sales/page.tsx
+app/[locale]/(routes)/reports/page.tsx
+app/[locale]/(routes)/reports/loading.tsx
+app/[locale]/(routes)/reports/leads/page.tsx
+app/api/reports/export/route.ts
+app/[locale]/(routes)/reports/campaigns/page.tsx
+components/ui/minio-uploader.tsx
+components/ui/user-search-combobox.tsx
+components/ui/use-toast.ts
+components/ui/tooltip.tsx
+components/ui/toaster.tsx
+components/ui/toast.tsx
+components/ui/textarea.tsx
+components/ui/tabs.tsx
+components/ui/table.tsx
+components/ui/switch.tsx
+components/ui/sonner.tsx
+components/ui/skeleton.tsx
+components/ui/sidebar.tsx
+components/ui/sheet.tsx
+components/ui/separator.tsx
+components/ui/select.tsx
+components/ui/scroll-area.tsx
+components/ui/resizable.tsx
+components/ui/popover.tsx
+components/ui/modal.tsx
+components/ui/modal-document-view.tsx
+components/ui/label.tsx
+components/ui/input.tsx
+components/ui/input-otp.tsx
+components/ui/icons.tsx
+components/ui/hover-card.tsx
+
+exec
+/usr/bin/bash -lc 'rg --files .claude AGENTS.md | head -n 80' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+rg: .claude: No such file or directory (os error 2)
+AGENTS.md
+
+exec
+/usr/bin/bash -lc "rg -n \"FeedbackForm|feedback|client-logs|submit\" app components lib src pages --glob '"'!node_modules'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+rg: src: No such file or directory (os error 2)
+rg: pages: No such file or directory (os error 2)
+app/client-logger.ts:8:const ENDPOINT = "/api/client-logs";
+app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+app/api/feedback/route.ts:33:  const { feedback } = body;
+app/api/feedback/route.ts:35:    typeof feedback === "string" ? feedback.trim() : "";
+app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+components/form/form-submit.tsx:32:      type="submit"
+components/crm/activities/ActivityForm.tsx:230:            <Button type="submit" disabled={saving}>
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:98:            <Button type="submit">Set Resend key</Button>
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx:45:          <Button type="submit" disabled={loading} className="w-full">
+app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx:52:          <Button type="submit" disabled={loading} className="w-full">
+app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx:12:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/admin/users/components/IviteForm.tsx:132:        <Button className="w-[150px]" type="submit" disabled={isLoading}>
+app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx:102:          <Button className="w-[80px]" disabled={isLoading} type="submit">
+app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx:536:          <Button disabled={form.formState.isSubmitting} type="submit">
+app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx:469:          <Button disabled={form.formState.isSubmitting} type="submit" data-testid="account-submit-btn">
+app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx:17:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx:18:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/products/_forms/update-product.tsx:15:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/products/_forms/create-product.tsx:15:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx:571:          <Button disabled={form.formState.isSubmitting} type="submit">
+app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx:96:          <Button className="w-[80px]" disabled={isLoading} type="submit">
+app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx:265:            <Button type="submit" disabled={isLoading}>
+app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx:568:          <Button disabled={form.formState.isSubmitting} type="submit" data-testid="contact-submit-btn">
+app/[locale]/(routes)/projects/dialogs/NewTask.tsx:302:                <Button type="submit">{t("newTask.create")}</Button>
+app/[locale]/(routes)/projects/dialogs/NewProject.tsx:186:                <Button type="submit">{t("newProject.create")}</Button>
+app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx:424:          <Button disabled={form.formState.isSubmitting} type="submit">
+app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx:504:          <Button disabled={form.formState.isSubmitting} type="submit" data-testid="opportunity-submit-btn">
+app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx:228:                <Button type="submit">Create</Button>
+app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx:13:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/components/line-items/EditLineItemForm.tsx:10:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/crm/components/line-items/AddLineItemForm.tsx:11:import { FormSubmit } from "@/components/form/form-submit";
+app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+app/[locale]/(routes)/components/FeedbackForm.tsx:28:  feedback: z.string().min(1, {
+app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+app/[locale]/(routes)/components/FeedbackForm.tsx:43:  const feedbackValue = form.watch("feedback") || "";
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/FeedbackForm.tsx:51:        submittedAt: new Date().toISOString(),
+app/[locale]/(routes)/components/FeedbackForm.tsx:57:      toast.success("Thank you for your feedback.");
+app/[locale]/(routes)/components/FeedbackForm.tsx:68:          name="feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:71:              <FormLabel>Send us a feedback</FormLabel>
+app/[locale]/(routes)/components/FeedbackForm.tsx:74:                  placeholder="Your feedback"
+app/[locale]/(routes)/components/FeedbackForm.tsx:81:                We appreciate every feedback. Thank you for helping us make this
+app/[locale]/(routes)/components/FeedbackForm.tsx:85:                {feedbackValue.length}/1000
+app/[locale]/(routes)/components/FeedbackForm.tsx:99:          <Button type="submit" variant={"secondary"} disabled={loading}>
+app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx:103:          <Button type="submit" disabled={isLoading}>
+app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx:370:          <Button disabled={form.formState.isSubmitting} type="submit">
+app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx:375:          <Button disabled={form.formState.isSubmitting} type="submit" data-testid="lead-submit-btn">
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx:298:                <Button type="submit">Create</Button>
+app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx:136:                <Button type="submit">{t("newSection.create")}</Button>
+app/[locale]/(routes)/profile/components/ProfileForm.tsx:134:        <Button className="w-[150px]" type="submit">
+app/[locale]/(routes)/projects/forms/UpdateProject.tsx:160:            <Button type="submit" disabled={isLoading}>
+app/[locale]/(routes)/profile/components/OpenAiForm.tsx:108:        <Button className="w-[150px]" type="submit">
+app/[locale]/(routes)/components/FulltextSearch.tsx:25:      <Button type="submit" className="gap-2" onClick={handleSearch}>
+app/[locale]/(routes)/campaigns/[campaignId]/components/CampaignDetail.tsx:52:              type="submit"
+app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx:411:        <Button disabled={form.formState.isSubmitting} type="submit" className="w-full">
+app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx:346:        <Button disabled={form.formState.isSubmitting} type="submit" className="w-full">
+app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx:133:              <Button type="submit" disabled={saving} className="w-full">
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' lib/resend.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,150p' app/[locale]/\\(routes\\)/components/FeedbackForm.tsx" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { Resend } from "resend";
+import { prismadb } from "./prisma";
+
+export default async function resendHelper() {
+  const resendKey = await prismadb.systemServices.findFirst({
+    where: {
+      name: "resend_smtp",
+    },
+  });
+
+  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+
+  if (!apiKey) {
+    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+  }
+
+  const resend = new Resend(apiKey);
+
+  return resend;
+}
+
+ succeeded in 0ms:
+"use client";
+
+import { createClientLogger } from "@/app/client-logger";
+import * as z from "zod";
+import axios from "axios";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Icons } from "@/components/ui/icons";
+
+
+const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+const formSchema = z.object({
+  feedback: z.string().min(1, {
+    message: "Feedback must be at least 1 character.",
+  }),
+});
+
+interface FeedbackFormProps {
+  setOpen: (open: boolean) => void;
+}
+
+const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+  const [loading, setLoading] = useState(false);
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+  });
+  const feedbackValue = form.watch("feedback") || "";
+
+  const onSubmit = async (data: any) => {
+    setLoading(true);
+    try {
+      await axios.post("/api/feedback", {
+        ...data,
+        page: window.location.pathname,
+        submittedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Feedback submission failed");
+      toast.error("Something went wrong. Please try again later.");
+    } finally {
+      toast.success("Thank you for your feedback.");
+      setOpen(false);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <FormField
+          control={form.control}
+          name="feedback"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Send us a feedback</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Your feedback"
+                  disabled={loading}
+                  maxLength={1000}
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription className="text-xs text-muted-foreground">
+                We appreciate every feedback. Thank you for helping us make this
+                app better
+              </FormDescription>
+              <div className="text-right text-xs text-muted-foreground">
+                {feedbackValue.length}/1000
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="flex justify-end space-x-2">
+          <Button
+            variant={"outline"}
+            onClick={() => setOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant={"secondary"} disabled={loading}>
+            {loading ? (
+              <div className="flex space-x-2">
+                <Icons.spinner className="h-4 w-4 animate-spin" />
+                <span>Sending ...</span>
+              </div>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+};
+
+export default FeedbackForm;
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' app/api/feedback/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,200p' lib/sendmail.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import { createLogger } from "@/lib/logger";
+import resendHelper from "@/lib/resend";
+import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "api.feedback" });
+function buildFeedbackSubject(sourcePath: string) {
+  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+}
+
+export async function POST(req: Request) {
+  /*
+  Resend.com function init - this is a helper function that will be used to send emails
+  */
+  let resend;
+  try {
+    resend = await resendHelper();
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message || "Resend API key is not configured" },
+      { status: 500 }
+    );
+  }
+  
+  const session = await getSession();
+  if (!session) {
+    return new NextResponse("Unauthenticated", { status: 401 });
+  }
+  const body = await req.json();
+  if (!body) {
+    return new NextResponse("Missing body", { status: 400 });
+  }
+  const { feedback } = body;
+  const normalizedFeedback =
+    typeof feedback === "string" ? feedback.trim() : "";
+  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+
+  if (!normalizedFeedback) {
+    return new NextResponse("Missing feedback", { status: 400 });
+  }
+
+  try {
+    //Send mail via Resend to info@softbase.cz
+    await resend.emails.send({
+      from:
+        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+      to: "info@softbase.cz",
+      subject: buildFeedbackSubject(sourcePath),
+      text: normalizedFeedback,
+    });
+    logger.info({ userId: session.user.id }, "Feedback email sent");
+    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+  } catch (error) {
+    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+  }
+}
+
+ succeeded in 0ms:
+import nodemailer from "nodemailer";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger({ module: "sendmail" });
+
+interface EmailOptions {
+  from: string | undefined;
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}
+
+export default async function sendEmail(
+  emailOptions: EmailOptions
+): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USERNAME,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  try {
+    await transporter.sendMail(emailOptions);
+    logger.info(
+      {
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email sent"
+    );
+  } catch (error: any | Error) {
+    logger.error(
+      {
+        err: error,
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email send failed"
+    );
+  }
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' app/api/client-logs/route.ts && sed -n '1,180p' app/client-logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { createLogger } from "@/lib/logger";
+import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "app.api.client-logs" });
+const levels = new Set(["debug", "info", "warn", "error"]);
+const MAX_BODY_BYTES = 64 * 1024;
+
+interface ClientLogBody {
+  context?: unknown;
+  level?: unknown;
+  message?: unknown;
+  pathname?: unknown;
+  sessionId?: unknown;
+  timestamp?: unknown;
+  url?: unknown;
+}
+
+function limitString(value: unknown, fallback: string) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return fallback;
+  }
+
+  return value.length > 1_000 ? `${value.slice(0, 1_000)}...[truncated]` : value;
+}
+
+export async function POST(req: Request) {
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
+  let body: ClientLogBody;
+  try {
+    const parsed = await req.json();
+    body = parsed && typeof parsed === "object" ? (parsed as ClientLogBody) : {};
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const level = typeof body.level === "string" && levels.has(body.level) ? body.level : "info";
+  const message = limitString(body?.message, "Client log");
+  const payload = {
+    client: {
+      sessionId: limitString(body?.sessionId, "unknown"),
+      pathname: limitString(body?.pathname, "unknown"),
+      url: limitString(body?.url, "unknown"),
+      timestamp: limitString(body?.timestamp, "unknown"),
+      userAgent: limitString(req.headers.get("user-agent"), "unknown"),
+    },
+    context: body.context && typeof body.context === "object" ? body.context : {},
+  };
+
+  switch (level) {
+    case "debug":
+      logger.debug(payload, message);
+      break;
+    case "warn":
+      logger.warn(payload, message);
+      break;
+    case "error":
+      logger.error(payload, message);
+      break;
+    default:
+      logger.info(payload, message);
+  }
+
+  return new NextResponse(null, { status: 204 });
+}
+"use client";
+
+type ClientLogLevel = "debug" | "info" | "warn" | "error";
+type ClientLogContext = Record<string, unknown>;
+
+const MAX_STRING_LENGTH = 4_000;
+const MAX_DEPTH = 4;
+const ENDPOINT = "/api/client-logs";
+
+const sessionId =
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
+function truncate(value: string) {
+  return value.length > MAX_STRING_LENGTH
+    ? `${value.slice(0, MAX_STRING_LENGTH)}...[truncated]`
+    : value;
+}
+
+function serialize(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: truncate(value.message),
+      stack: value.stack ? truncate(value.stack) : undefined,
+    };
+  }
+
+  if (value === null || typeof value !== "object") {
+    return typeof value === "string" ? truncate(value) : value;
+  }
+
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+
+  if (depth >= MAX_DEPTH) {
+    return "[MaxDepth]";
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((item) => serialize(item, depth + 1, seen));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .slice(0, 50)
+      .map(([key, item]) => [key, serialize(item, depth + 1, seen)])
+  );
+}
+
+function send(level: ClientLogLevel, message: string, context: ClientLogContext) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const payload = JSON.stringify({
+    level,
+    message,
+    context: serialize(context),
+    sessionId,
+    url: window.location.href,
+    pathname: window.location.pathname,
+    timestamp: new Date().toISOString(),
+  });
+
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(
+      ENDPOINT,
+      new Blob([payload], { type: "application/json" })
+    );
+    if (sent) {
+      return;
+    }
+  }
+
+  fetch(ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {
+    // Client logging must never break the UI.
+  });
+}
+
+export function createClientLogger(bindings: ClientLogContext) {
+  const log = (level: ClientLogLevel, context: ClientLogContext, message: string) => {
+    send(level, message, { ...bindings, ...context });
+  };
+
+  return {
+    debug: (context: ClientLogContext, message: string) => log("debug", context, message),
+    info: (context: ClientLogContext, message: string) => log("info", context, message),
+    warn: (context: ClientLogContext, message: string) => log("warn", context, message),
+    error: (context: ClientLogContext, message: string) => log("error", context, message),
+  };
+}
+
+exec
+/usr/bin/bash -lc "find . -maxdepth 2 -name '.env*' -o -name 'docker-compose*' -o -name 'README*' | sort | head -n 80" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./.env
+./.env.example
+./.env.local
+./.env.local.example
+./README.md
+./docker-compose.yml
+
+exec
+/usr/bin/bash -lc "rg -n \"context\\.pathname|pathname\\.replace|/api/feedback|RESEND_API_KEY|resend_smtp|EMAIL_FROM|NEXT_PUBLIC_APP_URL\" app lib components prisma . --glob '"'!node_modules'"' --glob '"'!*.lock'"' --glob '"'!package-lock.json'"'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+lib/auth.ts:10:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+lib/resend.ts:7:      name: "resend_smtp",
+lib/resend.ts:11:  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+lib/resend.ts:14:    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+lib/new-user-notify.ts:15:      from: process.env.EMAIL_FROM,
+lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+app/api/og/route.tsx:10:const websiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+app/api/feedback/route.ts:8:  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+app/api/feedback/route.ts:36:  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+app/api/feedback/route.ts:46:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+lib/auth-client.ts:6:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:106:| Self-signup (demo: `NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io"`) | `ACTIVE` | `member` |
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:231:| `RESEND_API_KEY` | Email delivery — now also used for OTP |
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md:232:| `NEXT_PUBLIC_APP_URL` | Demo mode detection |
+./docs/superpowers/specs/2026-03-25-campaigns-module-design.md:352:RESEND_API_KEY=            # Resend sending API key
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:311:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:364:          from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:440:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:642:      from: process.env.EMAIL_FROM,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:645:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1145:- Modify: `app/api/feedback/route.ts`
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1330:      from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1564:RESEND_API_KEY="your-resend-api-key"
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1565:EMAIL_FROM="no-reply@example.com"
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1734:- [ ] Verify `RESEND_API_KEY` and `EMAIL_FROM` configured
+./docs/superpowers/plans/2026-03-31-reports-remaster.md:4566:const resend = new Resend(process.env.RESEND_API_KEY);
+./app/api/og/route.tsx:10:const websiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:38:                : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+./docs/deployment/better-auth-migration-runbook.md:8:- [ ] Verify `RESEND_API_KEY` and `EMAIL_FROM` configured
+app/[locale]/(routes)/components/nav-main.tsx:72:      return pathname === url || pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") === url
+./docs/superpowers/plans/2026-03-25-campaigns-module.md:115:RESEND_API_KEY=            # https://resend.com/api-keys
+./docs/superpowers/plans/2026-03-25-campaigns-module.md:1299:const resend = new Resend(process.env.RESEND_API_KEY);
+./app/api/feedback/route.ts:8:  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+./app/api/feedback/route.ts:36:  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+./app/api/feedback/route.ts:46:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+./lib/auth-client.ts:6:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+./emails/admin/MessageToAllUser.tsx:21:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/admin/MessageToAllUser.tsx:51:              {process.env.NEXT_PUBLIC_APP_URL}. If you think you received this
+./emails/UpdatedTaskFromProject.tsx:28:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/UpdatedTaskFromProject.tsx:72:              <strong>{`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}</strong>
+./emails/UpdatedTaskFromProject.tsx:77:                href={`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}
+./emails/NewTaskFromProject.tsx:28:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/NewTaskFromProject.tsx:72:              <strong>{`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}</strong>
+./emails/NewTaskFromProject.tsx:77:                href={`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}
+./emails/NewTaskFromCRMToWatchers.tsx:27:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/NewTaskFromCRMToWatchers.tsx:70:              <strong>{`${process.env.NEXT_PUBLIC_APP_URL}/crm/tasks/viewtask/${taskData.id}`}</strong>
+./emails/NewTaskFromCRMToWatchers.tsx:75:                href={`${process.env.NEXT_PUBLIC_APP_URL}/crm/tasks/viewtask/${taskData.id}`}
+./emails/NewTaskFromCRM.tsx:27:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/NewTaskFromCRM.tsx:70:              <strong>{`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}</strong>
+./emails/NewTaskFromCRM.tsx:75:                href={`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskData.id}`}
+./lib/auth.ts:10:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+./lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+./emails/NewTaskComment.tsx:28:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/NewTaskComment.tsx:76:              <strong>{`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskId}`}</strong>
+./emails/NewTaskComment.tsx:81:                href={`${process.env.NEXT_PUBLIC_APP_URL}/projects/tasks/viewtask/${taskId}`}
+./emails/InviteUser.tsx:26:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./emails/InviteUser.tsx:70:              <strong>{process.env.NEXT_PUBLIC_APP_URL}</strong>.
+./emails/InviteUser.tsx:81:                href={process.env.NEXT_PUBLIC_APP_URL}
+./emails/InviteUser.tsx:92:                href={process.env.NEXT_PUBLIC_APP_URL}
+./emails/InviteUser.tsx:95:                {process.env.NEXT_PUBLIC_APP_URL}
+./lib/resend.ts:7:      name: "resend_smtp",
+./lib/resend.ts:11:  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+./lib/resend.ts:14:    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+./emails/AiTasksReport.tsx:27:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./lib/new-user-notify.ts:15:      from: process.env.EMAIL_FROM,
+./lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+./emails/AiProjectReport.tsx:25:const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+./inngest/functions/reports/send-scheduled.ts:13:const resend = new Resend(process.env.RESEND_API_KEY);
+./inngest/functions/campaigns/send-step.ts:6:const resend = new Resend(process.env.RESEND_API_KEY);
+app/[locale]/(routes)/layout.tsx:19:    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+./app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:37:          name: "resend_smtp",
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:57:      name: "resend_smtp",
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:68:            {process.env.RESEND_API_KEY ? (
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:70:                keyValue={process.env.RESEND_API_KEY}
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:169:                  : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+./app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+./app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:38:                : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+./app/[locale]/(routes)/components/nav-main.tsx:72:      return pathname === url || pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") === url
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:169:                  : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:37:          name: "resend_smtp",
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:57:      name: "resend_smtp",
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:68:            {process.env.RESEND_API_KEY ? (
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx:70:                keyValue={process.env.RESEND_API_KEY}
+./app/[locale]/(routes)/layout.tsx:19:    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+./actions/ai/projects/boards/getAiReport.tsx:65:      `${process.env.NEXT_PUBLIC_APP_URL}/api/openai/create-chat-completion`,
+./actions/ai/projects/boards/getAiReport.tsx:87:        from: process.env.EMAIL_FROM!,
+./actions/ai/projects/boards/getAiReport.tsx:89:        subject: `${process.env.NEXT_PUBLIC_APP_NAME} OpenAI Project manager assistant from: ${process.env.NEXT_PUBLIC_APP_URL}`,
+./actions/admin/users/invite-user.ts:68:      from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+./actions/admin/send-mail-to-all/index.ts:59:          name: "resend_smtp",
+./actions/admin/send-mail-to-all/index.ts:63:      if (!resendKey?.serviceKey || !process.env.RESEND_API_KEY) {
+./actions/admin/send-mail-to-all/index.ts:74:          from: process.env.EMAIL_FROM as string,
+./actions/admin/send-mail-to-all/index.ts:87:          process.env.EMAIL_FROM +
+./actions/projects/update-task.ts:76:                process.env.EMAIL_FROM +
+./actions/admin/users/activate-user.ts:25:        message = `You account has been activated in ${process.env.NEXT_PUBLIC_APP_NAME} \n\n Your username is: ${user.email} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL} \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`;
+./actions/admin/users/activate-user.ts:28:        message = `Váš účet v aplikaci ${process.env.NEXT_PUBLIC_APP_NAME} byl aktivován. \n\n Vaše uživatelské jméno je: ${user.email} \n\n  Prosím přihlašte se na ${process.env.NEXT_PUBLIC_APP_URL} \n\n Děkujeme \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`;
+./actions/admin/users/activate-user.ts:31:        message = `You account has been activated in ${process.env.NEXT_PUBLIC_APP_NAME} \n\n Your username is: ${user.email} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL} \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`;
+./actions/admin/users/activate-user.ts:36:      from: process.env.EMAIL_FROM,
+./actions/projects/create-task.ts:86:                process.env.EMAIL_FROM +
+./actions/projects/create-task-in-board.ts:114:                process.env.EMAIL_FROM +
+./actions/projects/add-comment-to-task.ts:90:                process.env.EMAIL_FROM +
+./actions/crm/opportunities/create-opportunity.ts:83:          from: process.env.EMAIL_FROM as string,
+./actions/crm/opportunities/create-opportunity.ts:91:              ? `New opportunity ${name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/opportunities/${opportunity.id}`
+./actions/crm/opportunities/create-opportunity.ts:92:              : `Nová příležitost ${name} byla přidána do systému a přidělena vám. Detaily naleznete zde: ${process.env.NEXT_PUBLIC_APP_URL}/crm/opportunities/${opportunity.id}`,
+./actions/crm/contacts/create-contact.ts:74:          from: process.env.EMAIL_FROM as string,
+./actions/crm/contacts/create-contact.ts:82:              ? `New contact ${data.first_name} ${data.last_name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/contacts/${contact.id}`
+./actions/crm/contacts/create-contact.ts:83:              : `Nový kontakt ${data.first_name} ${data.last_name} byla přidán do systému a přidělena vám. Detaily naleznete zde: ${process.env.NEXT_PUBLIC_APP_URL}/crm/contact/${contact.id}`,
+./actions/crm/leads/update-lead.ts:84:          from: process.env.EMAIL_FROM as string,
+./actions/crm/leads/update-lead.ts:92:              ? `New lead ${firstName} ${lastName} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`
+./actions/crm/leads/update-lead.ts:93:              : `Nová příležitost ${firstName} ${lastName} byla přidána do systému a přidělena vám. Detaily naleznete zde: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`,
+./actions/crm/leads/create-lead.ts:79:          from: process.env.EMAIL_FROM as string,
+./actions/crm/leads/create-lead.ts:87:              ? `New lead ${first_name} ${last_name} has been added to the system and assigned to you. You can click here for detail: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`
+./actions/crm/leads/create-lead.ts:88:              : `Nová příležitost ${first_name} ${last_name} byla přidána do systému a přidělena vám. Detaily naleznete zde: ${process.env.NEXT_PUBLIC_APP_URL}/crm/leads/${lead.id}`,
+./actions/crm/accounts/create-task.ts:63:            process.env.EMAIL_FROM +
+./actions/crm/accounts/create-task.ts:98:            process.env.EMAIL_FROM +
+
+exec
+/usr/bin/bash -lc "sed -n '1120,1175p' docs/superpowers/plans/2026-04-01-better-auth-migration.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+- [ ] **Step 2: Update inactive page**
+
+Same transformation as pending page.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add "app/[locale]/(auth)/pending/" "app/[locale]/(auth)/inactive/"
+git commit -m "refactor(auth): update pending/inactive pages to better-auth"
+```
+
+---
+
+### Task 18: Update all API routes
+
+**Files:**
+- Modify: `app/api/crm/contacts/[id]/route.ts`
+- Modify: `app/api/crm/contacts/enrich-bulk/route.ts`
+- Modify: `app/api/crm/contacts/enrich/route.ts`
+- Modify: `app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts`
+- Modify: `app/api/crm/targets/[id]/contacts/route.ts`
+- Modify: `app/api/crm/targets/[id]/enrich/route.ts`
+- Modify: `app/api/crm/targets/[id]/route.ts`
+- Modify: `app/api/crm/targets/enrich-bulk/route.ts`
+- Modify: `app/api/crm/targets/enrich/route.ts`
+- Modify: `app/api/feedback/route.ts`
+- Modify: `app/api/reports/export/route.ts`
+- Modify: `app/api/upload/presigned-url/route.ts`
+
+- [ ] **Step 1: In each API route file, apply the same transformation**
+
+Replace:
+```typescript
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+```
+with:
+```typescript
+import { getSession } from "@/lib/auth-server";
+```
+
+Replace:
+```typescript
+const session = await getServerSession(authOptions);
+if (!session?.user?.id) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+```
+with:
+```typescript
+const session = await getSession();
+if (!session) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+```
+
+
+exec
+/usr/bin/bash -lc 'for f in .env .env.local .env.example .env.local.example; do if [ -f "$f" ]; then printf '"'%s\\n' \""'$f"; rg -n '"'"'^(RESEND_API_KEY|EMAIL_FROM|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_APP_NAME)='"' \""'$f" | sed '"'s/=.*"'$/=<redacted>/'"' ; fi; done" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env
+19:RESEND_API_KEY=<redacted>
+.env.local
+18:EMAIL_FROM=<redacted>
+30:NEXT_PUBLIC_APP_NAME=<redacted>
+32:NEXT_PUBLIC_APP_URL=<redacted>
+66:RESEND_API_KEY=<redacted>
+.env.example
+19:RESEND_API_KEY=<redacted>
+.env.local.example
+18:EMAIL_FROM=<redacted>
+30:NEXT_PUBLIC_APP_NAME=<redacted>
+32:NEXT_PUBLIC_APP_URL=<redacted>
+66:RESEND_API_KEY=<redacted>
+
+exec
+/usr/bin/bash -lc "sed -n '1318,1342p' docs/superpowers/plans/2026-04-01-better-auth-migration.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+        role: true,
+        userLanguage: true,
+        userStatus: true,
+        lastLoginAt: true,
+      },
+    });
+
+    if (!user) {
+      return { error: "User not created" };
+    }
+
+    await resend.emails.send({
+      from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+      to: user.email,
+      subject: `You have been invited to ${process.env.NEXT_PUBLIC_APP_NAME}`,
+      react: InviteUserEmail({
+        invitedByUsername: session.user?.name || "admin",
+        username: user.name!,
+        userLanguage: language,
+      }),
+    });
+
+    revalidatePath("/[locale]/(routes)/admin", "page");
+    return { data: user };
+  } catch (error) {
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/feedback/route.ts | sed -n '1,90p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	function buildFeedbackSubject(sourcePath: string) {
+     8	  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+     9	}
+    10	
+    11	export async function POST(req: Request) {
+    12	  /*
+    13	  Resend.com function init - this is a helper function that will be used to send emails
+    14	  */
+    15	  let resend;
+    16	  try {
+    17	    resend = await resendHelper();
+    18	  } catch (error: any) {
+    19	    return NextResponse.json(
+    20	      { error: error?.message || "Resend API key is not configured" },
+    21	      { status: 500 }
+    22	    );
+    23	  }
+    24	  
+    25	  const session = await getSession();
+    26	  if (!session) {
+    27	    return new NextResponse("Unauthenticated", { status: 401 });
+    28	  }
+    29	  const body = await req.json();
+    30	  if (!body) {
+    31	    return new NextResponse("Missing body", { status: 400 });
+    32	  }
+    33	  const { feedback } = body;
+    34	  const normalizedFeedback =
+    35	    typeof feedback === "string" ? feedback.trim() : "";
+    36	  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+    37	
+    38	  if (!normalizedFeedback) {
+    39	    return new NextResponse("Missing feedback", { status: 400 });
+    40	  }
+    41	
+    42	  try {
+    43	    //Send mail via Resend to info@softbase.cz
+    44	    await resend.emails.send({
+    45	      from:
+    46	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    47	      to: "info@softbase.cz",
+    48	      subject: buildFeedbackSubject(sourcePath),
+    49	      text: normalizedFeedback,
+    50	    });
+    51	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    52	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    53	  } catch (error) {
+    54	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    55	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    56	  }
+    57	}
+
+exec
+/usr/bin/bash -lc "nl -ba lib/resend.ts | sed -n '1,35p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "nl -ba app/[locale]/\\(routes\\)/components/FeedbackForm.tsx | sed -n '35,62p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { Resend } from "resend";
+     2	import { prismadb } from "./prisma";
+     3	
+     4	export default async function resendHelper() {
+     5	  const resendKey = await prismadb.systemServices.findFirst({
+     6	    where: {
+     7	      name: "resend_smtp",
+     8	    },
+     9	  });
+    10	
+    11	  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+    12	
+    13	  if (!apiKey) {
+    14	    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+    15	  }
+    16	
+    17	  const resend = new Resend(apiKey);
+    18	
+    19	  return resend;
+    20	}
+
+ succeeded in 0ms:
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	  const feedbackValue = form.watch("feedback") || "";
+    44	
+    45	  const onSubmit = async (data: any) => {
+    46	    setLoading(true);
+    47	    try {
+    48	      await axios.post("/api/feedback", {
+    49	        ...data,
+    50	        page: window.location.pathname,
+    51	        submittedAt: new Date().toISOString(),
+    52	      });
+    53	    } catch (error) {
+    54	      logger.error({ err: error }, "Feedback submission failed");
+    55	      toast.error("Something went wrong. Please try again later.");
+    56	    } finally {
+    57	      toast.success("Thank you for your feedback.");
+    58	      setOpen(false);
+    59	      setLoading(false);
+    60	    }
+    61	  };
+    62	
+
+exec
+/usr/bin/bash -lc "cat package.json | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+{
+  "name": "nextcrm-app",
+  "version": "0.6.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && prisma migrate deploy && next build",
+    "start": "next start",
+    "lint": "eslint . --max-warnings=0",
+    "migrate:mongo-to-postgres": "pnpm exec tsx scripts/migrate-mongo-to-postgres.ts",
+    "validate:migration": "pnpm exec tsx scripts/validate-migration.ts",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
+  },
+  "prisma": {
+    "seed": "ts-node ./prisma/seeds/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0",
+    "@aws-sdk/signature-v4-crt": "^3.997.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/modifiers": "^9.0.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@hookform/resolvers": "^5.2.2",
+    "@mendable/firecrawl-js": "^1.29.3",
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@openai/agents": "^0.8.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@prisma/adapter-pg": "7.6.0",
+    "@prisma/client": "7.6.0",
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-collapsible": "^1.1.12",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-hover-card": "^1.1.15",
+    "@radix-ui/react-icons": "^1.3.2",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@react-email/components": "^1.0.8",
+    "@react-email/markdown": "0.0.18",
+    "@react-email/render": "^2.0.4",
+    "@react-pdf/renderer": "^4.3.2",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@tanstack/react-table": "^8.21.3",
+    "@tiptap/extension-link": "^3.20.5",
+    "@tiptap/extension-underline": "^3.20.5",
+    "@tiptap/pm": "^3.20.5",
+    "@tiptap/react": "^3.20.5",
+    "@tiptap/starter-kit": "^3.20.5",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
+    "@vercel/otel": "^2.1.2",
+    "ai": "^6.0.99",
+    "autoprefixer": "^10.4.24",
+    "aws-crt": "^1.29.0",
+    "axios": "^1.13.5",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "better-auth": "^1.5.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "e2b": "^2.18.0",
+    "encoding": "^0.1.13",
+    "entities": "^7.0.1",
+    "eslint": "^9.39.3",
+    "eslint-config-next": "16.1.6",
+    "form-data": "^4.0.5",
+    "geist": "^1.7.0",
+    "imap": "^0.8.19",
+    "inngest": "^4.0.2",
+    "input-otp": "^1.4.2",
+    "jotai": "^2.18.0",
+    "lucide-react": "^0.574.0",
+    "mailparser": "^3.9.3",
+    "mammoth": "^1.12.0",
+    "mcp-handler": "^1.1.0",
+    "moment": "^2.30.1",
+    "mongodb": "^7.1.0",
+    "next": "^16.2.1",
+    "next-intl": "^4.8.3",
+    "next-themes": "^0.4.6",
+    "nodemailer": "^8.0.4",
+    "openai": "^6.25.0",
+    "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.18.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "postcss": "^8.5.6",
+    "primeicons": "^7.0.0",
+    "primereact": "^10.9.7",
+    "react": "19.2.4",
+    "react-day-picker": "^9.13.2",
+    "react-doc-viewer": "^0.1.15",
+    "react-dom": "19.2.4",
+    "react-dropzone": "^15.0.0",
+    "react-hook-form": "^7.71.2",
+    "react-hot-toast": "^2.6.0",
+    "react-icons": "^5.5.0",
+
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+codex
+**Incident Report**
+
+Most likely root cause: the feedback API expects `body.context.pathname`, but the client sends `page`, not `context`.
+
+Evidence:
+- Client submits to `/api/feedback` with `{ feedback, page, submittedAt }` in [FeedbackForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48).
+- Server reads `body.context.pathname.replace(...)` in [route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36).
+- Because `body.context` is absent, this throws `TypeError: Cannot read properties of undefined`, outside the email-send `try/catch`, causing Next.js to return HTTP 500.
+- The observed client log is exactly consistent: Axios received `500` from `/api/feedback`, then `FeedbackForm` logged `"Feedback submission failed"`.
+
+Secondary finding: the form always shows the success toast and closes in `finally`, even after the failed request, so users may see a false success after the 500.
+
+Less likely alternative: missing Resend configuration could also produce a 500, but local env files contain `RESEND_API_KEY`, and the direct client/server payload mismatch is a deterministic failure path.
+
+Recommended fix: align the API and client payload shape, e.g. have the server read `body.page` or have the client send `context: { pathname: window.location.pathname }`, and guard optional fields before dereferencing. No code changes were made.
+tokens used
+21,278
+**Incident Report**
+
+Most likely root cause: the feedback API expects `body.context.pathname`, but the client sends `page`, not `context`.
+
+Evidence:
+- Client submits to `/api/feedback` with `{ feedback, page, submittedAt }` in [FeedbackForm.tsx](/home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48).
+- Server reads `body.context.pathname.replace(...)` in [route.ts](/home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36).
+- Because `body.context` is absent, this throws `TypeError: Cannot read properties of undefined`, outside the email-send `try/catch`, causing Next.js to return HTTP 500.
+- The observed client log is exactly consistent: Axios received `500` from `/api/feedback`, then `FeedbackForm` logged `"Feedback submission failed"`.
+
+Secondary finding: the form always shows the success toast and closes in `finally`, even after the failed request, so users may see a false success after the 500.
+
+Less likely alternative: missing Resend configuration could also produce a 500, but local env files contain `RESEND_API_KEY`, and the direct client/server payload mismatch is a deterministic failure path.
+
+Recommended fix: align the API and client payload shape, e.g. have the server read `body.page` or have the client send `context: { pathname: window.location.pathname }`, and guard optional fields before dereferencing. No code changes were made.

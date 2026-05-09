@@ -1,0 +1,2446 @@
+run_name: feature-task-1-A
+case_name: feature-task-1
+variant: A
+target_branch: feature/task-1
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T20:52:14Z
+elapsed_seconds: 100
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-1/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: the feedback form and `/api/feedback` route disagree on the request body shape.
+
+At [FeedbackForm.tsx](</home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48>), the client posts:
+
+```ts
+{
+  ...data,
+  page: window.location.pathname,
+  submittedAt: new Date().toISOString()
+}
+```
+
+But at [route.ts](</home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36>), the API assumes:
+
+```ts
+body.context.pathname
+```
+
+Since the client does not send `context`, `body.context` is `undefined`. That dereference will throw before the email-send `try/catch`, producing a 500 response. The incident’s Axios error, `Request failed with status code 500`, from `FeedbackForm` matches that failure mode.
+
+A secondary possible 500 path exists: `resendHelper()` can return a 500 if no Resend API key is configured. However, the client/API payload mismatch is deterministic for the current code path once the route reaches request-body handling, and it directly matches the feedback submission flow.
+
+Contributing issue: the form always shows a success toast in `finally`, even after logging the failure, so users may see “Thank you for your feedback” despite the API returning 500.
+
+No code changes were made.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e095c-cc7f-7bc1-9a54-caa7765560f4
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-02T18:34:29.669Z",
+      "timestampNs": "1777746869669777679",
+      "labels": {
+        "client_pathname": "/en",
+        "client_sessionId": "4f335a33-9f27-425f-8755-32b3bc9b3859",
+        "client_timestamp": "2026-05-02T18:34:29.426Z",
+        "client_url": "http://localhost:3000/en",
+        "client_userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0",
+        "context_err_message": "Request failed with status code 500",
+        "context_err_name": "AxiosError",
+        "context_err_stack": "AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n",
+        "context_module": "app.[locale].(routes).components.FeedbackForm",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "module": "app.api.client-logs",
+        "pid": "23369",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "f184cde15745e45a",
+        "time": "2026-05-02T18:34:29.560Z",
+        "trace_flags": "01",
+        "trace_id": "e2980506f723a88135d38840469ec308"
+      },
+      "line": "Feedback submission failed",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the local code paths named in the incident and any nearby API handlers/logging, then report the likely cause without editing files.
+exec
+/usr/bin/bash -lc 'git status --short' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc 'rg --files .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./package.json
+./docker-compose.yml
+./tsconfig.json
+./pnpm-lock.yaml
+./observability/otel-collector-config.yml
+./observability/loki-config.yml
+./observability/grafana/provisioning/datasources/loki.yml
+./next.config.js
+./logs/.gitkeep
+./instrumentation.ts
+./README.md
+./types/types.d.ts
+./tests/fixtures/products-import.csv
+./tests/e2e/sales-flow.spec.ts
+./tests/e2e/reports.spec.ts
+./tests/e2e/product-update.spec.ts
+./tests/e2e/product-read.spec.ts
+./tests/e2e/product-import.spec.ts
+./tests/e2e/product-delete.spec.ts
+./tests/e2e/product-create.spec.ts
+./tests/e2e/opportunity-update.spec.ts
+./tests/e2e/opportunity-detail-update.spec.ts
+./tests/e2e/lead-update.spec.ts
+./tests/e2e/lead-detail-update.spec.ts
+./tests/e2e/home.spec.ts
+./tests/e2e/crm.spec.ts
+./tests/e2e/contact-update.spec.ts
+./tests/e2e/contact-detail-update.spec.ts
+./tests/e2e/campaign-targets.spec.ts
+./tests/e2e/campaign-list.spec.ts
+./tests/e2e/campaign-detail.spec.ts
+./tests/e2e/campaign-create.spec.ts
+./tests/e2e/auth.spec.ts
+./tests/e2e/account-update.spec.ts
+./tests/e2e/account-detail-update.spec.ts
+./tests/auth.setup.ts
+./tailwind.config.js
+./skills-lock.json
+./scripts/validation/validators.ts
+./scripts/validation/types.ts
+./scripts/validation/table-schema.ts
+./scripts/validation/report-generator.ts
+./scripts/validate-migration.ts
+./scripts/test-data/README.md
+./scripts/migration/uuid-mapper.ts
+./scripts/migration/utils.ts
+./scripts/migration/types.ts
+./scripts/migration/transformers/users-transformer.ts
+./scripts/migration/transformers/todo-list-transformer.ts
+./scripts/migration/transformers/tasks-transformer.ts
+./scripts/migration/transformers/tasks-comments-transformer.ts
+./scripts/migration/transformers/system-services-transformer.ts
+./scripts/migration/transformers/system-modules-enabled-transformer.ts
+./scripts/migration/transformers/sections-transformer.ts
+./scripts/migration/transformers/openai-keys-transformer.ts
+./scripts/migration/transformers/my-account-transformer.ts
+./scripts/migration/transformers/modul-status-transformer.ts
+./scripts/migration/transformers/invoices-transformer.ts
+./scripts/migration/transformers/invoice-states-transformer.ts
+./scripts/migration/transformers/index.ts
+./scripts/migration/transformers/image-upload-transformer.ts
+./scripts/migration/transformers/gpt-models-transformer.ts
+./scripts/migration/transformers/employees-transformer.ts
+./scripts/migration/transformers/documents-types-transformer.ts
+./scripts/migration/transformers/documents-transformer.ts
+./scripts/migration/transformers/crm-opportunities-type-transformer.ts
+./scripts/migration/transformers/crm-opportunities-transformer.ts
+./scripts/migration/transformers/crm-opportunities-sales-stages-transformer.ts
+./scripts/migration/transformers/crm-leads-transformer.ts
+./scripts/migration/transformers/crm-industry-type-transformer.ts
+./scripts/migration/transformers/crm-contracts-transformer.ts
+./scripts/migration/transformers/crm-contacts-transformer.ts
+./scripts/migration/transformers/crm-campaigns-transformer.ts
+./scripts/migration/transformers/crm-accounts-transformer.ts
+./scripts/migration/transformers/crm-accounts-tasks-transformer.ts
+./scripts/migration/transformers/boards-transformer.ts
+./scripts/migration/table-config.ts
+./scripts/migration/progress-tracker.ts
+./scripts/migration/orchestrator.ts
+./scripts/migration/junction-populator.ts
+./scripts/migration/error-logger.ts
+./scripts/migration/checkpoint-manager.ts
+./scripts/migration/batch-processor.ts
+./scripts/migration/backfill-roles.ts
+./scripts/migration/MIGRATION_MONGO_NATIVE.md
+./scripts/migrate-openai-keys.ts
+./scripts/migrate-mongo-to-postgres.ts
+./scripts/db-backup.sh
+./scripts/VALIDATION_README.md
+./scripts/VALIDATION_QUICK_START.md
+./scripts/PHASE3_IMPLEMENTATION_SUMMARY.md
+./scripts/PHASE2_IMPLEMENTATION_STATUS.md
+./scripts/MIGRATION_README.md
+./release-please-config.json
+./public/vercel.svg
+./public/tmp/favicon_io.zip
+./public/tmp/data.json
+./public/tmp/64d68b562d25286957d594a9.xml
+./public/tmp/64d62de8242c5821b3d0270f.xml
+./public/tmp/64d620d4242c5821b3d0270d.xml
+./public/reports.png
+./public/og.png
+./public/images/opengraph-image.png
+./public/images/nouser.png
+./public/Inter-Bold.ttf
+./proxy.ts
+./prisma/seeds/seed.ts
+./prisma/seeds/currencies.ts
+./prisma/schema.prisma.orig
+./prisma/schema.prisma
+./prisma/migrations/migration_lock.toml
+./prisma/migrations/20260406190000_soft_delete_documents_target_lists/migration.sql
+./buildCount.json
+./prisma/migrations/20260406180000_soft_delete_universal/migration.sql
+./context/currency-context.tsx
+./context/avatar-context.tsx
+./prisma/migrations/20260406120000_cleanup_dead_models_and_bigint/migration.sql
+./lib/sendmail.ts
+./prisma/migrations/20260405150000_add_line_items/migration.sql
+./lib/openai.ts
+./app/client-logger.ts
+./lib/logger.ts
+./lib/audit-log.ts
+./lib/auth.ts
+./lib/utils.ts
+./lib/serialize-decimals.ts
+./lib/resend.ts
+./lib/prisma.ts
+./lib/new-user-notify.ts
+./lib/minio.ts
+./__tests__/reports/users.test.ts
+./__tests__/reports/types.test.ts
+./__tests__/reports/schedule.test.ts
+./__tests__/reports/sales.test.ts
+./__tests__/reports/leads.test.ts
+./__tests__/reports/export-csv.test.ts
+./__tests__/reports/dashboard.test.ts
+./__tests__/reports/config.test.ts
+./__tests__/reports/campaigns.test.ts
+./__tests__/reports/activity.test.ts
+./__tests__/reports/accounts.test.ts
+./lib/__tests__/audit-log.test.ts
+./jest.env.setup.ts
+./jest.config.ts
+./prisma/migrations/20260405070547_add_products_module/migration.sql
+./__tests__/lib/email-crypto.test.ts
+./__tests__/lib/currency.test.ts
+./__tests__/lib/api-tokens.test.ts
+./__tests__/lib/api-keys.test.ts
+./prisma/migrations/20260404150000_add_currency_support/migration.sql
+./actions/user/update-profile.ts
+./actions/user/set-language.ts
+./actions/user/update-profile-photo.ts
+./actions/user/search-users.ts
+./actions/user/get-user-by-id.ts
+./components/ui/minio-uploader.tsx
+./components/ui/user-search-combobox.tsx
+./components/ui/use-toast.ts
+./components/ui/tooltip.tsx
+./components/ui/toaster.tsx
+./components/ui/toast.tsx
+./components/ui/textarea.tsx
+./components/ui/tabs.tsx
+./components/ui/table.tsx
+./components/ui/switch.tsx
+./components/ui/sonner.tsx
+./components/ui/skeleton.tsx
+./components/ui/sidebar.tsx
+./components/ui/sheet.tsx
+./components/ui/separator.tsx
+./components/ui/select.tsx
+./components/ui/scroll-area.tsx
+./components/ui/resizable.tsx
+./components/ui/popover.tsx
+./components/ui/modal.tsx
+./components/ui/modal-document-view.tsx
+./components/ui/label.tsx
+./components/ui/input.tsx
+./components/ui/input-otp.tsx
+./components/ui/icons.tsx
+./components/ui/hover-card.tsx
+./components/ui/heading.tsx
+./components/ui/form.tsx
+./components/ui/file-uploader.tsx
+./components/ui/file-uploader-dropzone.tsx
+./components/ui/dropdown-menu.tsx
+./components/ui/drawer.tsx
+./components/ui/dialog.tsx
+./components/ui/dialog-document-view.tsx
+./components/ui/data-table.tsx
+./components/ui/command.tsx
+./components/ui/collapsible.tsx
+./components/ui/checkbox.tsx
+./components/ui/chart.tsx
+./components/ui/card.tsx
+./components/ui/calendar.tsx
+./components/ui/button.tsx
+./components/ui/badge.tsx
+./components/ui/avatar.tsx
+./components/ui/alert.tsx
+./components/ui/alert-dialog.tsx
+./components/ui/account-search-combobox.tsx
+./components/ui/IconButton.tsx
+./inngest/lib/imap-utils.ts
+./inngest/lib/embedding-utils.ts
+./prisma/migrations/20260404120000_add_currency_support/migration.sql
+./actions/system/get-next-version.ts
+./lib/mcp/tools/reports.ts
+./lib/mcp/tools/projects.ts
+./lib/mcp/tools/index.ts
+./lib/mcp/tools/crm-targets.ts
+./lib/mcp/tools/crm-target-lists.ts
+./lib/mcp/tools/crm-products.ts
+./lib/mcp/tools/crm-opportunities.ts
+./lib/mcp/tools/crm-leads.ts
+./lib/mcp/tools/crm-enrichment.ts
+./lib/mcp/tools/crm-email-accounts.ts
+./lib/mcp/tools/crm-documents.ts
+./lib/mcp/tools/crm-contracts.ts
+./lib/mcp/tools/crm-contacts.ts
+./lib/mcp/tools/crm-activities.ts
+./lib/mcp/tools/crm-accounts.ts
+./lib/mcp/tools/campaigns.ts
+./lib/mcp/helpers.ts
+./lib/mcp/auth.ts
+./lib/line-items.ts
+./lib/junction-helpers.ts
+./lib/fetcher.ts
+./__tests__/inngest/emails/embed-email.test.ts
+./components/typography/h4.tsx
+./components/typography/h2.tsx
+./components/support.tsx
+./prisma/migrations/20260404000000_fix_better_auth_id_defaults/migration.sql
+./__tests__/enrichment/utils.test.ts
+./__tests__/enrichment/enrich-target-route.test.ts
+./__tests__/enrichment/enrich-target-job.test.ts
+./actions/reports/users.ts
+./__tests__/enrichment/enrich-route.test.ts
+./actions/reports/types.ts
+./__tests__/enrichment/enrich-contact-job.test.ts
+./actions/reports/schedule.ts
+./__tests__/enrichment/e2b-apply-result.test.ts
+./actions/reports/sales.ts
+./actions/reports/leads.ts
+./actions/reports/export-pdf.ts
+./actions/reports/export-csv.ts
+./actions/reports/dashboard.ts
+./__tests__/crm-settings-actions.test.ts
+./actions/reports/config.ts
+./actions/reports/campaigns.ts
+./actions/reports/activity.ts
+./actions/reports/accounts.ts
+./prisma/migrations/20260403000000_documents_enrichment/migration.sql
+./components/skeletons/table-skeleton.tsx
+./components/skeletons/search-skeleton.tsx
+./components/skeletons/reports-skeleton.tsx
+./components/skeletons/projects-skeleton.tsx
+./components/skeletons/profile-skeleton.tsx
+./components/skeletons/emails-skeleton.tsx
+./components/skeletons/documents-skeleton.tsx
+./components/skeletons/crm-table-skeleton.tsx
+./components/skeletons/crm-accounts-skeleton.tsx
+./components/skeletons/app-shell-skeleton.tsx
+./components/skeletons/admin-skeleton.tsx
+./__tests__/campaigns/merge-tags.test.ts
+./lib/enrichment/utils/source-context.ts
+./lib/enrichment/utils/skip-list.ts
+./lib/enrichment/utils/field-utils.ts
+./lib/enrichment/utils/email-detection.ts
+./lib/enrichment/utils.ts
+./prisma/migrations/20260401000001_add_better_auth_user_fields/migration.sql
+./components/sheets/form-sheet.tsx
+./components/sheets/form-sheet-no-trigger.tsx
+./__tests__/campaigns/inngest/send-step.test.ts
+./lib/enrichment/types/stored-result.ts
+./lib/enrichment/types/index.ts
+./lib/enrichment/types/field-generation.ts
+./prisma/migrations/20260401000000_add_better_auth_tables_and_role/migration.sql
+./actions/projects/watch-project.ts
+./actions/projects/update-task.ts
+./actions/projects/update-section-title.ts
+./actions/projects/update-project.ts
+./actions/projects/update-kanban-position.ts
+./actions/projects/mark-task-done.ts
+./actions/projects/delete-task.ts
+./actions/projects/delete-section.ts
+./actions/projects/delete-project.ts
+./actions/projects/create-task.ts
+./actions/projects/create-task-in-board.ts
+./actions/projects/create-section.ts
+./actions/projects/create-project.ts
+./actions/projects/assign-document-to-task.ts
+./actions/projects/add-comment-to-task.ts
+./actions/projects/get-user-tasks.ts
+./actions/projects/get-tasks.ts
+./actions/projects/get-tasks-past-due.ts
+./actions/projects/get-task.ts
+./actions/projects/get-task-documents.ts
+./actions/projects/get-task-comments.ts
+./actions/projects/get-sections.ts
+./actions/projects/get-kanban-data.ts
+./actions/projects/get-boards.ts
+./actions/projects/get-board.ts
+./actions/projects/get-board-sections.ts
+./components/reports/ScheduleDialog.tsx
+./components/reports/SavedReportsDropdown.tsx
+./components/reports/SaveConfigDialog.tsx
+./components/reports/ReportToolbar.tsx
+./components/reports/ReportTable.tsx
+./components/reports/ReportPageLayout.tsx
+./components/reports/ReportChart.tsx
+./components/reports/KPICard.tsx
+./components/reports/FilterBar.tsx
+./components/reports/DateRangePicker.tsx
+./__tests__/campaigns/api/webhooks-resend.test.ts
+./__tests__/campaigns/api/unsubscribe.test.ts
+./prisma/migrations/20260331000001_add_report_config_and_schedule/migration.sql
+./lib/enrichment/strategies/enrichment-strategy.ts
+./lib/enrichment/strategies/email-parser.ts
+./lib/enrichment/strategies/agent-enrichment-strategy.ts
+./actions/github/get-repo-stars.ts
+./actions/github/get-repo-commits.ts
+./actions/get-users.ts
+./actions/get-user.ts
+./actions/get-empoloyees.ts
+./prisma/migrations/20260331000000_resolve_drift/migration.sql
+./components/modals/ImportTargetsModal.tsx
+./components/modals/upload-file-modal.tsx
+./components/modals/right-view-notrigger.tsx
+./components/modals/password-reset.tsx
+./components/modals/loading-modal.tsx
+./components/modals/document-view-modal.tsx
+./components/modals/alert-modal.tsx
+./components/modals/CreateTargetListModal.tsx
+./actions/fulltext/unified-search.ts
+./components/modals/AddTargetToListModal.tsx
+./lib/enrichment/services/specialized-agents.ts
+./lib/enrichment/services/openai.ts
+./lib/enrichment/services/firecrawl.ts
+./lib/enrichment/rate-limit.ts
+./actions/emails/sync.ts
+./components/fulltext-search/result-card.tsx
+./actions/emails/messages.ts
+./components/fulltext-search/entity-result-section.tsx
+./actions/emails/accounts.ts
+./__tests__/actions/emails/accounts.test.ts
+./prisma/migrations/20260328000002_add_crm_audit_log/migration.sql
+./inngest/functions/reports/send-scheduled.ts
+./inngest/functions/enrich-targets-bulk.ts
+./inngest/functions/enrich-target.ts
+./inngest/functions/enrich-target-contact.ts
+./inngest/functions/enrich-contacts-bulk.ts
+./inngest/functions/enrich-contact.ts
+./inngest/functions/embed-opportunity.ts
+./inngest/functions/embed-lead.ts
+./inngest/functions/embed-contact.ts
+./inngest/functions/embed-backfill.ts
+./inngest/functions/embed-account.ts
+./lib/enrichment/presets/target-fields.ts
+./components/form/from-select.tsx
+./components/form/form-textarea.tsx
+./components/form/form-submit.tsx
+./components/form/form-input.tsx
+./components/form/form-errors.tsx
+./components/form/form-datepicker.tsx
+./__mocks__/e2b.ts
+./LICENSE
+./CONTRIBUTING.md
+./CHANGELOG.md
+./AGENTS.md
+./actions/documents/bulk-delete-documents.ts
+./actions/documents/bulk-change-type.ts
+./prisma/migrations/20260328000001_add_soft_delete_columns/migration.sql
+./actions/documents/unlink-from-account.ts
+./actions/documents/search-documents.ts
+./actions/documents/retry-enrichment.ts
+./actions/documents/get-storage-size.ts
+./actions/documents/get-documents.ts
+./actions/documents/get-documents-by-opportunityId.ts
+./actions/documents/get-documents-by-contactId.ts
+./actions/documents/get-documents-by-accountId.ts
+./actions/documents/get-document-versions.ts
+./actions/documents/delete-document.ts
+./actions/documents/create-document.ts
+./actions/documents/create-document-version.ts
+./actions/documents/check-duplicate.ts
+./actions/documents/bulk-link-to-account.ts
+./app/favicon.ico
+./inngest/functions/emails/sync-all.ts
+./inngest/functions/emails/sync-account.ts
+./lib/enrichment/e2b/apply-result.ts
+./inngest/functions/emails/link-crm.ts
+./lib/enrichment/e2b/agent-script.ts
+./inngest/functions/emails/embed-email.ts
+./components/crm/similar-records-drawer.tsx
+./components/crm/find-similar-button.tsx
+./app/components/NoApiKeyDialog.tsx
+./prisma/migrations/20260328000000_add_crm_activities/migration.sql
+./components/crm/audit-log/Timeline.tsx
+./components/crm/audit-log/Entry.tsx
+./components/crm/audit-log/AdminTable.tsx
+./components/crm/audit-log/AdminPageClient.tsx
+./components/crm/audit-log/AdminFilters.tsx
+./lib/enrichment/config/enrichment.ts
+./inngest/functions/ecb/sync-exchange-rates.ts
+./actions/dashboard/get-tasks-count.ts
+./actions/dashboard/get-opportunities-count.ts
+./actions/dashboard/get-leads-count.ts
+./actions/dashboard/get-documents-count.ts
+./actions/dashboard/get-contracts-count.ts
+./actions/dashboard/get-contacts-count.ts
+./actions/dashboard/get-boards-count.ts
+./actions/dashboard/get-active-users-count.ts
+./actions/dashboard/get-accounts-count.ts
+./components/crm/activities/ActivityForm.tsx
+./components/crm/activities/ActivityEntry.tsx
+./components/crm/activities/ActivitiesView.tsx
+./prisma/migrations/20260327000001_crm_settings_db_backed/migration.sql
+./inngest/functions/documents/generate-thumbnail.ts
+./inngest/functions/documents/enrich-document.ts
+./app/api/client-logs/route.ts
+./components/campaigns/TipTapEditor.tsx
+./components/ThemeToggle.tsx
+./components/SetLanguage.tsx
+./components/CurrencySwitcher.tsx
+./components/CommandComponent.tsx
+./components.json
+./prisma/migrations/20260325000010_add_target_enrichment_fields/migration.sql
+./lib/enrichment/agent-architecture/tools/website-scraper-tool.ts
+./lib/enrichment/agent-architecture/tools/smart-search-tool.ts
+./lib/enrichment/agent-architecture/tools/email-parser-tool.ts
+./lib/enrichment/agent-architecture/orchestrator.ts
+./lib/enrichment/agent-architecture/index.ts
+./inngest/functions/campaigns/send-step.ts
+./inngest/functions/campaigns/send-now.ts
+./inngest/functions/campaigns/schedule-send.ts
+./inngest/functions/campaigns/process-follow-up.ts
+./inngest/client.ts
+./prisma/migrations/20260325000002_add_email_module/migration.sql
+./emails/admin/MessageToAllUser.tsx
+./emails/UpdatedTaskFromProject.tsx
+./emails/ScheduledReport.tsx
+./emails/NewTaskFromProject.tsx
+./emails/NewTaskFromCRMToWatchers.tsx
+./emails/NewTaskFromCRM.tsx
+./emails/NewTaskComment.tsx
+./emails/InviteUser.tsx
+./emails/DemoTemplate.tsx
+./emails/AiTasksReport.tsx
+./emails/AiProjectReport.tsx
+./app/api/upload/presigned-url/route.ts
+./lib/enrichment/agent-architecture/core/types.ts
+./lib/enrichment/agent-architecture/core/agent-base.ts
+./i18n/routing.ts
+./prisma/migrations/20260325000001_drop_system_modules_enabled/migration.sql
+./actions/crm/get-opportunities.ts
+./e2b/template.ts
+./e2b/build.ts
+./e2b.toml
+./e2b.Dockerfile
+./i18n/request.ts
+./i18n/navigation.ts
+./lib/enrichment/agent-architecture/agents/tech-stack-agent.ts
+./lib/enrichment/agent-architecture/agents/metrics-agent.ts
+./lib/enrichment/agent-architecture/agents/general-agent.ts
+./lib/enrichment/agent-architecture/agents/funding-agent.ts
+./lib/enrichment/agent-architecture/agents/discovery-agent.ts
+./lib/enrichment/agent-architecture/agents/company-profile-agent.ts
+./prisma/migrations/20260325000000_campaigns_module/migration.sql
+./docs/observability.md
+./lib/email-crypto.ts
+./lib/currency.ts
+./lib/currency-format.ts
+./lib/create-safe-action.ts
+./actions/crm/tasks/delete-task.ts
+./actions/crm/tasks/add-comment.ts
+./actions/crm/tasks/get-user-tasks.ts
+./app/api/reports/export/route.ts
+./prisma/migrations/20260323000001_add_api_keys/migration.sql
+./lib/campaigns/merge-tags.ts
+./lib/auth-server.ts
+./lib/auth-permissions.ts
+./lib/auth-guards.ts
+./lib/auth-client.ts
+./lib/api-tokens.ts
+./lib/api-keys.ts
+./prisma.config.ts
+./postcss.config.js
+./playwright.config.ts
+./app/api/og/route.tsx
+./prisma/migrations/20260323000000_add_contact_enrichment/migration.sql
+./locales/uk.json
+./locales/en.json
+./locales/de.json
+./locales/cz.json
+./docs/superpowers/specs/2026-04-06-soft-delete-migration-design.md
+./docs/superpowers/specs/2026-04-06-mcp-full-parity-design.md
+./docs/superpowers/specs/2026-04-06-frontend-alignment-remaining-gaps-design.md
+./docs/superpowers/specs/2026-04-05-products-playwright-tests-design.md
+./docs/superpowers/specs/2026-04-05-products-module-design.md
+./docs/superpowers/specs/2026-04-05-line-items-design.md
+./docs/superpowers/specs/2026-04-04-currency-support-design.md
+./docs/superpowers/specs/2026-04-03-documents-module-refactor-design.md
+./docs/superpowers/specs/2026-04-01-better-auth-migration-design.md
+./docs/superpowers/specs/2026-03-31-shadcn-charts-refactor-design.md
+./docs/superpowers/specs/2026-03-31-reports-remaster-design.md
+./docs/superpowers/specs/2026-03-30-crm-sales-module-update-tests-design.md
+./docs/superpowers/specs/2026-03-30-campaign-tests-refactor-design.md
+./docs/superpowers/specs/2026-03-30-campaign-targets-playwright-tests-design.md
+./docs/superpowers/specs/2026-03-28-sales-flow-playwright-design.md
+./docs/superpowers/specs/2026-03-28-crm-activities-design.md
+./docs/superpowers/specs/2026-03-27-crm-settings-design.md
+./docs/superpowers/specs/2026-03-27-crm-audit-log-design.md
+./docs/superpowers/specs/2026-03-26-enrichment-fixes-design.md
+./docs/superpowers/specs/2026-03-26-e2b-agent-enrichment-design.md
+./docs/superpowers/specs/2026-03-25-campaigns-module-design.md
+./docs/superpowers/specs/2026-03-23-target-enrichment-design.md
+./docs/superpowers/specs/2026-03-23-llm-api-keys-design.md
+./docs/superpowers/specs/2026-03-23-contact-enrichment-design.md
+./docs/superpowers/specs/2026-03-22-emails-design.md
+./docs/superpowers/specs/2026-03-21-suspense-skeleton-loading-design.md
+./docs/superpowers/specs/2026-03-21-profile-settings-redesign.md
+./docs/superpowers/specs/2026-03-20-unified-search-design.md
+./docs/superpowers/specs/2026-03-20-pgvector-embeddings-design.md
+./docs/superpowers/specs/2026-03-20-mcp-server-design.md
+./prisma/migrations/20260320000001_add_api_tokens/migration.sql
+./app/api/mcp/[transport]/route.ts
+./prisma/migrations/0_init/migration.sql
+./actions/crm/targets/import-targets.ts
+./actions/crm/targets/suggest-mapping.ts
+./actions/crm/targets/convert-target.ts
+./actions/crm/targets/update-target.ts
+./actions/crm/targets/delete-target.ts
+./actions/crm/targets/create-target.ts
+./app/api/inngest/route.ts
+./prisma/migrations/20260320000000_add_pgvector_embeddings/migration.sql
+./actions/crm/get-crm-data.ts
+./actions/crm/get-contracts.ts
+./actions/crm/get-contract.ts
+./actions/crm/get-contacts.ts
+./actions/crm/get-contacts-by-opportunityId.ts
+./actions/crm/get-contacts-by-accountId.ts
+./actions/crm/get-contact.ts
+./actions/crm/get-campaigns.ts
+./actions/crm/get-accounts.ts
+./actions/crm/get-accounts-by-opportunityId.ts
+./actions/crm/get-accounts-by-contactId.ts
+./actions/crm/get-account.ts
+./app/api/feedback/route.ts
+./prisma/initial-data/crm_Opportunities_Type.json
+./prisma/initial-data/crm_Opportunities_Sales_Stages.json
+./prisma/initial-data/crm_Lead_Types.json
+./prisma/initial-data/crm_Lead_Statuses.json
+./prisma/initial-data/crm_Lead_Sources.json
+./docs/superpowers/plans/2026-04-06-soft-delete-migration.md
+./prisma/initial-data/crm_Industry_Type.json
+./docs/superpowers/plans/2026-04-06-mcp-full-parity.md
+./prisma/initial-data/crm_Contact_Types.json
+./docs/superpowers/plans/2026-04-06-frontend-alignment-remaining-gaps.md
+./docs/superpowers/plans/2026-04-05-products-playwright-tests.md
+./docs/superpowers/plans/2026-04-05-products-module.md
+./docs/superpowers/plans/2026-04-05-line-items.md
+./docs/superpowers/plans/2026-04-04-currency-support.md
+./docs/superpowers/plans/2026-04-03-documents-module-refactor.md
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md
+./docs/superpowers/plans/2026-03-31-shadcn-charts-refactor.md
+./docs/superpowers/plans/2026-03-31-reports-remaster.md
+./docs/superpowers/plans/2026-03-30-crm-sales-module-update-tests.md
+./docs/superpowers/plans/2026-03-30-campaign-tests-refactor.md
+./docs/superpowers/plans/2026-03-30-campaign-targets-playwright-tests.md
+./docs/superpowers/plans/2026-03-30-campaign-playwright-tests.md
+./docs/superpowers/plans/2026-03-29-gmail-quick-connect.md
+./docs/superpowers/plans/2026-03-28-sales-flow-playwright.md
+./docs/superpowers/plans/2026-03-28-crm-activities.md
+./docs/superpowers/plans/2026-03-27-crm-settings.md
+./docs/superpowers/plans/2026-03-27-crm-audit-log.md
+./docs/superpowers/plans/2026-03-26-enrichment-fixes.md
+./docs/superpowers/plans/2026-03-26-e2b-agent-enrichment.md
+./docs/superpowers/plans/2026-03-25-target-enrichment-conversion.md
+./docs/superpowers/plans/2026-03-25-campaigns-module.md
+./docs/superpowers/plans/2026-03-23-target-enrichment.md
+./docs/superpowers/plans/2026-03-23-llm-api-keys.md
+./docs/superpowers/plans/2026-03-23-contact-enrichment.md
+./docs/superpowers/plans/2026-03-22-emails.md
+./docs/superpowers/plans/2026-03-22-email-sync-overhaul.md
+./docs/superpowers/plans/2026-03-21-suspense-skeleton-loading.md
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md
+./docs/superpowers/plans/2026-03-20-unified-search.md
+./docs/superpowers/plans/2026-03-20-pgvector-embeddings.md
+./docs/superpowers/plans/2026-03-20-mcp-server.md
+./actions/crm/target-lists/update-target-list.ts
+./actions/crm/target-lists/remove-target-from-list.ts
+./actions/crm/target-lists/delete-target-list.ts
+./actions/crm/target-lists/create-target-list.ts
+./actions/crm/target-lists/add-targets-to-list.ts
+./docs/specs/2026-03-23-bulk-actions-contacts-design.md
+./docs/soft-delete-gaps.md
+./actions/crm/account/get-tasks.ts
+./actions/crm/account/get-task.ts
+./hooks/useDebounce.tsx
+./hooks/use-toast.ts
+./hooks/use-mobile.tsx
+./hooks/use-action.ts
+./eslint.config.mjs
+./docs/deployment/better-auth-migration-runbook.md
+./docs/POSTGRESQL_MIGRATION_GUIDE.md
+./actions/crm/contracts/update-contract/index.ts
+./actions/crm/contracts/update-contract/types.ts
+./actions/crm/contracts/update-contract/schema.ts
+./actions/crm/similarity/get-similar-opportunities.ts
+./actions/crm/similarity/get-similar-leads.ts
+./actions/crm/similarity/get-similar-contacts.ts
+./actions/crm/similarity/get-similar-accounts.ts
+./app/api/crm/targets/enrich/validate.ts
+./app/api/crm/targets/enrich/route.ts
+./actions/crm/contracts/restore-contract/index.ts
+./actions/crm/products/import-products.ts
+./app/api/crm/targets/enrich-bulk/route.ts
+./actions/admin/users/set-role.ts
+./actions/admin/users/invite-user.ts
+./actions/admin/users/delete-user.ts
+./actions/admin/users/deactivate-user.ts
+./actions/admin/users/activate-user.ts
+./actions/crm/account-products/update-assignment/index.ts
+./actions/crm/account-products/update-assignment/types.ts
+./actions/crm/account-products/update-assignment/schema.ts
+./actions/crm/contracts/delete-contract/index.ts
+./actions/crm/contracts/delete-contract/types.ts
+./actions/crm/contracts/delete-contract/schema.ts
+./app/api/crm/targets/[id]/route.ts
+./actions/admin/send-mail-to-all/index.ts
+./actions/admin/send-mail-to-all/types.ts
+./actions/admin/send-mail-to-all/schema.ts
+./actions/crm/products/update-product/index.ts
+./actions/crm/products/update-product/types.ts
+./actions/crm/products/update-product/schema.ts
+./actions/crm/products/get-products.ts
+./actions/crm/products/get-product.ts
+./actions/crm/products/get-product-categories.ts
+./actions/crm/account-products/remove-assignment/index.ts
+./actions/crm/account-products/get-account-products.ts
+./actions/ai/projects/boards/getAiReport.tsx
+./actions/crm/contracts/create-new-contract/index.ts
+./actions/crm/contracts/create-new-contract/types.ts
+./actions/crm/contracts/create-new-contract/schema.ts
+./app/api/crm/targets/[id]/enrich/route.ts
+./actions/campaigns/update-campaign.ts
+./actions/crm/products/delete-product/index.ts
+./actions/crm/account-products/assign-product/index.ts
+./actions/crm/account-products/assign-product/types.ts
+./actions/crm/account-products/assign-product/schema.ts
+./actions/crm/audit-log/get-audit-log-by-entity.ts
+./actions/crm/audit-log/get-audit-log-admin.ts
+./app/api/crm/targets/[id]/contacts/route.ts
+./actions/campaigns/templates/update-template.ts
+./actions/campaigns/templates/get-templates.ts
+./actions/campaigns/templates/get-template.ts
+./actions/campaigns/templates/generate-template.ts
+./actions/campaigns/templates/delete-template.ts
+./actions/campaigns/templates/create-template.ts
+./actions/campaigns/send-campaign-now.ts
+./actions/campaigns/schedule-campaign.ts
+./actions/campaigns/pause-campaign.ts
+./actions/campaigns/get-campaigns.ts
+./actions/campaigns/get-campaign.ts
+./actions/campaigns/delete-campaign.ts
+./actions/campaigns/create-campaign.ts
+./actions/api-tokens.ts
+./actions/crm/products/create-product/index.ts
+./actions/crm/products/create-product/types.ts
+./actions/crm/products/create-product/schema.ts
+./actions/crm/contacts/update-contact.ts
+./actions/crm/contacts/unlink-opportunity.ts
+./actions/crm/contacts/restore-contact.ts
+./actions/crm/contacts/delete-contact.ts
+./actions/crm/contacts/create-contact.ts
+./actions/crm/contract-line-items/get-line-items.ts
+./actions/crm/accounts/watch-account.ts
+./actions/crm/accounts/update-account.ts
+./actions/crm/accounts/unwatch-account.ts
+./actions/crm/accounts/restore-account.ts
+./actions/crm/accounts/delete-account.ts
+./actions/crm/accounts/create-task.ts
+./actions/crm/accounts/create-account.ts
+./actions/crm/accounts/search-accounts.ts
+./actions/crm/accounts/get-accounts.ts
+./app/api/crm/targets/[id]/contacts/[contactId]/enrich/route.ts
+./actions/crm/contract-line-items/update-line-item/index.ts
+./actions/crm/contract-line-items/update-line-item/types.ts
+./actions/crm/contract-line-items/update-line-item/schema.ts
+./actions/crm/opportunity/get-expected-revenue.ts
+./actions/crm/activities/update-activity.ts
+./actions/crm/activities/get-activities-by-entity.ts
+./actions/crm/activities/delete-activity.ts
+./actions/crm/activities/create-activity.ts
+./actions/crm/contract-line-items/copy-from-opportunity/index.ts
+./actions/crm/get-sales-stage.ts
+./actions/crm/get-opportunity.ts
+./actions/crm/get-opportunities-with-includes.ts
+./actions/crm/get-opportunities-with-includes-by-contactId.ts
+./actions/crm/get-opportunities-with-includes-by-accountId.ts
+./actions/crm/get-leads.ts
+./actions/crm/get-leads-by-accountId.ts
+./actions/crm/get-lead.ts
+./actions/crm/get-industries.ts
+./actions/crm/get-currencies.ts
+./actions/crm/get-targets.ts
+./actions/crm/get-target.ts
+./actions/crm/get-target-lists.ts
+./actions/crm/get-target-list.ts
+./actions/crm/get-sales-type.ts
+./actions/crm/contract-line-items/add-line-item/index.ts
+./actions/crm/contract-line-items/add-line-item/types.ts
+./actions/crm/contract-line-items/add-line-item/schema.ts
+./actions/crm/get-user-leads.ts
+./actions/crm/get-user-opportunities.ts
+./actions/crm/contract-line-items/reorder-line-items/index.ts
+./actions/crm/opportunity/dashboard/set-inactive.ts
+./actions/crm/contract-line-items/remove-line-item/index.ts
+./actions/crm/leads/create-lead.ts
+./app/api/crm/leads/create-lead-from-web/route.ts
+./actions/crm/opportunities/update-opportunity.ts
+./actions/crm/opportunities/restore-opportunity.ts
+./actions/crm/opportunities/delete-opportunity.ts
+./actions/crm/opportunities/create-opportunity.ts
+./actions/crm/leads/delete-lead.ts
+./actions/crm/leads/restore-lead.ts
+./actions/crm/leads/update-lead.ts
+./app/providers/ToastProvider.tsx
+./app/[locale]/layout.tsx
+./app/providers/ThemeProvider.tsx
+./app/[locale]/loading.tsx
+./app/[locale]/globals.css.bck
+./app/[locale]/globals.css
+./app/opengraph-image.png
+./actions/crm/opportunity-line-items/get-line-items.ts
+./app/api/crm/contacts/enrich/validate.ts
+./app/api/crm/contacts/enrich/route.ts
+./app/api/auth/test-otp/route.ts
+./actions/crm/opportunity-line-items/update-line-item/index.ts
+./actions/crm/opportunity-line-items/update-line-item/types.ts
+./actions/crm/opportunity-line-items/update-line-item/schema.ts
+./app/api/campaigns/webhooks/resend/route.ts
+./actions/crm/opportunity-line-items/add-line-item/index.ts
+./actions/crm/opportunity-line-items/add-line-item/types.ts
+./actions/crm/opportunity-line-items/add-line-item/schema.ts
+./app/api/crm/contacts/enrich-bulk/route.ts
+./app/api/auth/[...all]/route.ts
+./actions/crm/opportunity-line-items/reorder-line-items/index.ts
+./app/client-error-listener.tsx
+./app/api/campaigns/unsubscribe/route.ts
+./app/api/crm/contacts/create-from-remote/route.ts
+./actions/crm/opportunity-line-items/remove-line-item/index.ts
+./app/api/crm/contacts/[id]/route.ts
+./app/[locale]/(routes)/emails/use-mail.ts
+./app/[locale]/(routes)/emails/page.tsx
+./app/[locale]/(routes)/emails/data.tsx
+./app/api/campaigns/targets/[id]/route.ts
+./app/api/campaigns/targets/enrich/route.ts
+./app/[locale]/(routes)/components/FeedbackForm.tsx
+./app/[locale]/(routes)/components/Feedback.tsx
+./app/[locale]/(routes)/components/Footer.tsx
+./app/[locale]/(routes)/emails/components/mail-display.tsx
+./app/[locale]/(routes)/emails/components/nav.tsx
+./app/[locale]/(routes)/emails/components/mail.tsx
+./app/[locale]/(routes)/emails/components/mail-list.tsx
+./app/[locale]/(routes)/emails/components/account-switcher.tsx
+./app/[locale]/(routes)/emails/components/ComposeModal.tsx
+./app/api/campaigns/targets/[id]/enrich/route.ts
+./app/api/campaigns/targets/enrich-bulk/route.ts
+./app/[locale]/(routes)/components/ui/Container.tsx
+./app/[locale]/(routes)/components/ui/AvatarDropdown.tsx
+./app/[locale]/(routes)/components/nav-user.tsx
+./app/[locale]/(routes)/components/nav-secondary.tsx
+./app/[locale]/(routes)/components/nav-main.tsx
+./app/[locale]/(routes)/reports/users/page.tsx
+./app/[locale]/(routes)/documents/page.tsx
+./app/[locale]/(routes)/campaigns/templates/page.tsx
+./app/[locale]/(routes)/documents/loading.tsx
+./app/[locale]/(routes)/admin/_components/copy-key.tsx
+./app/[locale]/(routes)/admin/_components/ResendCard.tsx
+./app/[locale]/(routes)/admin/_components/AdminSidebarNav.tsx
+./app/[locale]/(routes)/reports/sales/page.tsx
+./app/[locale]/(routes)/documents/data/schema.tsx
+./app/[locale]/(routes)/documents/data/data.tsx
+./app/[locale]/(routes)/reports/page.tsx
+./app/[locale]/(routes)/campaigns/templates/new/page.tsx
+./app/[locale]/(routes)/reports/loading.tsx
+./app/[locale]/(routes)/components/menu-items/Reports.tsx
+./app/[locale]/(routes)/components/menu-items/Projects.tsx
+./app/[locale]/(routes)/components/menu-items/Emails.tsx
+./app/[locale]/(routes)/components/menu-items/Documents.tsx
+./app/[locale]/(routes)/admin/currencies/page.tsx
+./app/[locale]/(auth)/sign-in/page.tsx
+./app/[locale]/(routes)/components/menu-items/Dashboard.tsx
+./app/[locale]/(routes)/components/menu-items/Crm.tsx
+./app/[locale]/(routes)/components/menu-items/Campaigns.tsx
+./app/[locale]/(routes)/components/menu-items/Administration.tsx
+./app/[locale]/(routes)/reports/leads/page.tsx
+./app/[locale]/(routes)/campaigns/templates/new/components/TemplateEditorForm.tsx
+./app/[locale]/(routes)/admin/users/table-data/schema.tsx
+./app/[locale]/(routes)/admin/users/table-data/data.tsx
+./app/[locale]/(auth)/sign-in/components/LoginComponent.tsx
+./app/[locale]/(routes)/components/dasboard/storage-quota.tsx
+./app/[locale]/(routes)/components/dasboard/loading-box.tsx
+./app/[locale]/(routes)/components/app-sidebar.tsx
+./app/[locale]/(routes)/admin/currencies/_components/ExchangeRatesTable.tsx
+./app/[locale]/(routes)/admin/currencies/_components/ECBToggle.tsx
+./app/[locale]/(routes)/documents/components/processing-status-badge.tsx
+./app/[locale]/(routes)/admin/currencies/_components/CurrencyTable.tsx
+./app/[locale]/(routes)/documents/components/modal-dropzone.tsx
+./app/[locale]/(routes)/documents/components/document-detail-panel.tsx
+./app/[locale]/(routes)/documents/components/data-table.tsx
+./app/[locale]/(routes)/documents/components/data-table-view-options.tsx
+./app/[locale]/(routes)/documents/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/documents/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/documents/components/data-table-pagination.tsx
+./app/[locale]/(routes)/documents/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/documents/components/data-table-column-header.tsx
+./app/[locale]/(routes)/documents/components/columns.tsx
+./app/[locale]/(routes)/documents/components/bulk-upload-modal.tsx
+./app/[locale]/(routes)/documents/components/batch-actions-bar.tsx
+./app/[locale]/(routes)/reports/campaigns/page.tsx
+./app/[locale]/(routes)/campaigns/templates/components/TemplatesView.tsx
+./app/[locale]/(auth)/pending/page.tsx
+./app/[locale]/(routes)/admin/currencies/_actions/currencies.ts
+./app/[locale]/(routes)/components/__tests__/nav-main-demo.tsx
+./app/[locale]/(routes)/databox/page.tsx
+./app/[locale]/(routes)/components/Header.tsx
+./app/[locale]/(routes)/components/FulltextSearch.tsx
+./app/[locale]/(routes)/page.tsx
+./app/[locale]/(routes)/loading.tsx
+./app/[locale]/(routes)/layout.tsx
+./app/[locale]/(routes)/reports/activity/page.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/campaigns/templates/[templateId]/page.tsx
+./app/[locale]/(routes)/admin/users/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/admin/users/table-components/columns.tsx
+./app/[locale]/(routes)/admin/users/page.tsx
+./app/[locale]/(auth)/pending/components/TryAgain.tsx
+./app/[locale]/(auth)/layout.tsx
+./app/[locale]/(routes)/admin/crm-settings/page.tsx
+./app/[locale]/(routes)/reports/accounts/page.tsx
+./app/[locale]/(routes)/admin/users/components/send-mail-to-all.tsx
+./app/[locale]/(routes)/admin/users/components/IviteForm.tsx
+./app/[locale]/(routes)/admin/page.tsx
+./app/[locale]/(routes)/admin/loading.tsx
+./app/[locale]/(auth)/inactive/page.tsx
+./app/[locale]/(routes)/fulltext-search/search/page.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/CrmSettingsTabs.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigList.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigEditDialog.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigDeleteDialog.tsx
+./app/[locale]/(routes)/admin/crm-settings/_components/ConfigAddDialog.tsx
+./app/[locale]/(routes)/admin/llm-keys/page.tsx
+./app/[locale]/(routes)/admin/llm-keys/ProviderKeyCard.tsx
+./app/[locale]/(routes)/admin/layout.tsx
+./app/[locale]/(routes)/campaigns/targets/table-data/schema.tsx
+./app/[locale]/(auth)/inactive/components/TryAgain.tsx
+./app/[locale]/(routes)/fulltext-search/search/components/ResultPage.tsx
+./app/[locale]/(routes)/admin/crm-settings/_actions/crm-settings.ts
+./app/[locale]/(routes)/fulltext-search/page.tsx
+./app/[locale]/(routes)/admin/actions/api-keys.ts
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/campaigns/targets/table-components/columns.tsx
+./app/[locale]/(routes)/campaigns/targets/page.tsx
+./app/[locale]/(routes)/admin/audit-log/page.tsx
+./app/[locale]/(routes)/fulltext-search/components/SearchResult.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/page.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-data/schema.tsx
+./app/[locale]/(routes)/campaigns/table-data/schema.tsx
+./app/[locale]/(routes)/campaigns/page.tsx
+./app/[locale]/(routes)/campaigns/targets/enrichment/page.tsx
+./app/[locale]/(routes)/campaigns/targets/enrichment/RetryEnrichmentButton.tsx
+./app/[locale]/(routes)/employees/page.tsx
+./app/[locale]/(routes)/campaigns/target-lists/components/TargetListsView.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/schema.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/data/data.tsx
+./app/[locale]/(routes)/campaigns/new/page.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/campaigns/target-lists/table-components/columns.tsx
+./app/[locale]/(routes)/campaigns/target-lists/page.tsx
+./app/[locale]/(routes)/campaigns/targets/components/EnrichFieldSelector.tsx
+./app/[locale]/(routes)/campaigns/targets/components/BulkEnrichTargetsModal.tsx
+./app/[locale]/(routes)/campaigns/targets/components/UpdateTargetForm.tsx
+./app/[locale]/(routes)/campaigns/targets/components/TargetsView.tsx
+./app/[locale]/(routes)/campaigns/targets/components/NewTargetForm.tsx
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/page.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/page.tsx
+./app/[locale]/(routes)/campaigns/new/components/WizardShell.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step4Schedule.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step3Audience.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step2Template.tsx
+./app/[locale]/(routes)/campaigns/new/components/Step1Details.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/page.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/team-conversation.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns.tsx
+./app/[locale]/(routes)/crm/tasks/viewtask/[taskId]/components/columns-task.tsx
+./app/[locale]/(routes)/campaigns/target-lists/[targetListId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/dashboard/user/page.tsx
+./app/[locale]/(routes)/crm/dashboard/page.tsx
+./app/[locale]/(routes)/campaigns/components/CampaignsView.tsx
+./app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/page.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/TargetContactsTable.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichTargetDrawer.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/EnrichButton.tsx
+./app/[locale]/(routes)/campaigns/targets/[targetId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/contracts/table-data/schema.tsx
+./app/[locale]/(routes)/crm/contracts/table-data/data.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/page.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/schema.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/data/data.tsx
+./app/[locale]/(routes)/crm/dashboard/[userId]/page.tsx
+./app/[locale]/(routes)/crm/products/table-data/schema.tsx
+./app/[locale]/(routes)/crm/products/table-data/data.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/LineItemsSection.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/contracts/[contractId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/crm/contracts/_forms/update-contract.tsx
+./app/[locale]/(routes)/crm/contracts/_forms/create-contract.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/columns.tsx
+./app/[locale]/(routes)/crm/contracts/page.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/StepsTimeline.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/RecipientsTable.tsx
+./app/[locale]/(routes)/campaigns/[campaignId]/components/CampaignDetail.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/contracts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/page.tsx
+./app/[locale]/(routes)/crm/products/_forms/update-product.tsx
+./app/[locale]/(routes)/crm/products/_forms/create-product.tsx
+./app/[locale]/(routes)/crm/products/table-components/columns.tsx
+./app/[locale]/(routes)/crm/products/page.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-row-actions-tasks.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/team-conversation.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-pagination.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/columns-task.tsx
+./app/[locale]/(routes)/projects/tasks/viewtask/[taskId]/components/TaskViewActions.tsx
+./app/[locale]/(routes)/projects/tasks/page.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/products/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/products/[productId]/page.tsx
+./app/[locale]/(routes)/crm/products/components/ImportProductsDialog.tsx
+./app/[locale]/(routes)/crm/contacts/table-data/schema.tsx
+./app/[locale]/(routes)/projects/tasks/data/schema.tsx
+./app/[locale]/(routes)/projects/tasks/data/data.tsx
+./app/[locale]/(routes)/crm/opportunities/table-data/schema.tsx
+./app/[locale]/(routes)/crm/opportunities/table-data/data.tsx
+./app/[locale]/(routes)/crm/accounts/table-data/schema.tsx
+./app/[locale]/(routes)/crm/accounts/table-data/data.tsx
+./app/[locale]/(routes)/projects/dialogs/UpdateTask.tsx
+./app/[locale]/(routes)/projects/dialogs/NewTask.tsx
+./app/[locale]/(routes)/projects/dialogs/NewProject.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/EditProductButton.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/products/[productId]/components/AccountsTab.tsx
+./app/[locale]/(routes)/projects/actions/get-task-done.ts
+./app/[locale]/(routes)/crm/contacts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/contacts/table-components/columns.tsx
+./app/[locale]/(routes)/crm/contacts/page.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/opportunities/table-components/columns.tsx
+./app/[locale]/(routes)/crm/opportunities/page.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/_components/ProjectsView.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/accounts/table-components/columns.tsx
+./app/[locale]/(routes)/crm/accounts/page.tsx
+./app/[locale]/(routes)/crm/accounts/loading.tsx
+./app/[locale]/(routes)/projects/data/schema.tsx
+./app/[locale]/(routes)/projects/data/data.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-pagination.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/tasks/components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/tasks/components/columns.tsx
+./app/[locale]/(routes)/crm/contacts/enrichment/page.tsx
+./app/[locale]/(routes)/crm/contacts/enrichment/RetryEnrichmentButton.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/page.tsx
+./app/[locale]/(routes)/crm/opportunities/components/UpdateOpportunityForm.tsx
+./app/[locale]/(routes)/crm/opportunities/components/NewOpportunityForm.tsx
+./app/[locale]/(routes)/profile/page.tsx
+./app/[locale]/(routes)/profile/loading.tsx
+./app/[locale]/(routes)/crm/accounts/components/UpdateAccountForm.tsx
+./app/[locale]/(routes)/crm/accounts/components/NewAccountForm.tsx
+./app/[locale]/(routes)/projects/dashboard/page.tsx
+./app/[locale]/(routes)/crm/contacts/components/UpdateContactForm.tsx
+./app/[locale]/(routes)/crm/contacts/components/NewContactForm.tsx
+./app/[locale]/(routes)/crm/contacts/components/EnrichFieldSelector.tsx
+./app/[locale]/(routes)/crm/contacts/components/BulkEnrichModal.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/page.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/forms/NewSection.tsx
+./app/[locale]/(routes)/projects/dashboard/components/ProjectDasboard.tsx
+./app/[locale]/(routes)/projects/loading.tsx
+./app/[locale]/(routes)/profile/components/ProfilePhotoForm.tsx
+./app/[locale]/(routes)/projects/tasks/[userId]/page.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/page.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewTaskInProject.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/NewSection.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/dialogs/DeleteProject.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/OpportunityDetailActions.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/LineItemsSection.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/opportunities/[opportunityId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/projects/forms/UpdateProject.tsx
+./app/[locale]/(routes)/projects/page.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/page.tsx
+./app/[locale]/(routes)/profile/components/tabs/SecurityTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/ProfileTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/PreferencesTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/LlmsTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/EmailAccountsTabContent.tsx
+./app/[locale]/(routes)/profile/components/tabs/DeveloperTabContent.tsx
+./app/[locale]/(routes)/profile/components/ProfileTabs.tsx
+./app/[locale]/(routes)/profile/components/ProfileHeroAvatar.tsx
+./app/[locale]/(routes)/profile/components/ProfileHero.tsx
+./app/[locale]/(routes)/profile/components/ProfileForm.tsx
+./app/[locale]/(routes)/profile/components/OpenAiForm.tsx
+./app/[locale]/(routes)/profile/components/LanguageForm.tsx
+./app/[locale]/(routes)/profile/components/EmailAccountsList.tsx
+./app/[locale]/(routes)/profile/components/ApiTokens.tsx
+./app/[locale]/(routes)/projects/boards/[boardId]/components/Kanban.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichContactDrawer.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/EnrichButton.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/ContactDetailActions.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/contacts/[contactId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountProductsView.tsx
+./app/[locale]/(routes)/crm/leads/page.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AccountDetailActions.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/AssignProductForm.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/schema.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/data/data.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/TasksView.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/NewTaskForm.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/components/BasicView.tsx
+./app/[locale]/(routes)/profile/actions/api-keys.ts
+./app/[locale]/(routes)/crm/leads/table-data/schema.tsx
+./app/[locale]/(routes)/crm/leads/table-data/data.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/columns.tsx
+./app/[locale]/(routes)/crm/components/AccountsView.tsx
+./app/[locale]/(routes)/crm/leads/components/UpdateLeadForm.tsx
+./app/[locale]/(routes)/crm/leads/components/NewLeadForm.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/page.tsx
+./app/[locale]/(routes)/crm/components/DocumentsView.tsx
+./app/[locale]/(routes)/crm/components/ContractsView.tsx
+./app/[locale]/(routes)/crm/components/ContactsView.tsx
+./app/[locale]/(routes)/crm/components/LeadsView.tsx
+./app/[locale]/(routes)/crm/components/MainPageView.tsx
+./app/[locale]/(routes)/crm/components/OpportunitiesView.tsx
+./app/[locale]/(routes)/crm/components/ProductsView.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table.tsx
+./app/[locale]/(routes)/crm/accounts/[accountId]/tasks-data-table/components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/crm/leads/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/crm/leads/table-components/columns.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-column-header.tsx
+./app/[locale]/(routes)/projects/table-components/columns.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-faceted-filter.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-pagination.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/LeadDetailActions.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/HistoryTab.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/BasicView.tsx
+./app/[locale]/(routes)/crm/leads/[leadId]/components/ActivitiesSection.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-view-options.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-toolbar.tsx
+./app/[locale]/(routes)/projects/table-components/data-table.tsx
+./app/[locale]/(routes)/projects/table-components/data-table-row-actions.tsx
+./app/[locale]/(routes)/crm/components/line-items/AddLineItemForm.tsx
+./app/[locale]/(routes)/crm/components/line-items/EditLineItemForm.tsx
+./app/[locale]/(routes)/crm/components/line-items/LineItemsTable.tsx
+
+exec
+/usr/bin/bash -lc 'rg -n "FeedbackForm|Feedback submission failed|client-logs|feedback" .' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./docs/superpowers/specs/2026-04-05-products-playwright-tests-design.md:136:- Duplicate SKU — error feedback expected
+./scripts/VALIDATION_README.md:366:   - Collect user feedback
+./app/client-logger.ts:8:const ENDPOINT = "/api/client-logs";
+./app/api/client-logs/route.ts:4:const logger = createLogger({ module: "app.api.client-logs" });
+./docs/superpowers/specs/2026-03-23-llm-api-keys-design.md:266:- Note: bulk modals call `/enrich-bulk` routes — those routes only fire an Inngest event today and do not call enrichment directly. They must be updated to call `getApiKey` before sending the Inngest event and return `402 NO_API_KEY` early if no key is found, providing fast user feedback rather than a silent Inngest job failure.
+./app/api/feedback/route.ts:6:const logger = createLogger({ module: "api.feedback" });
+./app/api/feedback/route.ts:33:  const { feedback } = body;
+./app/api/feedback/route.ts:35:    typeof feedback === "string" ? feedback.trim() : "";
+./app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+./CONTRIBUTING.md:31:- Focus on constructive feedback
+./CONTRIBUTING.md:163:   - Wait for review and address feedback
+./docs/superpowers/plans/2026-04-01-better-auth-migration.md:1145:- Modify: `app/api/feedback/route.ts`
+./docs/superpowers/plans/2026-03-21-profile-settings-redesign.md:500:- [ ] Submit a form in each tab — toast feedback still works (no regressions)
+./app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+./app/[locale]/(routes)/components/FeedbackForm.tsx:28:  feedback: z.string().min(1, {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:43:  const feedbackValue = form.watch("feedback") || "";
+./app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+./app/[locale]/(routes)/components/FeedbackForm.tsx:54:      logger.error({ err: error }, "Feedback submission failed");
+./app/[locale]/(routes)/components/FeedbackForm.tsx:57:      toast.success("Thank you for your feedback.");
+./app/[locale]/(routes)/components/FeedbackForm.tsx:68:          name="feedback"
+./app/[locale]/(routes)/components/FeedbackForm.tsx:71:              <FormLabel>Send us a feedback</FormLabel>
+./app/[locale]/(routes)/components/FeedbackForm.tsx:74:                  placeholder="Your feedback"
+./app/[locale]/(routes)/components/FeedbackForm.tsx:81:                We appreciate every feedback. Thank you for helping us make this
+./app/[locale]/(routes)/components/FeedbackForm.tsx:85:                {feedbackValue.length}/1000
+./app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+./app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+./app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+
+codex
+The incident points to the feedback form’s POST and the client log collector only records the Axios 500, so I’m checking the server route implementation and its dependencies next.
+exec
+/usr/bin/bash -lc "sed -n '1,200p' lib/sendmail.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,160p' app/api/client-logs/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,150p' 'app/[locale]/(routes)/components/FeedbackForm.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import nodemailer from "nodemailer";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger({ module: "sendmail" });
+
+interface EmailOptions {
+  from: string | undefined;
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}
+
+export default async function sendEmail(
+  emailOptions: EmailOptions
+): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USERNAME,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+
+  try {
+    await transporter.sendMail(emailOptions);
+    logger.info(
+      {
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email sent"
+    );
+  } catch (error: any | Error) {
+    logger.error(
+      {
+        err: error,
+        hasHtml: Boolean(emailOptions.html),
+      },
+      "Email send failed"
+    );
+  }
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,180p' app/api/feedback/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { createLogger } from "@/lib/logger";
+import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "app.api.client-logs" });
+const levels = new Set(["debug", "info", "warn", "error"]);
+const MAX_BODY_BYTES = 64 * 1024;
+
+interface ClientLogBody {
+  context?: unknown;
+  level?: unknown;
+  message?: unknown;
+  pathname?: unknown;
+  sessionId?: unknown;
+  timestamp?: unknown;
+  url?: unknown;
+}
+
+function limitString(value: unknown, fallback: string) {
+  if (typeof value !== "string" || value.trim() === "") {
+    return fallback;
+  }
+
+  return value.length > 1_000 ? `${value.slice(0, 1_000)}...[truncated]` : value;
+}
+
+export async function POST(req: Request) {
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
+  let body: ClientLogBody;
+  try {
+    const parsed = await req.json();
+    body = parsed && typeof parsed === "object" ? (parsed as ClientLogBody) : {};
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const level = typeof body.level === "string" && levels.has(body.level) ? body.level : "info";
+  const message = limitString(body?.message, "Client log");
+  const payload = {
+    client: {
+      sessionId: limitString(body?.sessionId, "unknown"),
+      pathname: limitString(body?.pathname, "unknown"),
+      url: limitString(body?.url, "unknown"),
+      timestamp: limitString(body?.timestamp, "unknown"),
+      userAgent: limitString(req.headers.get("user-agent"), "unknown"),
+    },
+    context: body.context && typeof body.context === "object" ? body.context : {},
+  };
+
+  switch (level) {
+    case "debug":
+      logger.debug(payload, message);
+      break;
+    case "warn":
+      logger.warn(payload, message);
+      break;
+    case "error":
+      logger.error(payload, message);
+      break;
+    default:
+      logger.info(payload, message);
+  }
+
+  return new NextResponse(null, { status: 204 });
+}
+
+ succeeded in 0ms:
+"use client";
+
+import { createClientLogger } from "@/app/client-logger";
+import * as z from "zod";
+import axios from "axios";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormDescription,
+  FormMessage,
+} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
+
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { Icons } from "@/components/ui/icons";
+
+
+const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+const formSchema = z.object({
+  feedback: z.string().min(1, {
+    message: "Feedback must be at least 1 character.",
+  }),
+});
+
+interface FeedbackFormProps {
+  setOpen: (open: boolean) => void;
+}
+
+const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+  const [loading, setLoading] = useState(false);
+
+  const form = useForm({
+    resolver: zodResolver(formSchema),
+  });
+  const feedbackValue = form.watch("feedback") || "";
+
+  const onSubmit = async (data: any) => {
+    setLoading(true);
+    try {
+      await axios.post("/api/feedback", {
+        ...data,
+        page: window.location.pathname,
+        submittedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error({ err: error }, "Feedback submission failed");
+      toast.error("Something went wrong. Please try again later.");
+    } finally {
+      toast.success("Thank you for your feedback.");
+      setOpen(false);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <FormField
+          control={form.control}
+          name="feedback"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Send us a feedback</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Your feedback"
+                  disabled={loading}
+                  maxLength={1000}
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription className="text-xs text-muted-foreground">
+                We appreciate every feedback. Thank you for helping us make this
+                app better
+              </FormDescription>
+              <div className="text-right text-xs text-muted-foreground">
+                {feedbackValue.length}/1000
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <div className="flex justify-end space-x-2">
+          <Button
+            variant={"outline"}
+            onClick={() => setOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" variant={"secondary"} disabled={loading}>
+            {loading ? (
+              <div className="flex space-x-2">
+                <Icons.spinner className="h-4 w-4 animate-spin" />
+                <span>Sending ...</span>
+              </div>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+};
+
+export default FeedbackForm;
+
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import { createLogger } from "@/lib/logger";
+import resendHelper from "@/lib/resend";
+import { NextResponse } from "next/server";
+
+const logger = createLogger({ module: "api.feedback" });
+function buildFeedbackSubject(sourcePath: string) {
+  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+}
+
+export async function POST(req: Request) {
+  /*
+  Resend.com function init - this is a helper function that will be used to send emails
+  */
+  let resend;
+  try {
+    resend = await resendHelper();
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message || "Resend API key is not configured" },
+      { status: 500 }
+    );
+  }
+  
+  const session = await getSession();
+  if (!session) {
+    return new NextResponse("Unauthenticated", { status: 401 });
+  }
+  const body = await req.json();
+  if (!body) {
+    return new NextResponse("Missing body", { status: 400 });
+  }
+  const { feedback } = body;
+  const normalizedFeedback =
+    typeof feedback === "string" ? feedback.trim() : "";
+  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+
+  if (!normalizedFeedback) {
+    return new NextResponse("Missing feedback", { status: 400 });
+  }
+
+  try {
+    //Send mail via Resend to info@softbase.cz
+    await resend.emails.send({
+      from:
+        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+      to: "info@softbase.cz",
+      subject: buildFeedbackSubject(sourcePath),
+      text: normalizedFeedback,
+    });
+    logger.info({ userId: session.user.id }, "Feedback email sent");
+    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+  } catch (error) {
+    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+  }
+}
+
+codex
+The main mismatch I found is that the client sends `page`, while the API route dereferences `body.context.pathname`. I’m checking the mail helper because the route can also return 500 before it reaches that line if Resend is not configured.
+exec
+/usr/bin/bash -lc "sed -n '1,180p' lib/resend.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { Resend } from "resend";
+import { prismadb } from "./prisma";
+
+export default async function resendHelper() {
+  const resendKey = await prismadb.systemServices.findFirst({
+    where: {
+      name: "resend_smtp",
+    },
+  });
+
+  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+
+  if (!apiKey) {
+    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+  }
+
+  const resend = new Resend(apiKey);
+
+  return resend;
+}
+
+exec
+/usr/bin/bash -lc "nl -ba app/api/feedback/route.ts | sed -n '1,120p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+     1	import { getSession } from "@/lib/auth-server";
+     2	import { createLogger } from "@/lib/logger";
+     3	import resendHelper from "@/lib/resend";
+     4	import { NextResponse } from "next/server";
+     5	
+     6	const logger = createLogger({ module: "api.feedback" });
+     7	function buildFeedbackSubject(sourcePath: string) {
+     8	  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+     9	}
+    10	
+    11	export async function POST(req: Request) {
+    12	  /*
+    13	  Resend.com function init - this is a helper function that will be used to send emails
+    14	  */
+    15	  let resend;
+    16	  try {
+    17	    resend = await resendHelper();
+    18	  } catch (error: any) {
+    19	    return NextResponse.json(
+    20	      { error: error?.message || "Resend API key is not configured" },
+    21	      { status: 500 }
+    22	    );
+    23	  }
+    24	  
+    25	  const session = await getSession();
+    26	  if (!session) {
+    27	    return new NextResponse("Unauthenticated", { status: 401 });
+    28	  }
+    29	  const body = await req.json();
+    30	  if (!body) {
+    31	    return new NextResponse("Missing body", { status: 400 });
+    32	  }
+    33	  const { feedback } = body;
+    34	  const normalizedFeedback =
+    35	    typeof feedback === "string" ? feedback.trim() : "";
+    36	  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+    37	
+    38	  if (!normalizedFeedback) {
+    39	    return new NextResponse("Missing feedback", { status: 400 });
+    40	  }
+    41	
+    42	  try {
+    43	    //Send mail via Resend to info@softbase.cz
+    44	    await resend.emails.send({
+    45	      from:
+    46	        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+    47	      to: "info@softbase.cz",
+    48	      subject: buildFeedbackSubject(sourcePath),
+    49	      text: normalizedFeedback,
+    50	    });
+    51	    logger.info({ userId: session.user.id }, "Feedback email sent");
+    52	    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+    53	  } catch (error) {
+    54	    logger.error({ err: error, userId: session.user.id }, "Feedback email failed");
+    55	    return NextResponse.json({ error: "Initial error" }, { status: 500 });
+    56	  }
+    57	}
+
+exec
+/usr/bin/bash -lc "nl -ba 'app/[locale]/(routes)/components/FeedbackForm.tsx' | sed -n '35,65p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+    35	}
+    36	
+    37	const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+    38	  const [loading, setLoading] = useState(false);
+    39	
+    40	  const form = useForm({
+    41	    resolver: zodResolver(formSchema),
+    42	  });
+    43	  const feedbackValue = form.watch("feedback") || "";
+    44	
+    45	  const onSubmit = async (data: any) => {
+    46	    setLoading(true);
+    47	    try {
+    48	      await axios.post("/api/feedback", {
+    49	        ...data,
+    50	        page: window.location.pathname,
+    51	        submittedAt: new Date().toISOString(),
+    52	      });
+    53	    } catch (error) {
+    54	      logger.error({ err: error }, "Feedback submission failed");
+    55	      toast.error("Something went wrong. Please try again later.");
+    56	    } finally {
+    57	      toast.success("Thank you for your feedback.");
+    58	      setOpen(false);
+    59	      setLoading(false);
+    60	    }
+    61	  };
+    62	
+    63	  return (
+    64	    <Form {...form}>
+    65	      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+
+exec
+/usr/bin/bash -lc "rg -n \"resendHelper|RESEND|EMAIL_FROM|NEXT_PUBLIC_APP_URL|NEXT_PUBLIC_APP_NAME|context\\.pathname|submittedAt|page:\" app lib .env*" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+.env.local.example:18:EMAIL_FROM=info@domain.com
+.env.local.example:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local.example:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local.example:66:RESEND_API_KEY=
+.env.local.example:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.local:18:EMAIL_FROM=info@domain.com
+.env.local:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local:66:RESEND_API_KEY=
+.env.local:67:RESEND_FROM_EMAIL=noreply@domain.com
+.env.example:19:RESEND_API_KEY="your-resend-api-key"
+.env.example:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env.example:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+.env:19:RESEND_API_KEY="your-resend-api-key"
+.env:53:RESEND_WEBHOOK_SECRET=     # Resend webhook signing secret
+.env:54:RESEND_FROM_EMAIL=         # e.g. noreply@yourdomain.com
+lib/auth.ts:8:import resendHelper from "@/lib/resend";
+lib/auth.ts:10:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+lib/auth.ts:73:          const resend = await resendHelper();
+lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+lib/resend.ts:4:export default async function resendHelper() {
+lib/resend.ts:11:  const apiKey = process.env.RESEND_API_KEY || resendKey?.serviceKey;
+lib/resend.ts:14:    throw new Error("Resend API key is not configured. Please add it in Admin settings or set RESEND_API_KEY environment variable.");
+lib/new-user-notify.ts:15:      from: process.env.EMAIL_FROM,
+lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+app/api/og/route.tsx:10:const websiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+app/api/feedback/route.ts:3:import resendHelper from "@/lib/resend";
+app/api/feedback/route.ts:8:  return `New Feedback from: ${process.env.NEXT_PUBLIC_APP_URL}${sourcePath}`;
+app/api/feedback/route.ts:17:    resend = await resendHelper();
+app/api/feedback/route.ts:36:  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+app/api/feedback/route.ts:46:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+app/api/campaigns/webhooks/resend/route.ts:6:  if (!signature || !process.env.RESEND_WEBHOOK_SECRET) return false;
+app/api/campaigns/webhooks/resend/route.ts:7:  const expected = createHmac("sha256", process.env.RESEND_WEBHOOK_SECRET)
+lib/auth-client.ts:6:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+app/[locale]/(auth)/sign-in/page.tsx:8:          Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
+app/[locale]/(auth)/pending/page.tsx:30:          {process.env.NEXT_PUBLIC_APP_NAME} - your account must be allowed by
+app/[locale]/(auth)/pending/page.tsx:34:          Hi, welcome to {process.env.NEXT_PUBLIC_APP_NAME}. Ask someone in your
+app/[locale]/(auth)/inactive/page.tsx:35:        Hi, your {process.env.NEXT_PUBLIC_APP_NAME} account has been disabled.
+app/[locale]/(routes)/emails/page.tsx:81:    : { emails: [], total: 0, page: 1, totalPages: 0 };
+app/[locale]/(routes)/emails/components/mail.tsx:29:  page: number;
+app/[locale]/(routes)/emails/components/mail-list.tsx:14:  page: number;
+app/[locale]/(routes)/layout.tsx:19:    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:169:                  : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:68:            {process.env.RESEND_API_KEY ? (
+app/[locale]/(routes)/admin/_components/ResendCard.tsx:70:                keyValue={process.env.RESEND_API_KEY}
+app/[locale]/(routes)/admin/audit-log/page.tsx:22:    page: currentPage,
+app/[locale]/(routes)/components/FeedbackForm.tsx:50:        page: window.location.pathname,
+app/[locale]/(routes)/components/FeedbackForm.tsx:51:        submittedAt: new Date().toISOString(),
+app/[locale]/(routes)/components/Footer.tsx:14:            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:38:                : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/components/app-sidebar.tsx:153:            {process.env.NEXT_PUBLIC_APP_NAME || "NextCRM"}
+
+codex
+There are two credible 500 paths: missing Resend configuration and an API/client payload contract mismatch. I’m checking whether the server log has the matching server-side entry around the incident time, which should disambiguate them.
+exec
+/usr/bin/bash -lc 'test -f /var/log/nextcrm/nextcrm.log && rg -n "2026-05-02T18:34|Feedback|api.feedback|Resend|context|pathname|TypeError" /var/log/nextcrm/nextcrm.log | tail -n 20 || true' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "ls -la logs /var/log/nextcrm 2>/dev/null | sed -n '1,20p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+logs:
+total 92
+drwxr-xr-x. 1 dmytro dmytro    56 May  4 23:11 .
+drwxr-xr-x. 1 dmytro dmytro  1274 May  4 23:51 ..
+-rw-r--r--. 1 dmytro dmytro     1 May  1 17:06 .gitkeep
+-rw-r--r--. 1 dmytro dmytro 51921 May  4 23:21 build.log
+-rw-r--r--. 1 dmytro dmytro 35919 May  4 22:04 nextcrm.log
+
+exec
+/usr/bin/bash -lc 'test -f logs/nextcrm.log && rg -n "2026-05-02T18:34|Feedback|api.feedback|Resend|context|pathname|TypeError" logs/nextcrm.log | tail -n 20 || true' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+4:{"level":"error","time":"2026-05-02T18:34:29.560Z","service":"nextcrm-app","environment":"development","pid":23369,"hostname":"localhost","module":"app.api.client-logs","trace_id":"e2980506f723a88135d38840469ec308","span_id":"f184cde15745e45a","trace_flags":"01","client":{"sessionId":"4f335a33-9f27-425f-8755-32b3bc9b3859","pathname":"/en","url":"http://localhost:3000/en","timestamp":"2026-05-02T18:34:29.426Z","userAgent":"Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"},"context":{"module":"app.[locale].(routes).components.FeedbackForm","err":{"name":"AxiosError","message":"Request failed with status code 500","stack":"AxiosError@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:797:9\nsettle@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2070:16\nonloadend@http://localhost:3000/_next/static/chunks/0vh~_axios_lib_00q~6c8._.js:2615:225\n"}},"message":"Feedback submission failed"}
+6:{"level":"error","time":"2026-05-04T18:30:26.432Z","service":"nextcrm-app","environment":"development","pid":86917,"hostname":"localhost","module":"app.api.client-logs","trace_id":"e205c05bab2c1e0f7842fa624396f721","span_id":"f6f18ebb5ee63701","trace_flags":"01","client":{"sessionId":"f4e338ce-1d65-492f-9a53-16026bf86155","pathname":"/en/sign-in","url":"http://localhost:3000/en/sign-in","timestamp":"2026-05-04T18:30:26.368Z","userAgent":"Mozilla/5.0 (X11; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"},"context":{"module":"app.client-error-listener","err":{"name":"Error","message":"Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HTTPAccessFallbackBoundary notFound={undefined} forbidden={undefined} unauthorized={undefined}>\n      <RedirectBoundary>\n        <RedirectErrorBoundary router={{...}}>\n          <InnerLayoutRouter url=\"/en/sign-in\" tree={[...]} params={{locale:\"en\"}} cacheNode={{rsc:{...}, ...}} ...>\n            <SegmentViewNode type=\"page\" pagePath=\"[locale]/(...\">\n              <SegmentTrieNode>\n              <SignInPage>\n                <div className=\"h-full\">\n                  <div>\n                  <div>\n                    <LoginComponent>\n                      <Card className=\"shadow-lg ...\">\n                        <div ref={undefined} className=\"rounded-lg...\">\n                          <CardHeader className=\"space-y-1\">\n                            <div ref={undefined} className=\"flex flex-...\">\n                              <CardTitle className=\"text-2xl\">\n                                <div ref={undefined} className=\"font-semibold tracking-tight text-2xl\">\n+                                 Sign in\n-                                 Login\n                              ...\n                          ...\n            ...\n          ...\n","stack":"throwOnHydrationMismatch@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3318:56\nprepareToHydrateHostInstance@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:3372:23\ncompleteWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:6922:88\nrunWithFiberInDEV@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:965:131\ncompleteUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9622:23\nperformUnitOfWork@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9557:28\nworkLoopConcurrentByScheduler@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9551:75\nrenderRootConcurrent@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9534:71\nperformWorkOnRoot@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:9061:150\nperformWorkOnRootViaSchedulerTask@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_react-dom_05bqvg8._.js:10255:26\nperformWorkUntilDeadline@http://localhost:3000/_next/static/chunks/0sc8_next_dist_compiled_13m26rn._.js:2647:72\n"}},"message":"Unhandled client error"}
+11:{"level":"error","time":"2026-05-04T18:44:22.247Z","service":"nextcrm-app","environment":"development","pid":89724,"hostname":"localhost","module":"api.upload.presigned-url","trace_id":"dd675312fb402fed6a9ff838a3d9a064","span_id":"8f0a9636dd20584e","trace_flags":"01","err":{"type":"TypeError","message":"Invalid URL","stack":"TypeError: Invalid URL\n    at new URL (node:internal/url:819:25)\n    at buildPublicFileUrl (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:817:27)\n    at POST (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:872:25)\n    at async AppRouteRouteModule.do (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40115)\n    at async AppRouteRouteModule.handle (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47321)\n    at async responseGenerator (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17690:38)\n    at async AppRouteRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:227216)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17753:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17804:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)","code":"ERR_INVALID_URL","input":""},"contentType":"application/pdf","folder":"documents","userId":"8c28cd6d-deca-4202-b776-ff7ca2b9b158","message":"Presigned upload URL generation failed"}
+15:{"level":"error","time":"2026-05-04T19:04:06.330Z","service":"nextcrm-app","environment":"development","pid":94945,"hostname":"localhost","trace_id":"b7fc50998917f6d53bb5de0ae8776eb5","span_id":"af6b25b5543af455","trace_flags":"01","err":{"type":"TypeError","message":"Cannot read properties of undefined (reading 'toString')","stack":"TypeError: Cannot read properties of undefined (reading 'toString')\n    at parseEmployeesValue (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:383:26)\n    at /home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:416:27\n    at Array.forEach (<anonymous>)\n    at importTargets (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/_12nrsm3._.js:399:10)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async executeActionAndPrepareForRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:5248)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:64:1986\n    at async handleAction (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:62:25378)\n    at async renderToHTMLOrFlightImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:69:55630)\n    at async doRender (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4079:28)\n    at async AppPageRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-page-turbo.runtime.dev.js:71:63567)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4372:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/ssr/node_modules__pnpm_0u~r44_._.js:4772:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)","digest":"1383626540"},"request":{"method":"POST","path":"/en/campaigns/targets"},"route":{"path":"/[locale]/campaigns/targets","routerKind":"App Router","routeType":"action","renderSource":"react-server-components-payload"},"message":"Unhandled request error"}
+
+codex
+I found the matching local log entry, but it only contains the client-side Axios failure, not the API route’s server-side exception. I’m applying the repo’s debugging guidance now by tracing the exact execution path from request payload to 500 response.
+exec
+/usr/bin/bash -lc "sed -n '1,220p' .claude/skills/systematic-debugging/SKILL.md" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,140p' app/client-logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,180p' lib/logger.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+sed: can't read .claude/skills/systematic-debugging/SKILL.md: No such file or directory
+
+ succeeded in 0ms:
+"use client";
+
+type ClientLogLevel = "debug" | "info" | "warn" | "error";
+type ClientLogContext = Record<string, unknown>;
+
+const MAX_STRING_LENGTH = 4_000;
+const MAX_DEPTH = 4;
+const ENDPOINT = "/api/client-logs";
+
+const sessionId =
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+
+function truncate(value: string) {
+  return value.length > MAX_STRING_LENGTH
+    ? `${value.slice(0, MAX_STRING_LENGTH)}...[truncated]`
+    : value;
+}
+
+function serialize(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: truncate(value.message),
+      stack: value.stack ? truncate(value.stack) : undefined,
+    };
+  }
+
+  if (value === null || typeof value !== "object") {
+    return typeof value === "string" ? truncate(value) : value;
+  }
+
+  if (seen.has(value)) {
+    return "[Circular]";
+  }
+
+  if (depth >= MAX_DEPTH) {
+    return "[MaxDepth]";
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map((item) => serialize(item, depth + 1, seen));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .slice(0, 50)
+      .map(([key, item]) => [key, serialize(item, depth + 1, seen)])
+  );
+}
+
+function send(level: ClientLogLevel, message: string, context: ClientLogContext) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const payload = JSON.stringify({
+    level,
+    message,
+    context: serialize(context),
+    sessionId,
+    url: window.location.href,
+    pathname: window.location.pathname,
+    timestamp: new Date().toISOString(),
+  });
+
+  if (navigator.sendBeacon) {
+    const sent = navigator.sendBeacon(
+      ENDPOINT,
+      new Blob([payload], { type: "application/json" })
+    );
+    if (sent) {
+      return;
+    }
+  }
+
+  fetch(ENDPOINT, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: payload,
+    keepalive: true,
+  }).catch(() => {
+    // Client logging must never break the UI.
+  });
+}
+
+export function createClientLogger(bindings: ClientLogContext) {
+  const log = (level: ClientLogLevel, context: ClientLogContext, message: string) => {
+    send(level, message, { ...bindings, ...context });
+  };
+
+  return {
+    debug: (context: ClientLogContext, message: string) => log("debug", context, message),
+    info: (context: ClientLogContext, message: string) => log("info", context, message),
+    warn: (context: ClientLogContext, message: string) => log("warn", context, message),
+    error: (context: ClientLogContext, message: string) => log("error", context, message),
+  };
+}
+
+ succeeded in 0ms:
+import { context, trace } from "@opentelemetry/api";
+import { mkdirSync } from "node:fs";
+import { hostname } from "node:os";
+import { dirname, resolve } from "node:path";
+import pino from "pino";
+
+const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
+
+function getTraceBindings() {
+  const spanContext = trace.getSpan(context.active())?.spanContext();
+
+  if (!spanContext || !trace.isSpanContextValid(spanContext)) {
+    return {};
+  }
+
+  return {
+    trace_id: spanContext.traceId,
+    span_id: spanContext.spanId,
+    trace_flags: spanContext.traceFlags.toString(16).padStart(2, "0"),
+  };
+}
+
+function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
+  const streams: pino.StreamEntry[] = [];
+  const prettyLogs = process.env.PINO_PRETTY === "true";
+
+  streams.push({
+    level: logLevel as pino.Level,
+    stream: prettyLogs
+      ? pino.transport({
+          target: "pino-pretty",
+          options: {
+            colorize: true,
+            ignore: "pid,hostname",
+            translateTime: "SYS:standard",
+          },
+        })
+      : pino.destination({ dest: 1, sync: false }),
+  });
+
+  if (process.env.LOG_FILE_PATH) {
+    const logFilePath = resolve(process.cwd(), process.env.LOG_FILE_PATH);
+    mkdirSync(dirname(logFilePath), { recursive: true });
+
+    streams.push({
+      level: logLevel as pino.Level,
+      stream: pino.destination({ dest: logFilePath, sync: false }),
+    });
+  }
+
+  return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
+}
+
+export const logger = pino(
+  {
+    base: {
+      service: serviceName,
+      environment: process.env.NODE_ENV || "development",
+      pid: process.pid,
+      hostname: hostname(),
+    },
+    formatters: {
+      level(label) {
+        return { level: label };
+      },
+    },
+    level: logLevel,
+    messageKey: "message",
+    mixin: getTraceBindings,
+    redact: {
+      censor: "[REDACTED]",
+      paths: [
+        "authorization",
+        "cookie",
+        "password",
+        "secret",
+        "token",
+        "apiKey",
+        "headers.authorization",
+        "headers.cookie",
+        "*.authorization",
+        "*.cookie",
+        "*.password",
+        "*.secret",
+        "*.token",
+        "*.apiKey",
+      ],
+    },
+    serializers: {
+      err: pino.stdSerializers.err,
+      error: pino.stdSerializers.err,
+    },
+    timestamp: pino.stdTimeFunctions.isoTime,
+  },
+  createLogStreams()
+);
+
+export function createLogger(bindings: pino.Bindings) {
+  return logger.child(bindings);
+}
+
+exec
+/usr/bin/bash -lc "find .claude -maxdepth 3 -type f 2>/dev/null | sed -n '1,40p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+exec
+/usr/bin/bash -lc "rg -n \"FeedbackForm|/api/feedback|context:\\s*\\{|pathname.*replace|Missing feedback|Feedback sent\" __tests__ tests app lib docs | sed -n '1,80p'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/api/feedback/route.ts:36:  const sourcePath = body.context.pathname.replace(/\/$/, "") || "/";
+app/api/feedback/route.ts:39:    return new NextResponse("Missing feedback", { status: 400 });
+app/api/feedback/route.ts:52:    return NextResponse.json({ message: "Feedback sent" }, { status: 200 });
+docs/superpowers/plans/2026-04-01-better-auth-migration.md:1145:- Modify: `app/api/feedback/route.ts`
+app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+app/[locale]/(routes)/components/FeedbackForm.tsx:48:      await axios.post("/api/feedback", {
+app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+app/[locale]/(routes)/components/nav-main.tsx:72:      return pathname === url || pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") === url
+
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'app/[locale]/(routes)/page.tsx' 2>/dev/null || true" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'app/[locale]/(routes)/layout.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '1,120p' 'app/[locale]/(routes)/components/Feedback.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { getSession } from "@/lib/auth-server";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+
+import Header from "./components/Header";
+import Footer from "./components/Footer";
+import getAllCommits from "@/actions/github/get-repo-commits";
+
+import { Metadata } from "next";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "./components/app-sidebar";
+import { getTranslations } from "next-intl/server";
+import { AvatarProvider } from "@/context/avatar-context";
+import { CurrencyProvider } from "@/context/currency-context";
+import { getEnabledCurrencies, getDefaultCurrency } from "@/lib/currency";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+  ),
+  title: "",
+  description: "",
+  openGraph: {
+    images: [
+      {
+        url: "/images/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: [
+      {
+        url: "/images/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "",
+      },
+    ],
+  },
+};
+
+export default async function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await getSession();
+
+  //console.log(session, "session");
+
+  if (!session) {
+    return redirect("/sign-in");
+  }
+
+  const user = session?.user;
+
+  if (user?.userStatus === "PENDING") {
+    return redirect("/pending");
+  }
+
+  if (user?.userStatus === "INACTIVE") {
+    return redirect("/inactive");
+  }
+
+  const build = await getAllCommits();
+
+  // Fetch localization dictionary
+  const dict = await getTranslations("ModuleMenu");
+
+  // Extract translations as plain object for client component
+  const translations = {
+    dashboard: dict("dashboard"),
+    crm: {
+      title: dict("crm.title"),
+      accounts: dict("crm.accounts"),
+      opportunities: dict("crm.opportunities"),
+      contacts: dict("crm.contacts"),
+      leads: dict("crm.leads"),
+      contracts: dict("crm.contracts"),
+      products: dict("crm.products"),
+      targets: dict("crm.targets"),
+      targetLists: dict("crm.targetLists"),
+    },
+    projects: dict("projects"),
+    emails: dict("emails"),
+    reports: dict("reports"),
+    documents: dict("documents"),
+    settings: dict("settings"),
+  };
+
+  const cookieStore = await cookies();
+  const sidebarOpen = cookieStore.get("sidebar_state")?.value !== "false";
+
+  const enabledCurrencies = await getEnabledCurrencies();
+  const defaultCurrency = await getDefaultCurrency();
+  const cookieCurrency = cookieStore.get("display_currency")?.value;
+  const displayCurrency = cookieCurrency && enabledCurrencies.some((c: { code: string }) => c.code === cookieCurrency)
+    ? cookieCurrency
+    : defaultCurrency;
+  const currencyList = enabledCurrencies.map((c: { code: string; name: string; symbol: string }) => ({ code: c.code, name: c.name, symbol: c.symbol }));
+
+  //console.log(typeof build, "build");
+  return (
+    <AvatarProvider initialAvatar={user?.image}>
+    <CurrencyProvider initialCurrency={displayCurrency} currencies={currencyList}>
+    <SidebarProvider defaultOpen={sidebarOpen}>
+      <AppSidebar
+        dict={translations}
+        build={build}
+        session={session}
+      />
+      <SidebarInset>
+        <Header
+          id={session.user.id as string}
+          lang={session.user.userLanguage as string}
+        />
+
+ succeeded in 0ms:
+"use client";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import FeedbackForm from "./FeedbackForm";
+
+import { Button } from "@/components/ui/button";
+import { ChatBubbleIcon } from "@radix-ui/react-icons";
+import { useState } from "react";
+
+const Feedback = () => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild className="hidden sm:flex">
+        <Button variant={"secondary"} onClick={() => setOpen(false)}>
+          <ChatBubbleIcon className="w-4 h-4 mr-2" />
+          Feedback
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96">
+        <FeedbackForm setOpen={setOpen} />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+export default Feedback;
+
+ succeeded in 0ms:
+import { Suspense } from "react";
+import { getSession } from "@/lib/auth-server";
+import {
+  CoinsIcon,
+  Contact,
+  DollarSignIcon,
+  FactoryIcon,
+  FilePenLine,
+  HeartHandshakeIcon,
+  LandmarkIcon,
+  UserIcon,
+  Users2Icon,
+} from "lucide-react";
+import Link from "next/link";
+
+import Container from "./components/ui/Container";
+import LoadingBox from "./components/dasboard/loading-box";
+import StorageQuota from "./components/dasboard/storage-quota";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+import {
+  getTasksCount,
+  getUsersTasksCount,
+} from "@/actions/dashboard/get-tasks-count";
+import { getEmployees } from "@/actions/get-empoloyees";
+import { getLeadsCount } from "@/actions/dashboard/get-leads-count";
+import { getBoardsCount } from "@/actions/dashboard/get-boards-count";
+import { getStorageSize } from "@/actions/documents/get-storage-size";
+import { getContactCount } from "@/actions/dashboard/get-contacts-count";
+import { getAccountsCount } from "@/actions/dashboard/get-accounts-count";
+import { getContractsCount } from "@/actions/dashboard/get-contracts-count";
+import { getDocumentsCount } from "@/actions/dashboard/get-documents-count";
+import { getActiveUsersCount } from "@/actions/dashboard/get-active-users-count";
+import { getOpportunitiesCount } from "@/actions/dashboard/get-opportunities-count";
+import { getExpectedRevenue } from "@/actions/crm/opportunity/get-expected-revenue";
+import { getTranslations } from "next-intl/server";
+import { cookies } from "next/headers";
+import { getDefaultCurrency, formatCurrency as formatCurrencyUtil } from "@/lib/currency";
+import { Decimal } from "@prisma/client/runtime/client";
+
+const DashboardPage = async () => {
+  const session = await getSession();
+
+  if (!session) return null;
+
+  const userId = session?.user?.id;
+
+  const cookieStore = await cookies();
+  const defaultCurrency = await getDefaultCurrency();
+  const displayCurrency = cookieStore.get("display_currency")?.value || defaultCurrency;
+
+  //Get user language
+  const lang = session?.user?.userLanguage;
+
+  //Fetch translations from dictionary
+  const dict = await getTranslations("DashboardPage");
+  const leads = await getLeadsCount();
+  const tasks = await getTasksCount();
+  const employees = await getEmployees();
+  const storage = await getStorageSize();
+  const projects = await getBoardsCount();
+  const contacts = await getContactCount();
+  const contracts = await getContractsCount();
+  const users = await getActiveUsersCount();
+  const accounts = await getAccountsCount();
+  const revenue = await getExpectedRevenue(displayCurrency);
+  const documents = await getDocumentsCount();
+  const opportunities = await getOpportunitiesCount();
+  const usersTasks = await getUsersTasksCount(userId);
+
+  return (
+    <Container
+      title={dict("containerTitle")}
+      description={
+        "Welcome to NextCRM cockpit, here you can see your company overview"
+      }
+    >
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <Suspense fallback={<LoadingBox />}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {dict("totalRevenue")}
+              </CardTitle>
+              <DollarSignIcon className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-medium">{"0"}</div>
+            </CardContent>
+          </Card>
+        </Suspense>
+        <Suspense fallback={<LoadingBox />}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {dict("expectedRevenue")}
+              </CardTitle>
+              <DollarSignIcon className="w-4 h-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-medium">
+                {formatCurrencyUtil(new Decimal(revenue), displayCurrency)}
+              </div>
+            </CardContent>
+          </Card>
+        </Suspense>
+
+        <DashboardCard
+          href="/admin/users"
+          title={dict("activeUsers")}
+          IconComponent={UserIcon}
+          content={users}
+        />
+        <DashboardCard
+          href="/employees"
+          title="Employees"
+          IconComponent={Users2Icon}
+          content={employees.length}
+        />
+        <DashboardCard
+
+exec
+/usr/bin/bash -lc "sed -n '1,160p' 'app/[locale]/(routes)/components/Header.tsx'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import Feedback from "./Feedback";
+import FulltextSearch from "./FulltextSearch";
+
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SetLanguage } from "@/components/SetLanguage";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { CommandComponent } from "@/components/CommandComponent";
+import SupportComponent from "@/components/support";
+import { CurrencySwitcher } from "@/components/CurrencySwitcher";
+
+type Props = {
+  id: string;
+  lang: string;
+};
+
+/**
+ * Header Component - Task Group 3.2
+ *
+ * Reorganized header for new layout with shadcn dashboard-01 pattern.
+ *
+ * Layout Structure:
+ * - Left side: SidebarTrigger (mobile menu), FulltextSearch
+ * - Right side: CommandComponent, SetLanguage, Feedback, ThemeToggle, SupportComponent
+ *
+ * Changes from previous version:
+ * - Removed AvatarDropdown (functionality moved to nav-user section in sidebar)
+ * - Removed unused props: name, email, avatar (now only used by nav-user)
+ * - Optimized spacing and alignment for new layout
+ * - SidebarTrigger added in Task 2.8.0 for mobile menu control
+ *
+ * Note: User profile functionality (avatar, name, email, user actions) is now
+ * handled by the NavUser component in the sidebar footer (Task 3.1).
+ */
+const Header = ({ id, lang }: Props) => {
+  return (
+    <>
+      <div className="flex h-16 shrink-0 items-center justify-between gap-2 px-4 transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12">
+        <div className="flex items-center gap-2">
+          <SidebarTrigger className="-ml-1" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <FulltextSearch />
+        </div>
+        <div className="flex items-center gap-2">
+          <CommandComponent />
+          <SetLanguage userId={id} />
+          <Feedback />
+          <CurrencySwitcher />
+          <ThemeToggle />
+          <SupportComponent />
+        </div>
+      </div>
+      <Separator />
+    </>
+  );
+};
+
+export default Header;
+
+exec
+/usr/bin/bash -lc "rg -n \"<Feedback|Feedback\" 'app/[locale]/(routes)/components'" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+app/[locale]/(routes)/components/FeedbackForm.tsx:26:const logger = createClientLogger({ module: "app.[locale].(routes).components.FeedbackForm" });
+app/[locale]/(routes)/components/FeedbackForm.tsx:29:    message: "Feedback must be at least 1 character.",
+app/[locale]/(routes)/components/FeedbackForm.tsx:33:interface FeedbackFormProps {
+app/[locale]/(routes)/components/FeedbackForm.tsx:37:const FeedbackForm = ({ setOpen }: FeedbackFormProps) => {
+app/[locale]/(routes)/components/FeedbackForm.tsx:54:      logger.error({ err: error }, "Feedback submission failed");
+app/[locale]/(routes)/components/FeedbackForm.tsx:115:export default FeedbackForm;
+app/[locale]/(routes)/components/Feedback.tsx:7:import FeedbackForm from "./FeedbackForm";
+app/[locale]/(routes)/components/Feedback.tsx:13:const Feedback = () => {
+app/[locale]/(routes)/components/Feedback.tsx:20:          Feedback
+app/[locale]/(routes)/components/Feedback.tsx:24:        <FeedbackForm setOpen={setOpen} />
+app/[locale]/(routes)/components/Feedback.tsx:30:export default Feedback;
+app/[locale]/(routes)/components/Header.tsx:1:import Feedback from "./Feedback";
+app/[locale]/(routes)/components/Header.tsx:24: * - Right side: CommandComponent, SetLanguage, Feedback, ThemeToggle, SupportComponent
+app/[locale]/(routes)/components/Header.tsx:47:          <Feedback />
+
+codex
+**Incident Report**
+
+Most likely root cause: the feedback form and `/api/feedback` route disagree on the request body shape.
+
+At [FeedbackForm.tsx](</home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48>), the client posts:
+
+```ts
+{
+  ...data,
+  page: window.location.pathname,
+  submittedAt: new Date().toISOString()
+}
+```
+
+But at [route.ts](</home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36>), the API assumes:
+
+```ts
+body.context.pathname
+```
+
+Since the client does not send `context`, `body.context` is `undefined`. That dereference will throw before the email-send `try/catch`, producing a 500 response. The incident’s Axios error, `Request failed with status code 500`, from `FeedbackForm` matches that failure mode.
+
+A secondary possible 500 path exists: `resendHelper()` can return a 500 if no Resend API key is configured. However, the client/API payload mismatch is deterministic for the current code path once the route reaches request-body handling, and it directly matches the feedback submission flow.
+
+Contributing issue: the form always shows a success toast in `finally`, even after logging the failure, so users may see “Thank you for your feedback” despite the API returning 500.
+
+No code changes were made.
+tokens used
+41,002
+**Incident Report**
+
+Most likely root cause: the feedback form and `/api/feedback` route disagree on the request body shape.
+
+At [FeedbackForm.tsx](</home/dmytro/Github/phd-work/nextcrm-app-update/app/[locale]/(routes)/components/FeedbackForm.tsx:48>), the client posts:
+
+```ts
+{
+  ...data,
+  page: window.location.pathname,
+  submittedAt: new Date().toISOString()
+}
+```
+
+But at [route.ts](</home/dmytro/Github/phd-work/nextcrm-app-update/app/api/feedback/route.ts:36>), the API assumes:
+
+```ts
+body.context.pathname
+```
+
+Since the client does not send `context`, `body.context` is `undefined`. That dereference will throw before the email-send `try/catch`, producing a 500 response. The incident’s Axios error, `Request failed with status code 500`, from `FeedbackForm` matches that failure mode.
+
+A secondary possible 500 path exists: `resendHelper()` can return a 500 if no Resend API key is configured. However, the client/API payload mismatch is deterministic for the current code path once the route reaches request-body handling, and it directly matches the feedback submission flow.
+
+Contributing issue: the form always shows a success toast in `finally`, even after logging the failure, so users may see “Thank you for your feedback” despite the API returning 500.
+
+No code changes were made.

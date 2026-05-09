@@ -1,0 +1,384 @@
+run_name: feature-task-3-A
+case_name: feature-task-3
+variant: A
+target_branch: feature/task-3
+run_project_root: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: default
+started_utc: 2026-05-08T20:54:49Z
+elapsed_seconds: 36
+exit_code: 0
+context_file: /home/dmytro/Github/phd-work/nextcrm-app-research/research/llm-rca/test-input/feature-task-3/A/context.md
+
+===== RESPONSE =====
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is configured as an empty string in the local environment, and the upload presigned URL endpoint passes it directly into `new URL()`.
+
+Evidence:
+
+- Error: `ERR_INVALID_URL`, `err_input: ""`
+- Failing function: `buildPublicFileUrl`
+- Source: `app/api/upload/presigned-url/route.ts`
+- Code path:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- `MINIO_PUBLIC_URL` comes from `lib/minio.ts`:
+
+```ts
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+```
+
+- Local config has:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+The request itself appears valid: `contentType` is `application/pdf`, and `folder` is `documents`, both accepted by the route. The failure occurs after presigned URL generation begins, when the API tries to construct the public file URL to return to the client.
+
+Conclusion: the incident was caused by missing local MinIO public endpoint configuration, specifically empty `NEXT_PUBLIC_MINIO_ENDPOINT`. The expected value should be a valid absolute URL such as `https://your-minio-host` or the local MinIO public URL.
+===== CLI LOG =====
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /home/dmytro/Github/phd-work/nextcrm-app-update
+model: gpt-5.5
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: high
+reasoning summaries: none
+session id: 019e095f-1e5f-7023-8d13-0ab6d6b5881a
+--------
+user
+Here is your incident context; find the most likely root cause, do not make any code changes, and return only a textual report.
+
+Context:
+# Incident context
+
+The following JSON object contains incident-related evidence collected from the application observability pipeline.
+
+```json
+{
+  "events": [
+    {
+      "time": "2026-05-04T18:44:22.320Z",
+      "timestampNs": "1777920262320876047",
+      "labels": {
+        "contentType": "application/pdf",
+        "deployment_environment": "local",
+        "detected_level": "error",
+        "environment": "development",
+        "err_code": "ERR_INVALID_URL",
+        "err_input": "",
+        "err_message": "Invalid URL",
+        "err_stack": "TypeError: Invalid URL\n    at new URL (node:internal/url:819:25)\n    at buildPublicFileUrl (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:817:27)\n    at POST (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/[root-of-the-server]__0d.g0~i._.js:872:25)\n    at async AppRouteRouteModule.do (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40115)\n    at async AppRouteRouteModule.handle (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47321)\n    at async responseGenerator (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17690:38)\n    at async AppRouteRouteModule.handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:227216)\n    at async handleResponse (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17753:32)\n    at async Module.handler (/home/dmytro/Github/phd-work/nextcrm-app-update/.next/dev/server/chunks/0sc8_next_01okvwa._.js:17804:13)\n    at async DevServer.renderToResponseWithComponentsImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1454:9)\n    at async DevServer.renderPageComponent (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1506:24)\n    at async DevServer.renderToResponseImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1556:32)\n    at async DevServer.pipeImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:1043:25)\n    at async NextNodeServer.handleCatchallRenderRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/next-server.js:338:17)\n    at async DevServer.handleRequestImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/base-server.js:934:17)\n    at async /home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:394:20\n    at async Span.traceAsyncFn (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/trace/trace.js:164:20)\n    at async DevServer.handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/dev/next-dev-server.js:390:24)\n    at async invokeRender (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:266:21)\n    at async handleRequest (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:465:24)\n    at async requestHandlerImpl (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/router-server.js:514:13)\n    at async Server.requestListener (/home/dmytro/Github/phd-work/nextcrm-app-update/node_modules/.pnpm/next@16.2.4_@babel+core@7.29.0_@opentelemetry+api@1.9.1_@playwright+test@1.58.2_react-d_d5dcdff52a2fa350539c8415eb2a346f/node_modules/next/dist/server/lib/start-server.js:225:13)",
+        "err_type": "TypeError",
+        "folder": "documents",
+        "hostname": "localhost",
+        "level": "error",
+        "log_file_name": "nextcrm.log",
+        "log_file_path": "/var/log/nextcrm/nextcrm.log",
+        "module": "api.upload.presigned-url",
+        "pid": "89724",
+        "service": "nextcrm-app",
+        "service_name": "nextcrm-app",
+        "span_id": "8f0a9636dd20584e",
+        "time": "2026-05-04T18:44:22.247Z",
+        "trace_flags": "01",
+        "trace_id": "dd675312fb402fed6a9ff838a3d9a064",
+        "userId": "8c28cd6d-deca-4202-b776-ff7ca2b9b158"
+      },
+      "line": "Presigned upload URL generation failed",
+      "metadata": {}
+    }
+  ]
+}
+```
+
+codex
+I’ll inspect the upload presign route and its URL-building helper, then correlate the stack labels with source-level configuration inputs.
+exec
+/usr/bin/bash -lc "rg -n \"buildPublicFileUrl|api\\.upload\\.presigned-url|Presigned upload URL generation failed\" ." in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+./app/api/upload/presigned-url/route.ts:10:const logger = createLogger({ module: "api.upload.presigned-url" });
+./app/api/upload/presigned-url/route.ts:15:function buildPublicFileUrl(key: string) {
+./app/api/upload/presigned-url/route.ts:64:    const fileUrl = buildPublicFileUrl(key);
+./app/api/upload/presigned-url/route.ts:85:      "Presigned upload URL generation failed"
+
+exec
+/usr/bin/bash -lc 'rg -n "NEXT_PUBLIC|PUBLIC.*URL|APP_URL|SITE_URL|BASE_URL|SUPABASE|STORAGE|UPLOAD" .env* next.config.* package.json app src lib server 2>/dev/null' in /home/dmytro/Github/phd-work/nextcrm-app-update
+ exited 2 in 0ms:
+lib/auth.ts:10:const isDemo = process.env.NEXT_PUBLIC_APP_URL === "https://demo.nextcrm.io";
+lib/auth.ts:75:            from: `${process.env.NEXT_PUBLIC_APP_NAME} <${process.env.EMAIL_FROM}>`,
+lib/prisma.ts:11:  const connectionString = `${process.env.DATABASE_URL}`;
+lib/new-user-notify.ts:18:      text: `New User Registered: ${newUser.name} \n\n Please login to ${process.env.NEXT_PUBLIC_APP_URL}/admin/users and activate them. \n\n Thank you \n\n ${process.env.NEXT_PUBLIC_APP_NAME}`,
+lib/minio.ts:19:export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+lib/mcp/tools/crm-documents.ts:5:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+lib/mcp/tools/crm-documents.ts:125:      const fileUrl = `${MINIO_PUBLIC_URL}/${MINIO_BUCKET}/${key}`;
+lib/auth-client.ts:6:  baseURL: process.env.NEXT_PUBLIC_APP_URL,
+app/api/upload/presigned-url/route.ts:7:import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+app/api/upload/presigned-url/route.ts:16:  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+.env.local.example:3:DATABASE_URL=postgresql://user:password@localhost:5432/nextcrm
+.env.local.example:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local.example:31:NEXT_PUBLIC_APP_V=0.0.3-beta
+.env.local.example:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local.example:33:NEXT_PUBLIC_NEXT_VERSION="14.0.4"
+.env.local.example:34:NEXT_PUBLIC_GITHUB_REPO_URL="https://github.com/pdovhomilja/nextcrm-app"
+.env.local.example:35:NEXT_PUBLIC_GITHUB_ISSUES_URL=""
+.env.local.example:36:NEXT_PUBLIC_GITHUB_COMMIT_SHA="main"
+.env.local.example:37:NEXT_PUBLIC_GITHUB_TOKEN=
+.env.local.example:54:NEXT_PUBLIC_OPENAI_API_KEY=
+.env.local.example:63:NEXT_PUBLIC_DISCORD_INVITE_URL="https://discord.com/invite/Dd4Aj6S4Dz"
+.env.local.example:72:INNGEST_BASE_URL=
+.env.local.example:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.local:3:DATABASE_URL=postgresql://user:password@localhost:5432/nextcrm
+.env.local:30:NEXT_PUBLIC_APP_NAME=NextCRM
+.env.local:31:NEXT_PUBLIC_APP_V=0.0.3-beta
+.env.local:32:NEXT_PUBLIC_APP_URL=http://localhost:3000
+.env.local:33:NEXT_PUBLIC_NEXT_VERSION="14.0.4"
+.env.local:34:NEXT_PUBLIC_GITHUB_REPO_URL="https://github.com/pdovhomilja/nextcrm-app"
+.env.local:35:NEXT_PUBLIC_GITHUB_ISSUES_URL=""
+.env.local:36:NEXT_PUBLIC_GITHUB_COMMIT_SHA="main"
+.env.local:37:NEXT_PUBLIC_GITHUB_TOKEN=
+.env.local:54:NEXT_PUBLIC_OPENAI_API_KEY=
+.env.local:63:NEXT_PUBLIC_DISCORD_INVITE_URL="https://discord.com/invite/Dd4Aj6S4Dz"
+.env.local:72:INNGEST_BASE_URL=
+.env.local:77:NEXT_PUBLIC_MINIO_ENDPOINT=
+.env.example:8:DATABASE_URL="postgresql://<username>:<password>@<host>:<port>/<database>?schema=public"
+.env.example:32:NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+.env:8:DATABASE_URL="postgresql://user:password@localhost:5432/nextcrm?schema=public"
+.env:32:NEXT_PUBLIC_MINIO_ENDPOINT=
+app/api/feedback/route.ts:40:        process.env.NEXT_PUBLIC_APP_NAME + " <" + process.env.EMAIL_FROM + ">",
+app/api/feedback/route.ts:42:      subject: "New Feedback from: " + process.env.NEXT_PUBLIC_APP_URL,
+app/[locale]/layout.tsx:30:    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+app/[locale]/(auth)/layout.tsx:35:          href={process.env.NEXT_PUBLIC_GITHUB_REPO_URL || "#"}
+app/[locale]/(auth)/sign-in/page.tsx:8:          Welcome to {process.env.NEXT_PUBLIC_APP_NAME}
+app/[locale]/(auth)/inactive/page.tsx:35:        Hi, your {process.env.NEXT_PUBLIC_APP_NAME} account has been disabled.
+app/[locale]/(auth)/pending/page.tsx:30:          {process.env.NEXT_PUBLIC_APP_NAME} - your account must be allowed by
+app/[locale]/(auth)/pending/page.tsx:34:          Hi, welcome to {process.env.NEXT_PUBLIC_APP_NAME}. Ask someone in your
+app/[locale]/(routes)/crm/dashboard/_components/CRMKanban.tsx:169:                  : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/layout.tsx:19:    process.env.NEXT_PUBLIC_APP_URL! || "http://localhost:3000"
+app/api/og/route.tsx:10:const websiteUrl = process.env.NEXT_PUBLIC_APP_URL;
+app/[locale]/(routes)/components/Footer.tsx:14:            {process.env.NEXT_PUBLIC_APP_NAME} - v{version}
+app/[locale]/(routes)/components/Footer.tsx:21:          {nextVersion.substring(1, 7) || process.env.NEXT_PUBLIC_NEXT_VERSION}
+app/[locale]/(routes)/components/ui/AvatarDropdown.tsx:38:                : `${process.env.NEXT_PUBLIC_APP_URL}/images/nouser.png`
+app/[locale]/(routes)/components/app-sidebar.tsx:153:            {process.env.NEXT_PUBLIC_APP_NAME || "NextCRM"}
+
+codex
+The stack points directly at `app/api/upload/presigned-url/route.ts`. The environment search already shows `NEXT_PUBLIC_MINIO_ENDPOINT` is empty in both `.env` and `.env.local`, so I’m reading the route and MinIO config to confirm the failure path.
+exec
+/usr/bin/bash -lc "sed -n '68,84p' .env.local" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+
+#INNGEST
+INNGEST_ID=nextcrm
+INNGEST_APP_NAME=NextCRM
+INNGEST_BASE_URL=
+INNGEST_EVENT_KEY=
+INNGEST_SIGNING_KEY=
+
+#MINIO
+NEXT_PUBLIC_MINIO_ENDPOINT=
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+MINIO_ACCESS_KEY="your-access-key"
+MINIO_SECRET_KEY="your-secret-key"
+
+
+exec
+/usr/bin/bash -lc "sed -n '1,140p' app/api/upload/presigned-url/route.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+exec
+/usr/bin/bash -lc "sed -n '28,36p' .env.example" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+ROSSUM_USERNAME="your-rossum-username"
+ROSSUM_PASSWORD="your-rossum-password"
+
+# MinIO Object Storage
+NEXT_PUBLIC_MINIO_ENDPOINT="https://your-minio-host"
+MINIO_ENDPOINT="https://your-minio-host"
+MINIO_PORT="9000"
+MINIO_BUCKET="your-bucket-name"
+MINIO_USE_SSL="true"
+
+ succeeded in 0ms:
+import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-server";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { createLogger } from "@/lib/logger";
+import { minioClient, MINIO_BUCKET, MINIO_PUBLIC_URL } from "@/lib/minio";
+import { randomUUID } from "crypto";
+
+const logger = createLogger({ module: "api.upload.presigned-url" });
+
+const ALLOWED_FOLDERS = ["avatars", "images", "documents", "uploads"] as const;
+type AllowedFolder = (typeof ALLOWED_FOLDERS)[number];
+
+function buildPublicFileUrl(key: string) {
+  const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+  publicBaseUrl.pathname = `/${MINIO_BUCKET}/${key}`;
+  return publicBaseUrl.toString();
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { filename: rawFilename, contentType, folder: rawFolder = "uploads" } = await req.json();
+
+  // Sanitize: strip any path components to prevent path traversal
+  const filename = path.basename(rawFilename ?? "");
+  // Whitelist folder to only allow known upload destinations
+  const folder: AllowedFolder = ALLOWED_FOLDERS.includes(rawFolder as AllowedFolder)
+    ? (rawFolder as AllowedFolder)
+    : "uploads";
+
+  if (!filename || !contentType) {
+    return NextResponse.json({ error: "filename and contentType are required" }, { status: 400 });
+  }
+
+  const ALLOWED_CONTENT_TYPES = new Set([
+    "image/jpeg", "image/png", "image/gif", "image/webp",
+    "application/pdf", "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+  ]);
+  if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
+    return NextResponse.json({ error: "Content type not allowed" }, { status: 400 });
+  }
+
+  // Fall back to "bin" if filename has no extension or extension is empty (e.g., ".")
+  const ext = filename.includes(".") ? filename.split(".").pop()?.trim() || "bin" : "bin";
+  const key = `${folder}/${randomUUID()}.${ext}`;
+  const originalFilename = filename;
+
+  const command = new PutObjectCommand({
+    Bucket: MINIO_BUCKET,
+    Key: key,
+    ContentType: contentType,
+  });
+
+  // Presigned URL valid for 10 minutes
+  try {
+    const presignedUrl = await getSignedUrl(minioClient, command, { expiresIn: 600 });
+
+    // The public URL where the file will be accessible after upload
+    const fileUrl = buildPublicFileUrl(key);
+
+    logger.info(
+      {
+        contentType,
+        folder,
+        key,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generated"
+    );
+
+    return NextResponse.json({ presignedUrl, fileUrl, key, originalFilename });
+  } catch (err) {
+    logger.error(
+      {
+        err,
+        contentType,
+        folder,
+        userId: session.user.id,
+      },
+      "Presigned upload URL generation failed"
+    );
+    return NextResponse.json({ error: "Failed to generate upload URL" }, { status: 500 });
+  }
+}
+
+exec
+/usr/bin/bash -lc "sed -n '1,120p' lib/minio.ts" in /home/dmytro/Github/phd-work/nextcrm-app-update
+ succeeded in 0ms:
+import { S3Client } from "@aws-sdk/client-s3";
+
+if (!process.env.MINIO_ENDPOINT) throw new Error("MINIO_ENDPOINT is not defined");
+if (!process.env.MINIO_ACCESS_KEY) throw new Error("MINIO_ACCESS_KEY is not defined");
+if (!process.env.MINIO_SECRET_KEY) throw new Error("MINIO_SECRET_KEY is not defined");
+if (!process.env.MINIO_BUCKET) throw new Error("MINIO_BUCKET is not defined");
+
+export const minioClient = new S3Client({
+  endpoint: process.env.MINIO_ENDPOINT,
+  region: "us-east-1", // MinIO requires a region value; actual value doesn't matter
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY,
+    secretAccessKey: process.env.MINIO_SECRET_KEY,
+  },
+  forcePathStyle: true, // REQUIRED for MinIO — without this, SDK uses virtual-hosted-style which breaks
+});
+
+export const MINIO_BUCKET = process.env.MINIO_BUCKET;
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+
+codex
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is configured as an empty string in the local environment, and the upload presigned URL endpoint passes it directly into `new URL()`.
+
+Evidence:
+
+- Error: `ERR_INVALID_URL`, `err_input: ""`
+- Failing function: `buildPublicFileUrl`
+- Source: `app/api/upload/presigned-url/route.ts`
+- Code path:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- `MINIO_PUBLIC_URL` comes from `lib/minio.ts`:
+
+```ts
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+```
+
+- Local config has:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+The request itself appears valid: `contentType` is `application/pdf`, and `folder` is `documents`, both accepted by the route. The failure occurs after presigned URL generation begins, when the API tries to construct the public file URL to return to the client.
+
+Conclusion: the incident was caused by missing local MinIO public endpoint configuration, specifically empty `NEXT_PUBLIC_MINIO_ENDPOINT`. The expected value should be a valid absolute URL such as `https://your-minio-host` or the local MinIO public URL.
+tokens used
+10,291
+**Incident Report**
+
+Most likely root cause: `NEXT_PUBLIC_MINIO_ENDPOINT` is configured as an empty string in the local environment, and the upload presigned URL endpoint passes it directly into `new URL()`.
+
+Evidence:
+
+- Error: `ERR_INVALID_URL`, `err_input: ""`
+- Failing function: `buildPublicFileUrl`
+- Source: `app/api/upload/presigned-url/route.ts`
+- Code path:
+
+```ts
+const publicBaseUrl = new URL(MINIO_PUBLIC_URL!);
+```
+
+- `MINIO_PUBLIC_URL` comes from `lib/minio.ts`:
+
+```ts
+export const MINIO_PUBLIC_URL = process.env.NEXT_PUBLIC_MINIO_ENDPOINT;
+```
+
+- Local config has:
+
+```env
+NEXT_PUBLIC_MINIO_ENDPOINT=
+```
+
+The request itself appears valid: `contentType` is `application/pdf`, and `folder` is `documents`, both accepted by the route. The failure occurs after presigned URL generation begins, when the API tries to construct the public file URL to return to the client.
+
+Conclusion: the incident was caused by missing local MinIO public endpoint configuration, specifically empty `NEXT_PUBLIC_MINIO_ENDPOINT`. The expected value should be a valid absolute URL such as `https://your-minio-host` or the local MinIO public URL.
