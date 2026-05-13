@@ -32,7 +32,6 @@ services:
     container_name: nextcrm_otel_collector
     image: otel/opentelemetry-collector-contrib:0.123.0
     restart: always
-    user: "0:0"
     command: ["--config=/etc/otelcol/config.yml"]
     depends_on:
       - loki
@@ -45,8 +44,6 @@ services:
       - "13133:13133"
     volumes:
       - ./observability/otel-collector-config.yml:/etc/otelcol/config.yml:ro,z
-      - ./logs:/var/log/nextcrm:ro,z
-      - otelcol_data:/var/lib/otelcol
     networks:
       - nextcrm-net
 
@@ -76,8 +73,6 @@ volumes:
   loki_data:
     driver: local
   grafana_data:
-    driver: local
-  otelcol_data:
     driver: local
 
 networks:

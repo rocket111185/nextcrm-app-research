@@ -3,8 +3,10 @@ import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
 import pino from "pino";
+import { createOtelLogStream } from "./otel-log-stream";
 
 const serviceName = process.env.OTEL_SERVICE_NAME || "nextcrm-app";
+const environment = process.env.NODE_ENV || "development";
 const logLevel = process.env.LOG_LEVEL || (process.env.NODE_ENV === "production" ? "info" : "debug");
 
 function getTraceBindings() {
@@ -24,6 +26,7 @@ function getTraceBindings() {
 function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
   const streams: pino.StreamEntry[] = [];
   const prettyLogs = process.env.PINO_PRETTY === "true";
+  const otelLogStream = createOtelLogStream({ environment, serviceName });
 
   streams.push({
     level: logLevel as pino.Level,
@@ -49,6 +52,13 @@ function createLogStreams(): pino.MultiStreamRes | pino.DestinationStream {
     });
   }
 
+  if (otelLogStream) {
+    streams.push({
+      level: logLevel as pino.Level,
+      stream: otelLogStream,
+    });
+  }
+
   return streams.length === 1 ? streams[0].stream : pino.multistream(streams, { dedupe: true });
 }
 
@@ -56,7 +66,7 @@ export const logger = pino(
   {
     base: {
       service: serviceName,
-      environment: process.env.NODE_ENV || "development",
+      environment,
       pid: process.pid,
       hostname: hostname(),
     },

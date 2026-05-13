@@ -1,9 +1,6 @@
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
-  file_storage:
-    directory: /var/lib/otelcol/file_storage
-    create_directory: true
 
 receivers:
   otlp:
@@ -12,25 +9,6 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
-
-  filelog/nextcrm:
-    include:
-      - /var/log/nextcrm/*.log
-    include_file_name: true
-    include_file_path: true
-    start_at: beginning
-    storage: file_storage
-    operators:
-      - id: parse_pino_json
-        type: json_parser
-        parse_from: body
-        parse_to: attributes
-        on_error: send
-      - id: promote_pino_message
-        type: move
-        from: attributes.message
-        to: body
-        if: 'attributes.message != nil'
 
 processors:
   memory_limiter:
@@ -57,7 +35,6 @@ exporters:
 service:
   extensions:
     - health_check
-    - file_storage
   pipelines:
     traces:
       receivers:
@@ -80,7 +57,6 @@ service:
     logs:
       receivers:
         - otlp
-        - filelog/nextcrm
       processors:
         - memory_limiter
         - resource/nextcrm

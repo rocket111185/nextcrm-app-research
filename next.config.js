@@ -4,7 +4,16 @@ const withNextIntl = require("next-intl/plugin")(
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "pino", "pino-pretty"],
+  serverExternalPackages: [
+    "@grpc/grpc-js",
+    "@opentelemetry/exporter-logs-otlp-grpc",
+    "@opentelemetry/exporter-logs-otlp-http",
+    "@opentelemetry/sdk-logs",
+    "pdf-parse",
+    "pdfjs-dist",
+    "pino",
+    "pino-pretty",
+  ],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "localhost" },
